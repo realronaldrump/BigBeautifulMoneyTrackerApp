@@ -90,8 +90,6 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.davis.BigBeautifulMoneyTrackerTests
         GENERATE_INFOPLIST_FILE: YES
-        TEST_HOST: $(BUILT_PRODUCTS_DIR)/BigBeautifulMoneyTracker.app/BigBeautifulMoneyTracker
-        BUNDLE_LOADER: $(TEST_HOST)
     dependencies:
       - target: BigBeautifulMoneyTracker
 schemes:

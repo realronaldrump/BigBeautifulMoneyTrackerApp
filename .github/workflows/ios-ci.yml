@@ -1,0 +1,39 @@
+name: iOS CI
+
+on:
+  push:
+    branches:
+      - main
+      - codex/**
+  pull_request:
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Project
+        run: xcodegen generate
+
+      - name: Build iOS Simulator App
+        run: >
+          xcodebuild
+          -project BigBeautifulMoneyTracker.xcodeproj
+          -scheme BigBeautifulMoneyTracker
+          -sdk iphonesimulator
+          -destination 'generic/platform=iOS Simulator'
+          build
+
+      - name: Run Logic Tests
+        run: >
+          xcodebuild
+          -project BigBeautifulMoneyTracker.xcodeproj
+          -scheme BigBeautifulMoneyTracker
+          -sdk iphonesimulator
+          -destination 'generic/platform=iOS Simulator'
+          test
