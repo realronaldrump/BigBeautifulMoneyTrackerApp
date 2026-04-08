@@ -24,10 +24,6 @@ enum DataBootstrapper {
             context.insert(PaySchedule())
         }
 
-        if try first(WorkplaceLocation.self, in: context) == nil {
-            context.insert(WorkplaceLocation())
-        }
-
         try context.save()
     }
 

@@ -1,6 +1,6 @@
 # Big Beautiful Money Tracker App
 
-Local-first iPhone earnings tracker built with SwiftUI, SwiftData, WidgetKit, ActivityKit, App Intents, reminders, and optional geofencing prompts.
+Local-first iPhone earnings tracker built with SwiftUI, SwiftData, WidgetKit, ActivityKit, App Intents, and reminders.
 
 ## Current Status
 

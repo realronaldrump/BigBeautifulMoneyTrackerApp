@@ -8,7 +8,6 @@
 
 /* Begin PBXBuildFile section */
 		05FBEA34874BA0227D9EEBFD /* TaxEstimator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D2F93B7E5B59A42A0A6D6F2 /* TaxEstimator.swift */; };
-		07CC992792DBB962A1F49071 /* GeofenceManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = F584EEDB3A292D8EE76AA376 /* GeofenceManager.swift */; };
 		0826CB1DDC8E09E124FB672D /* MoneyTrackerWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37EA3FFF9A4FAF675E799D31 /* MoneyTrackerWidgets.swift */; };
 		0DA778022258C71D137220CD /* ReminderManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 751904045AF860B35193929A /* ReminderManager.swift */; };
 		1059A93FCAB797CE887C1C64 /* AggregationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 609E94722DF52B0B79865C29 /* AggregationService.swift */; };
@@ -39,6 +38,7 @@
 		A9C9AB1E29EF7F5377C21EA4 /* HapticManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1DE0ECBC20AFF2C014C48A1 /* HapticManager.swift */; };
 		B7C7C8312873E0A83FFE2F6B /* AggregationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 609E94722DF52B0B79865C29 /* AggregationService.swift */; };
 		B90DDB8ED8F3F066AF4BE6FE /* HistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7C6480BC46625FEDF8BFB7E /* HistoryView.swift */; };
+		BC5D05EAC14C5303ED02DF8C /* AppNotificationDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8788FC074A315A5185BD5256 /* AppNotificationDelegate.swift */; };
 		BE7C49CAA6C362B8F389F3D6 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 030DC5A14C5032E1060833FA /* RootView.swift */; };
 		BE8ADBD3AD03B13E9F620AED /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2DD7DE6232BF82BD65C94F47 /* SettingsView.swift */; };
 		CE75CFC8BF704E859438EDB8 /* AppTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA854895C6BF1C471B25059A /* AppTheme.swift */; };
@@ -100,6 +100,7 @@
 		72FC659281BA65A56A15F91B /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		751904045AF860B35193929A /* ReminderManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReminderManager.swift; sourceTree = "<group>"; };
 		818DAF58F9BBD8324AB4FBBD /* MetricTile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetricTile.swift; sourceTree = "<group>"; };
+		8788FC074A315A5185BD5256 /* AppNotificationDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppNotificationDelegate.swift; sourceTree = "<group>"; };
 		8D606036C020E8AE5F2C85BC /* BigBeautifulMoneyTrackerWidgets.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = BigBeautifulMoneyTrackerWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		901AD27FB3709E9B428100F3 /* ShiftActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShiftActivityAttributes.swift; sourceTree = "<group>"; };
 		9ADB18FA9F92E3D60AB4293E /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
@@ -117,7 +118,6 @@
 		E6C94312478F761905736621 /* ModelContainerFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelContainerFactory.swift; sourceTree = "<group>"; };
 		E7C6480BC46625FEDF8BFB7E /* HistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryView.swift; sourceTree = "<group>"; };
 		EF049F2D4E3B430BEC531191 /* MilestoneBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MilestoneBanner.swift; sourceTree = "<group>"; };
-		F584EEDB3A292D8EE76AA376 /* GeofenceManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeofenceManager.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -199,6 +199,7 @@
 		707EB869D0008E2F5BBB9714 /* App */ = {
 			isa = PBXGroup;
 			children = (
+				8788FC074A315A5185BD5256 /* AppNotificationDelegate.swift */,
 				29D7B1AEF3E54493B27A850D /* BigBeautifulMoneyTrackerApp.swift */,
 				6DD8261EF1F5EF3A6CB10651 /* MoneyTrackerShortcuts.swift */,
 				030DC5A14C5032E1060833FA /* RootView.swift */,
@@ -217,7 +218,6 @@
 		8FB06300F2A72693F5AF7D40 /* Automation */ = {
 			isa = PBXGroup;
 			children = (
-				F584EEDB3A292D8EE76AA376 /* GeofenceManager.swift */,
 				C1DE0ECBC20AFF2C014C48A1 /* HapticManager.swift */,
 				A0D64AF572535E621793DA7F /* LiveActivityManager.swift */,
 				751904045AF860B35193929A /* ReminderManager.swift */,
@@ -376,15 +376,15 @@
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
 					4064C08BC37140B6CFCA23C8 = {
-						DevelopmentTeam = 5ANSK8B4FG;
+						DevelopmentTeam = CZ3N26YJ75;
 						ProvisioningStyle = Automatic;
 					};
 					4E9A5847F39ED5239992E567 = {
-						DevelopmentTeam = 5ANSK8B4FG;
+						DevelopmentTeam = CZ3N26YJ75;
 						ProvisioningStyle = Automatic;
 					};
 					51D5DB0E604870153733C5D5 = {
-						DevelopmentTeam = 5ANSK8B4FG;
+						DevelopmentTeam = CZ3N26YJ75;
 						ProvisioningStyle = Automatic;
 					};
 				};
@@ -416,11 +416,11 @@
 			buildActionMask = 2147483647;
 			files = (
 				B7C7C8312873E0A83FFE2F6B /* AggregationService.swift in Sources */,
+				BC5D05EAC14C5303ED02DF8C /* AppNotificationDelegate.swift in Sources */,
 				CE75CFC8BF704E859438EDB8 /* AppTheme.swift in Sources */,
 				A3D63223195513BBB4247A6A /* BigBeautifulMoneyTrackerApp.swift in Sources */,
 				36697D855B1EE5EB05A675D7 /* DataBootstrapper.swift in Sources */,
 				9CBB52C7AF8768A8742F0A97 /* EarningsEngine.swift in Sources */,
-				07CC992792DBB962A1F49071 /* GeofenceManager.swift in Sources */,
 				A9C9AB1E29EF7F5377C21EA4 /* HapticManager.swift in Sources */,
 				B90DDB8ED8F3F066AF4BE6FE /* HistoryView.swift in Sources */,
 				D42A3D83F47FB03101E425A9 /* HomeView.swift in Sources */,
@@ -494,7 +494,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
-				DEVELOPMENT_TEAM = 5ANSK8B4FG;
+				DEVELOPMENT_TEAM = CZ3N26YJ75;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -516,7 +516,7 @@
 				CODE_SIGN_ENTITLEMENTS = App/App.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = 5ANSK8B4FG;
+				DEVELOPMENT_TEAM = CZ3N26YJ75;
 				INFOPLIST_FILE = App/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -536,7 +536,7 @@
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_ENTITLEMENTS = Widgets/Widget.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = 5ANSK8B4FG;
+				DEVELOPMENT_TEAM = CZ3N26YJ75;
 				INFOPLIST_FILE = Widgets/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -589,7 +589,7 @@
 				COPY_PHASE_STRIP = NO;
 				CURRENT_PROJECT_VERSION = 1;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				DEVELOPMENT_TEAM = 5ANSK8B4FG;
+				DEVELOPMENT_TEAM = CZ3N26YJ75;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
@@ -622,7 +622,7 @@
 				CODE_SIGN_ENTITLEMENTS = App/App.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = 5ANSK8B4FG;
+				DEVELOPMENT_TEAM = CZ3N26YJ75;
 				INFOPLIST_FILE = App/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -673,7 +673,7 @@
 				COPY_PHASE_STRIP = NO;
 				CURRENT_PROJECT_VERSION = 1;
 				DEBUG_INFORMATION_FORMAT = dwarf;
-				DEVELOPMENT_TEAM = 5ANSK8B4FG;
+				DEVELOPMENT_TEAM = CZ3N26YJ75;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
@@ -712,7 +712,7 @@
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_ENTITLEMENTS = Widgets/Widget.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = 5ANSK8B4FG;
+				DEVELOPMENT_TEAM = CZ3N26YJ75;
 				INFOPLIST_FILE = Widgets/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -732,7 +732,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
-				DEVELOPMENT_TEAM = 5ANSK8B4FG;
+				DEVELOPMENT_TEAM = CZ3N26YJ75;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LD_RUNPATH_SEARCH_PATHS = (

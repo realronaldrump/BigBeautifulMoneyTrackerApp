@@ -4,6 +4,7 @@ import SwiftData
 enum ShiftControllerError: LocalizedError {
     case missingPayRate
     case noOpenShift
+    case invalidScheduledEnd
 
     var errorDescription: String? {
         switch self {
@@ -11,6 +12,8 @@ enum ShiftControllerError: LocalizedError {
             "Add an hourly rate before tracking a shift."
         case .noOpenShift:
             "There isn’t an active shift to end."
+        case .invalidScheduledEnd:
+            "The planned end needs to be later than the shift start."
         }
     }
 }
@@ -119,6 +122,37 @@ enum ShiftController {
     static func deleteShift(_ shift: ShiftRecord, in context: ModelContext) throws {
         context.delete(shift)
         try context.save()
+    }
+
+    static func updateOpenShift(
+        in context: ModelContext,
+        startDate: Date,
+        scheduledEndDate: Date?,
+        reminderOffsets: [Int]
+    ) throws {
+        guard let openShift = try DataBootstrapper.first(OpenShiftState.self, in: context) else {
+            throw ShiftControllerError.noOpenShift
+        }
+
+        if let scheduledEndDate, scheduledEndDate <= startDate {
+            throw ShiftControllerError.invalidScheduledEnd
+        }
+
+        openShift.startDate = startDate
+        openShift.scheduledEndDate = scheduledEndDate
+        openShift.scheduledReminderOffsets = scheduledEndDate == nil ? [] : reminderOffsets
+        try context.save()
+    }
+
+    @discardableResult
+    static func autoEndShiftIfNeeded(in context: ModelContext, at date: Date = .now) throws -> ShiftRecord? {
+        guard let openShift = try DataBootstrapper.first(OpenShiftState.self, in: context),
+              let scheduledEndDate = openShift.scheduledEndDate,
+              date >= scheduledEndDate else {
+            return nil
+        }
+
+        return try endShift(in: context, at: scheduledEndDate)
     }
 
     static func dashboardSnapshot(in context: ModelContext, at date: Date = .now) throws -> DashboardSnapshot {

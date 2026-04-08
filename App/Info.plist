@@ -22,10 +22,6 @@
 	<string>1</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
-	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>Big Beautiful Money Tracker uses your work location to suggest starting or ending a shift, only after asking.</string>
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Big Beautiful Money Tracker uses your work location to suggest starting or ending a shift, only after asking.</string>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
 	<key>UIApplicationSceneManifest</key>

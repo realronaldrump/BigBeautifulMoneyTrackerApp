@@ -3,6 +3,7 @@ import SwiftUI
 
 @main
 struct BigBeautifulMoneyTrackerApp: App {
+    @UIApplicationDelegateAdaptor(AppNotificationDelegate.self) private var appNotificationDelegate
     @State private var theme = AppTheme()
 
     private let modelContainer = AppModelContainerFactory.makeSharedContainer()

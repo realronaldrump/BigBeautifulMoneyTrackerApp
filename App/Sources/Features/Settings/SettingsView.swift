@@ -11,7 +11,6 @@ struct SettingsView: View {
     @Query private var paySchedules: [PaySchedule]
     @Query private var nightRules: [NightDifferentialRule]
     @Query private var overtimeRules: [OvertimeRuleSet]
-    @Query private var workplaces: [WorkplaceLocation]
     @Query(sort: \PayRateSchedule.effectiveDate, order: .reverse) private var payRates: [PayRateSchedule]
     @Query private var templates: [ScheduleTemplate]
 
@@ -23,15 +22,13 @@ struct SettingsView: View {
            let taxProfile = taxProfiles.first,
            let paySchedule = paySchedules.first,
            let nightRule = nightRules.first,
-           let overtimeRule = overtimeRules.first,
-           let workplace = workplaces.first {
+           let overtimeRule = overtimeRules.first {
             SettingsContent(
                 preferences: preferences,
                 taxProfile: taxProfile,
                 paySchedule: paySchedule,
                 nightRule: nightRule,
                 overtimeRule: overtimeRule,
-                workplace: workplace,
                 payRates: payRates,
                 templates: templates,
                 editingRate: $editingRate,
@@ -69,7 +66,6 @@ private struct SettingsContent: View {
     @Bindable var paySchedule: PaySchedule
     @Bindable var nightRule: NightDifferentialRule
     @Bindable var overtimeRule: OvertimeRuleSet
-    @Bindable var workplace: WorkplaceLocation
 
     let payRates: [PayRateSchedule]
     let templates: [ScheduleTemplate]
@@ -180,7 +176,6 @@ private struct SettingsContent: View {
 
             Section("Automation") {
                 Toggle("Schedule reminders", isOn: $preferences.remindersEnabled)
-                Toggle("Geofencing prompts", isOn: $preferences.geofencingEnabled)
                 Button("Request reminder permission") {
                     Task { await ReminderManager.shared.requestAuthorization() }
                 }
@@ -191,27 +186,6 @@ private struct SettingsContent: View {
                 }
                 NavigationLink("Schedule templates") {
                     TemplatesView()
-                }
-            }
-
-            Section("Workplace Geofence") {
-                TextField("Latitude", value: Binding(
-                    get: { workplace.latitude ?? 0 },
-                    set: { workplace.latitude = $0 }
-                ), format: .number.precision(.fractionLength(4...6)))
-                    .keyboardType(.numbersAndPunctuation)
-                TextField("Longitude", value: Binding(
-                    get: { workplace.longitude ?? 0 },
-                    set: { workplace.longitude = $0 }
-                ), format: .number.precision(.fractionLength(4...6)))
-                    .keyboardType(.numbersAndPunctuation)
-                TextField("Radius (meters)", value: $workplace.radiusMeters, format: .number.precision(.fractionLength(0)))
-                    .keyboardType(.decimalPad)
-                Button("Request location permission") {
-                    GeofenceManager.shared.requestAuthorization()
-                }
-                Button("Sync geofence") {
-                    GeofenceManager.shared.syncMonitoring(workplace: workplace, isEnabled: preferences.geofencingEnabled)
                 }
             }
 

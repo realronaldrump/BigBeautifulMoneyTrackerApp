@@ -50,12 +50,31 @@ final class OpenShiftState {
     var startDate: Date
     var note: String
     var celebratedFirstHundred: Bool
+    var scheduledEndDate: Date?
+    var scheduledReminderOffsetsRawValue: String
 
     init(id: UUID = UUID(), startDate: Date = .now, note: String = "") {
         self.id = id
         self.startDate = startDate
         self.note = note
         self.celebratedFirstHundred = false
+        self.scheduledEndDate = nil
+        self.scheduledReminderOffsetsRawValue = "30,15,5"
+    }
+
+    var scheduledReminderOffsets: [Int] {
+        get {
+            scheduledReminderOffsetsRawValue
+                .split(separator: ",")
+                .compactMap { Int($0.trimmingCharacters(in: .whitespaces)) }
+                .sorted(by: >)
+        }
+        set {
+            scheduledReminderOffsetsRawValue = newValue
+                .sorted(by: >)
+                .map(String.init)
+                .joined(separator: ",")
+        }
     }
 }
 
@@ -259,27 +278,11 @@ final class MilestoneEvent {
 }
 
 @Model
-final class WorkplaceLocation {
-    @Attribute(.unique) var id: UUID
-    var latitude: Double?
-    var longitude: Double?
-    var radiusMeters: Double
-
-    init(id: UUID = UUID(), latitude: Double? = nil, longitude: Double? = nil, radiusMeters: Double = 125) {
-        self.id = id
-        self.latitude = latitude
-        self.longitude = longitude
-        self.radiusMeters = radiusMeters
-    }
-}
-
-@Model
 final class AppPreferences {
     @Attribute(.unique) var id: UUID
     var selectedDisplayModeRawValue: String
     var hapticsEnabled: Bool
     var remindersEnabled: Bool
-    var geofencingEnabled: Bool
     var liveActivitiesEnabled: Bool
     var lockScreenWidgetsEnabled: Bool
     var cloudSyncEnabled: Bool
@@ -290,7 +293,6 @@ final class AppPreferences {
         selectedDisplayMode: EarningsDisplayMode = .gross,
         hapticsEnabled: Bool = true,
         remindersEnabled: Bool = false,
-        geofencingEnabled: Bool = false,
         liveActivitiesEnabled: Bool = true,
         lockScreenWidgetsEnabled: Bool = true,
         cloudSyncEnabled: Bool = true,
@@ -300,7 +302,6 @@ final class AppPreferences {
         self.selectedDisplayModeRawValue = selectedDisplayMode.rawValue
         self.hapticsEnabled = hapticsEnabled
         self.remindersEnabled = remindersEnabled
-        self.geofencingEnabled = geofencingEnabled
         self.liveActivitiesEnabled = liveActivitiesEnabled
         self.lockScreenWidgetsEnabled = lockScreenWidgetsEnabled
         self.cloudSyncEnabled = cloudSyncEnabled
