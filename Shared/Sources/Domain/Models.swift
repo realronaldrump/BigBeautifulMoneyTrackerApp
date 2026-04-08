@@ -46,12 +46,14 @@ final class ShiftRecord {
 
 @Model
 final class OpenShiftState {
+    private static let defaultScheduledReminderOffsets = [30, 15, 5]
+
     @Attribute(.unique) var id: UUID
     var startDate: Date
     var note: String
     var celebratedFirstHundred: Bool
     var scheduledEndDate: Date?
-    var scheduledReminderOffsetsRawValue: String
+    var scheduledReminderOffsetsRawValue: String?
 
     init(id: UUID = UUID(), startDate: Date = .now, note: String = "") {
         self.id = id
@@ -59,22 +61,30 @@ final class OpenShiftState {
         self.note = note
         self.celebratedFirstHundred = false
         self.scheduledEndDate = nil
-        self.scheduledReminderOffsetsRawValue = "30,15,5"
+        self.scheduledReminderOffsetsRawValue = Self.serializeScheduledReminderOffsets(Self.defaultScheduledReminderOffsets)
     }
 
     var scheduledReminderOffsets: [Int] {
         get {
-            scheduledReminderOffsetsRawValue
+            guard let scheduledReminderOffsetsRawValue else {
+                return Self.defaultScheduledReminderOffsets
+            }
+
+            return scheduledReminderOffsetsRawValue
                 .split(separator: ",")
                 .compactMap { Int($0.trimmingCharacters(in: .whitespaces)) }
                 .sorted(by: >)
         }
         set {
-            scheduledReminderOffsetsRawValue = newValue
-                .sorted(by: >)
-                .map(String.init)
-                .joined(separator: ",")
+            scheduledReminderOffsetsRawValue = Self.serializeScheduledReminderOffsets(newValue)
         }
+    }
+
+    private static func serializeScheduledReminderOffsets(_ offsets: [Int]) -> String {
+        offsets
+            .sorted(by: >)
+            .map(String.init)
+            .joined(separator: ",")
     }
 }
 
