@@ -1,0 +1,109 @@
+name: BigBeautifulMoneyTracker
+options:
+  bundleIdPrefix: com.davis
+  deploymentTarget:
+    iOS: "26.0"
+settings:
+  base:
+    SWIFT_VERSION: 6.0
+    DEVELOPMENT_TEAM: 5ANSK8B4FG
+    CODE_SIGN_STYLE: Automatic
+    CURRENT_PROJECT_VERSION: 1
+    MARKETING_VERSION: 1.0
+    GENERATE_INFOPLIST_FILE: NO
+    SUPPORTS_MACCATALYST: NO
+    TARGETED_DEVICE_FAMILY: "1"
+configs:
+  Debug: debug
+  Release: release
+targets:
+  BigBeautifulMoneyTracker:
+    type: application
+    platform: iOS
+    deploymentTarget: "26.0"
+    sources:
+      - path: App/Sources
+      - path: Shared/Sources
+    resources:
+      - path: App/Resources
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: Big Beautiful Money Tracker App
+        LSRequiresIPhoneOS: true
+        NSLocationAlwaysAndWhenInUseUsageDescription: Big Beautiful Money Tracker uses your work location to suggest starting or ending a shift, only after asking.
+        NSLocationWhenInUseUsageDescription: Big Beautiful Money Tracker uses your work location to suggest starting or ending a shift, only after asking.
+        NSSupportsLiveActivities: true
+        UIRequiresFullScreen: true
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        UILaunchScreen: {}
+    entitlements:
+      path: App/App.entitlements
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.davis.BigBeautifulMoneyTracker
+        PRODUCT_NAME: BigBeautifulMoneyTracker
+        CODE_SIGN_ENTITLEMENTS: App/App.entitlements
+        INFOPLIST_FILE: App/Info.plist
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        LD_RUNPATH_SEARCH_PATHS:
+          - $(inherited)
+          - "@executable_path/Frameworks"
+    dependencies:
+      - target: BigBeautifulMoneyTrackerWidgets
+        embed: true
+  BigBeautifulMoneyTrackerWidgets:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "26.0"
+    sources:
+      - path: Widgets/Sources
+      - path: Shared/Sources
+    resources:
+      - path: Widgets/Resources
+    info:
+      path: Widgets/Info.plist
+      properties:
+        CFBundleDisplayName: Big Beautiful Money Tracker App Widgets
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    entitlements:
+      path: Widgets/Widget.entitlements
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.davis.BigBeautifulMoneyTracker.Widgets
+        PRODUCT_NAME: BigBeautifulMoneyTrackerWidgets
+        CODE_SIGN_ENTITLEMENTS: Widgets/Widget.entitlements
+        INFOPLIST_FILE: Widgets/Info.plist
+        APPLICATION_EXTENSION_API_ONLY: YES
+        SKIP_INSTALL: YES
+  BigBeautifulMoneyTrackerTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: "26.0"
+    sources:
+      - path: Tests/Sources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.davis.BigBeautifulMoneyTrackerTests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/BigBeautifulMoneyTracker.app/BigBeautifulMoneyTracker
+        BUNDLE_LOADER: $(TEST_HOST)
+    dependencies:
+      - target: BigBeautifulMoneyTracker
+schemes:
+  BigBeautifulMoneyTracker:
+    build:
+      targets:
+        BigBeautifulMoneyTracker: all
+        BigBeautifulMoneyTrackerWidgets: [run, test]
+        BigBeautifulMoneyTrackerTests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - BigBeautifulMoneyTrackerTests
