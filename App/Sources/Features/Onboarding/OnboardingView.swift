@@ -10,14 +10,9 @@ struct OnboardingView: View {
     @Query private var paySchedules: [PaySchedule]
     @Query private var payRates: [PayRateSchedule]
 
-    @State private var hourlyRate = 42.0
+    @State private var hourlyRate = 33.29
     @State private var payFrequency: PayFrequency = .biweekly
     @State private var anchorDate = Calendar.current.startOfDay(for: .now)
-    @State private var filingStatus: FilingStatus = .single
-    @State private var usesStandardDeduction = true
-    @State private var annualInsurance = 0.0
-    @State private var annualRetirement = 0.0
-    @State private var expectedWeeklyHours = SharedConstants.fallbackExpectedWeeklyHours
     @State private var errorText: String?
 
     var body: some View {
@@ -31,7 +26,7 @@ struct OnboardingView: View {
                             .font(.system(size: 38, weight: .heavy, design: .rounded))
                             .foregroundStyle(.white)
 
-                        Text("Set the essentials once. After that, it’s one tap to start and one tap to stop.")
+                        Text("I’ve already started this off around your setup: $33.29/hour, single filer, one income source. You only need to confirm the basics here.")
                             .font(.system(size: 17, weight: .medium, design: .rounded))
                             .foregroundStyle(theme.secondaryText)
                     }
@@ -68,34 +63,38 @@ struct OnboardingView: View {
     private var formCard: some View {
         VStack(spacing: 18) {
             GroupBox {
-                VStack(spacing: 14) {
-                    TextField("Hourly Rate", value: $hourlyRate, format: .currency(code: "USD"))
-                    Picker("Pay Schedule", selection: $payFrequency) {
+                VStack(alignment: .leading, spacing: 14) {
+                    TextField("Your hourly pay", value: $hourlyRate, format: .currency(code: "USD"))
+                    Picker("My paycheck arrives", selection: $payFrequency) {
                         ForEach(PayFrequency.allCases) { frequency in
                             Text(frequency.title).tag(frequency)
                         }
                     }
-                    DatePicker("Pay Period Anchor", selection: $anchorDate, displayedComponents: .date)
+                    DatePicker("This pay period started on", selection: $anchorDate, displayedComponents: .date)
+                    Text("If you’re not sure, choose the day your current paycheck cycle began. You can change it later.")
+                        .font(.footnote)
+                        .foregroundStyle(theme.secondaryText)
                 }
                 .textFieldStyle(.roundedBorder)
             } label: {
-                Label("Compensation", systemImage: "dollarsign.ring")
+                Label("Your Pay", systemImage: "dollarsign.ring")
                     .foregroundStyle(.white)
             }
 
             GroupBox {
-                VStack(spacing: 14) {
-                    Picker("Filing Status", selection: $filingStatus) {
-                        ForEach(FilingStatus.allCases) { status in
-                            Text(status.title).tag(status)
-                        }
-                    }
-                    Toggle("Use standard deduction", isOn: $usesStandardDeduction)
-                    TextField("Pre-tax insurance / year", value: $annualInsurance, format: .currency(code: "USD"))
-                    TextField("Retirement contribution / year", value: $annualRetirement, format: .currency(code: "USD"))
-                    TextField("Expected hours / week", value: $expectedWeeklyHours, format: .number.precision(.fractionLength(1)))
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Take-home estimate defaults")
+                        .font(.system(size: 18, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.white)
+
+                    Text("For now I’ll estimate your take-home assuming you file single, this is your only income, and you use the regular deduction most people with one job use.")
+                        .font(.system(size: 15, weight: .medium, design: .rounded))
+                        .foregroundStyle(theme.secondaryText)
+
+                    Text("If your paycheck needs a closer match later, you can fine-tune insurance, retirement, and tax details in Settings.")
+                        .font(.footnote)
+                        .foregroundStyle(theme.secondaryText)
                 }
-                .textFieldStyle(.roundedBorder)
             } label: {
                 Label("Take Home Estimate", systemImage: "sun.max.trianglebadge.exclamationmark")
                     .foregroundStyle(.white)
@@ -138,11 +137,11 @@ struct OnboardingView: View {
             preferences.onboardingCompleted = true
             preferences.selectedDisplayMode = .gross
 
-            taxProfile.filingStatus = filingStatus
-            taxProfile.usesStandardDeduction = usesStandardDeduction
-            taxProfile.annualPretaxInsurance = annualInsurance
-            taxProfile.annualRetirementContribution = annualRetirement
-            taxProfile.expectedWeeklyHours = expectedWeeklyHours
+            taxProfile.filingStatus = .single
+            taxProfile.usesStandardDeduction = true
+            taxProfile.annualPretaxInsurance = 0
+            taxProfile.annualRetirementContribution = 0
+            taxProfile.expectedWeeklyHours = SharedConstants.fallbackExpectedWeeklyHours
 
             paySchedule.frequency = payFrequency
             paySchedule.anchorDate = anchorDate

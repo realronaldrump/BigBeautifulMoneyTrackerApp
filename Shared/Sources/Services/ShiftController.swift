@@ -116,6 +116,11 @@ enum ShiftController {
         try context.save()
     }
 
+    static func deleteShift(_ shift: ShiftRecord, in context: ModelContext) throws {
+        context.delete(shift)
+        try context.save()
+    }
+
     static func dashboardSnapshot(in context: ModelContext, at date: Date = .now) throws -> DashboardSnapshot {
         try DataBootstrapper.seedIfNeeded(in: context)
 

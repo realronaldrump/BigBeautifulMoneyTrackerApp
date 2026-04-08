@@ -79,7 +79,7 @@ private struct SettingsContent: View {
 
     var body: some View {
         Form {
-            Section("Display") {
+            Section("Main Screen") {
                 Picker("Default Mode", selection: $preferences.selectedDisplayModeRawValue) {
                     Text("Gross").tag(EarningsDisplayMode.gross.rawValue)
                     Text("Estimated Take Home").tag(EarningsDisplayMode.takeHome.rawValue)
@@ -89,73 +89,93 @@ private struct SettingsContent: View {
                 Toggle("Widgets", isOn: $preferences.lockScreenWidgetsEnabled)
             }
 
-            Section("Pay Rates") {
+            Section("Hourly Pay") {
                 ForEach(payRates) { rate in
                     Button {
                         editingRate = rate
                     } label: {
                         HStack {
-                            Text(rate.effectiveDate.formatted(date: .abbreviated, time: .omitted))
+                            Text("Starting \(rate.effectiveDate.formatted(date: .abbreviated, time: .omitted))")
                             Spacer()
                             Text(rate.hourlyRate, format: .currency(code: "USD"))
                         }
                     }
                 }
 
-                Button("Add Rate Change") {
+                Button("Add a pay change") {
                     creatingRate = true
                 }
             }
 
-            Section("Night Differential") {
-                Toggle("Enabled", isOn: $nightRule.isEnabled)
-                Stepper("Starts at \(nightRule.startHour):00", value: $nightRule.startHour, in: 0...23)
-                Stepper("Ends at \(nightRule.endHour):00", value: $nightRule.endHour, in: 0...23)
-                TextField("Percent increase", value: $nightRule.percentIncrease, format: .percent.precision(.fractionLength(0...1)))
-                    .keyboardType(.decimalPad)
+            Section("Night Shift Bonus") {
+                Toggle("I get extra pay for night hours", isOn: $nightRule.isEnabled)
+                if nightRule.isEnabled {
+                    DatePicker("Night bonus starts", selection: nightBonusStartBinding, displayedComponents: .hourAndMinute)
+                    DatePicker("Night bonus ends", selection: nightBonusEndBinding, displayedComponents: .hourAndMinute)
+                    TextField("Extra pay percent", value: $nightRule.percentIncrease, format: .percent.precision(.fractionLength(0...1)))
+                        .keyboardType(.decimalPad)
+                    Text("Default: 7:00 PM to 7:00 AM with a 7% bump.")
+                        .font(.footnote)
+                        .foregroundStyle(theme.secondaryText)
+                }
             }
 
             Section("Overtime") {
-                Toggle("Optional overtime module", isOn: $overtimeRule.isEnabled)
-                TextField("Daily threshold hours", value: Binding(
-                    get: { overtimeRule.dailyThresholdHours ?? 8 },
-                    set: { overtimeRule.dailyThresholdHours = $0 }
-                ), format: .number.precision(.fractionLength(1)))
-                    .keyboardType(.decimalPad)
-                TextField("Weekly threshold hours", value: Binding(
-                    get: { overtimeRule.weeklyThresholdHours ?? 40 },
-                    set: { overtimeRule.weeklyThresholdHours = $0 }
-                ), format: .number.precision(.fractionLength(1)))
-                    .keyboardType(.decimalPad)
-                TextField("Daily multiplier", value: $overtimeRule.dailyMultiplier, format: .number.precision(.fractionLength(2)))
-                    .keyboardType(.decimalPad)
-                TextField("Weekly multiplier", value: $overtimeRule.weeklyMultiplier, format: .number.precision(.fractionLength(2)))
-                    .keyboardType(.decimalPad)
-                Picker("Precedence", selection: $overtimeRule.precedenceRawValue) {
-                    ForEach(OvertimePrecedence.allCases) { precedence in
-                        Text(precedence.title).tag(precedence.rawValue)
+                Toggle("I want overtime tracking", isOn: $overtimeRule.isEnabled)
+                if overtimeRule.isEnabled {
+                    Text("Only turn this on if your employer actually pays overtime.")
+                        .font(.footnote)
+                        .foregroundStyle(theme.secondaryText)
+
+                    TextField("Overtime after this many hours in one day", value: Binding(
+                        get: { overtimeRule.dailyThresholdHours ?? 8 },
+                        set: { overtimeRule.dailyThresholdHours = $0 }
+                    ), format: .number.precision(.fractionLength(1)))
+                        .keyboardType(.decimalPad)
+                    TextField("Overtime after this many hours in one week", value: Binding(
+                        get: { overtimeRule.weeklyThresholdHours ?? 40 },
+                        set: { overtimeRule.weeklyThresholdHours = $0 }
+                    ), format: .number.precision(.fractionLength(1)))
+                        .keyboardType(.decimalPad)
+                    TextField("Daily overtime pays this many times normal pay", value: $overtimeRule.dailyMultiplier, format: .number.precision(.fractionLength(2)))
+                        .keyboardType(.decimalPad)
+                    TextField("Weekly overtime pays this many times normal pay", value: $overtimeRule.weeklyMultiplier, format: .number.precision(.fractionLength(2)))
+                        .keyboardType(.decimalPad)
+                    Picker("If both rules hit at once", selection: $overtimeRule.precedenceRawValue) {
+                        Text("Use the higher overtime rate").tag(OvertimePrecedence.highestRateWins.rawValue)
+                        Text("Use the daily rule first").tag(OvertimePrecedence.dailyFirst.rawValue)
+                        Text("Use the weekly rule first").tag(OvertimePrecedence.weeklyFirst.rawValue)
                     }
                 }
             }
 
-            Section("Take Home Estimate") {
-                Picker("Filing Status", selection: $taxProfile.filingStatusRawValue) {
+            Section("Take-Home Estimate") {
+                Text("This stays an estimate, not an exact paycheck deposit.")
+                    .font(.footnote)
+                    .foregroundStyle(theme.secondaryText)
+
+                Picker("I file as", selection: $taxProfile.filingStatusRawValue) {
                     ForEach(FilingStatus.allCases) { status in
                         Text(status.title).tag(status.rawValue)
                     }
                 }
-                Toggle("Use standard deduction", isOn: $taxProfile.usesStandardDeduction)
-                Picker("Pay Schedule", selection: $paySchedule.frequencyRawValue) {
+                Toggle("Use the regular deduction most people with one job use", isOn: $taxProfile.usesStandardDeduction)
+                Picker("My paycheck arrives", selection: $paySchedule.frequencyRawValue) {
                     ForEach(PayFrequency.allCases) { frequency in
                         Text(frequency.title).tag(frequency.rawValue)
                     }
                 }
-                DatePicker("Pay Period Anchor", selection: $paySchedule.anchorDate, displayedComponents: .date)
-                TextField("Insurance / year", value: $taxProfile.annualPretaxInsurance, format: .currency(code: "USD"))
-                TextField("Retirement / year", value: $taxProfile.annualRetirementContribution, format: .currency(code: "USD"))
-                TextField("Extra federal / period", value: $taxProfile.extraFederalWithholdingPerPeriod, format: .currency(code: "USD"))
-                TextField("Extra state / period", value: $taxProfile.extraStateWithholdingPerPeriod, format: .currency(code: "USD"))
-                TextField("Expected hours / week", value: $taxProfile.expectedWeeklyHours, format: .number.precision(.fractionLength(1)))
+                DatePicker("This pay period started on", selection: $paySchedule.anchorDate, displayedComponents: .date)
+                TextField("Insurance taken out over a year", value: $taxProfile.annualPretaxInsurance, format: .currency(code: "USD"))
+                    .keyboardType(.decimalPad)
+                TextField("Retirement taken out over a year", value: $taxProfile.annualRetirementContribution, format: .currency(code: "USD"))
+                    .keyboardType(.decimalPad)
+
+                DisclosureGroup("Advanced tax tweaks") {
+                    TextField("Extra federal withholding per paycheck", value: $taxProfile.extraFederalWithholdingPerPeriod, format: .currency(code: "USD"))
+                    TextField("Extra state withholding per paycheck", value: $taxProfile.extraStateWithholdingPerPeriod, format: .currency(code: "USD"))
+                    TextField("Typical hours in a week", value: $taxProfile.expectedWeeklyHours, format: .number.precision(.fractionLength(1)))
+                }
             }
 
             Section("Automation") {
@@ -217,6 +237,28 @@ private struct SettingsContent: View {
         }
         .tint(theme.grossAccent)
     }
+
+    private var nightBonusStartBinding: Binding<Date> {
+        Binding(
+            get: {
+                Calendar.current.date(from: DateComponents(hour: nightRule.startHour, minute: 0)) ?? .now
+            },
+            set: { newValue in
+                nightRule.startHour = Calendar.current.component(.hour, from: newValue)
+            }
+        )
+    }
+
+    private var nightBonusEndBinding: Binding<Date> {
+        Binding(
+            get: {
+                Calendar.current.date(from: DateComponents(hour: nightRule.endHour, minute: 0)) ?? .now
+            },
+            set: { newValue in
+                nightRule.endHour = Calendar.current.component(.hour, from: newValue)
+            }
+        )
+    }
 }
 
 private struct RateEditorView: View {
@@ -231,7 +273,7 @@ private struct RateEditorView: View {
     init(editingRate: PayRateSchedule?) {
         self.editingRate = editingRate
         _effectiveDate = State(initialValue: editingRate?.effectiveDate ?? Calendar.current.startOfDay(for: .now))
-        _hourlyRate = State(initialValue: editingRate?.hourlyRate ?? 42)
+        _hourlyRate = State(initialValue: editingRate?.hourlyRate ?? 33.29)
     }
 
     var body: some View {

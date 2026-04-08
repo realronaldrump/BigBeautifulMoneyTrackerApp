@@ -19,7 +19,7 @@ struct TemplatesView: View {
                     VStack(alignment: .leading, spacing: 6) {
                         Text(template.name)
                             .font(.system(size: 18, weight: .semibold, design: .rounded))
-                        Text("\(template.weekday.title) • \(String(format: "%02d:%02d", template.startHour, template.startMinute)) - \(String(format: "%02d:%02d", template.endHour, template.endMinute))")
+                        Text("\(template.weekday.title) • \(templateTimeLabel(hour: template.startHour, minute: template.startMinute)) - \(templateTimeLabel(hour: template.endHour, minute: template.endMinute))")
                             .font(.system(size: 14, weight: .medium, design: .rounded))
                             .foregroundStyle(.secondary)
                     }
@@ -90,8 +90,8 @@ private struct TemplateEditorView: View {
                     Text(weekday.title).tag(weekday)
                 }
             }
-            Stepper("Start hour: \(startHour):\(String(format: "%02d", startMinute))", value: $startHour, in: 0...23)
-            Stepper("End hour: \(endHour):\(String(format: "%02d", endMinute))", value: $endHour, in: 0...23)
+            DatePicker("Start time", selection: startTimeBinding, displayedComponents: .hourAndMinute)
+            DatePicker("End time", selection: endTimeBinding, displayedComponents: .hourAndMinute)
             Stepper("Reminder: \(reminderMinutesBefore) min before", value: $reminderMinutesBefore, in: 0...180, step: 5)
             Toggle("Enabled", isOn: $isEnabled)
         }
@@ -132,4 +132,35 @@ private struct TemplateEditorView: View {
             }
         }
     }
+
+    private var startTimeBinding: Binding<Date> {
+        Binding(
+            get: {
+                Calendar.current.date(from: DateComponents(hour: startHour, minute: startMinute)) ?? .now
+            },
+            set: { newValue in
+                startHour = Calendar.current.component(.hour, from: newValue)
+                startMinute = Calendar.current.component(.minute, from: newValue)
+            }
+        )
+    }
+
+    private var endTimeBinding: Binding<Date> {
+        Binding(
+            get: {
+                Calendar.current.date(from: DateComponents(hour: endHour, minute: endMinute)) ?? .now
+            },
+            set: { newValue in
+                endHour = Calendar.current.component(.hour, from: newValue)
+                endMinute = Calendar.current.component(.minute, from: newValue)
+            }
+        )
+    }
+}
+
+private func templateTimeLabel(hour: Int, minute: Int) -> String {
+    let formatter = DateFormatter()
+    formatter.timeStyle = .short
+    let date = Calendar.current.date(from: DateComponents(hour: hour, minute: minute)) ?? .now
+    return formatter.string(from: date)
 }

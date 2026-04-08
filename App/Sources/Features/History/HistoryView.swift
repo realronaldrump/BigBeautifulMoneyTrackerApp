@@ -28,6 +28,19 @@ struct HistoryView: View {
                             ShiftCardView(shift: shift, takeHomeEstimate: takeHomeEstimate(for: shift))
                         }
                         .buttonStyle(.plain)
+                        .contextMenu {
+                            Button {
+                                editingShift = shift
+                            } label: {
+                                Label("Edit Shift", systemImage: "pencil")
+                            }
+
+                            Button(role: .destructive) {
+                                try? ShiftController.deleteShift(shift, in: modelContext)
+                            } label: {
+                                Label("Delete Shift", systemImage: "trash")
+                            }
+                        }
                     }
                 }
             }
@@ -182,6 +195,21 @@ struct ShiftEditorView: View {
 
             Section("Notes") {
                 TextField("Optional note", text: $note, axis: .vertical)
+            }
+
+            if let editingShift {
+                Section {
+                    Button(role: .destructive) {
+                        do {
+                            try ShiftController.deleteShift(editingShift, in: modelContext)
+                            dismiss()
+                        } catch {
+                            errorText = error.localizedDescription
+                        }
+                    } label: {
+                        Text("Delete this shift")
+                    }
+                }
             }
 
             if let errorText {
