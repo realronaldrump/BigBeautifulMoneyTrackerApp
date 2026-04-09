@@ -62,96 +62,108 @@ struct HistoryView: View {
         ZStack {
             MoneyBackground(mode: .gross)
 
-            ScrollView {
-                LazyVStack(spacing: 14) {
+            List {
                     BrandHeader(
                         eyebrow: "Shift History",
-                        subtitle: "Reuse old shifts, queue future ones, and keep the finished ledger polished inside Davis's Big Beautiful Money Tracker App.",
+                        subtitle: "Review completed shifts, schedule future work, and keep a personal earnings ledger without a company account.",
                         mode: .gross,
                         compact: true
                     )
+                .historyListRow(top: 18, bottom: 12)
 
-                    if scheduledShifts.isEmpty, shifts.isEmpty {
-                        emptyState
-                    }
+                if scheduledShifts.isEmpty, shifts.isEmpty {
+                    emptyState
+                        .historyListRow(top: 24, bottom: 12)
+                }
 
-                    if !scheduledShifts.isEmpty {
-                        sectionHeader(title: "Upcoming Schedule", systemImage: "calendar.badge.clock")
+                if !scheduledShifts.isEmpty {
+                    sectionHeader(title: "Upcoming Schedule", systemImage: "calendar.badge.clock")
+                        .historyListRow(top: 8, bottom: 6)
 
-                        ForEach(scheduledShifts) { shift in
+                    ForEach(scheduledShifts) { shift in
+                        Button {
+                            destination = HistoryEditorDestination(kind: .editScheduledShift(shift))
+                        } label: {
+                            ScheduledShiftCardView(shift: shift)
+                        }
+                        .buttonStyle(.plain)
+                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                            Button(role: .destructive) {
+                                deleteScheduledShift(shift)
+                            } label: {
+                                Label("Delete Schedule", systemImage: "trash")
+                            }
+                        }
+                        .contextMenu {
                             Button {
                                 destination = HistoryEditorDestination(kind: .editScheduledShift(shift))
                             } label: {
-                                ScheduledShiftCardView(shift: shift)
+                                Label("Edit Schedule", systemImage: "calendar")
                             }
-                            .buttonStyle(.plain)
-                            .contextMenu {
-                                Button {
-                                    destination = HistoryEditorDestination(kind: .editScheduledShift(shift))
-                                } label: {
-                                    Label("Edit Schedule", systemImage: "calendar")
-                                }
 
-                                Button(role: .destructive) {
-                                    try? ShiftController.deleteScheduledShift(shift, in: modelContext)
-                                } label: {
-                                    Label("Delete Schedule", systemImage: "trash")
-                                }
+                            Button(role: .destructive) {
+                                deleteScheduledShift(shift)
+                            } label: {
+                                Label("Delete Schedule", systemImage: "trash")
                             }
                         }
+                        .historyListRow(bottom: 8)
                     }
+                }
 
-                    if !shifts.isEmpty {
-                        sectionHeader(title: "Completed Shifts", systemImage: "clock.arrow.circlepath")
+                if !shifts.isEmpty {
+                    sectionHeader(title: "Completed Shifts", systemImage: "clock.arrow.circlepath")
+                        .historyListRow(top: scheduledShifts.isEmpty ? 8 : 18, bottom: 6)
 
-                        ForEach(shifts) { shift in
+                    ForEach(shifts) { shift in
+                        Button {
+                            destination = HistoryEditorDestination(kind: .editShift(shift))
+                        } label: {
+                            ShiftCardView(shift: shift, takeHomeEstimate: takeHomeEstimate(for: shift))
+                        }
+                        .buttonStyle(.plain)
+                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                            Button(role: .destructive) {
+                                deleteShift(shift)
+                            } label: {
+                                Label("Delete Shift", systemImage: "trash")
+                            }
+                        }
+                        .contextMenu {
                             Button {
                                 destination = HistoryEditorDestination(kind: .editShift(shift))
                             } label: {
-                                ShiftCardView(shift: shift, takeHomeEstimate: takeHomeEstimate(for: shift))
+                                Label("Edit Shift", systemImage: "pencil")
                             }
-                            .buttonStyle(.plain)
-                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                Button(role: .destructive) {
-                                    deleteShift(shift)
-                                } label: {
-                                    Label("Delete Shift", systemImage: "trash")
-                                }
+
+                            Button {
+                                destination = HistoryEditorDestination(
+                                    kind: .newShift(ShiftEditorSeed.duplicate(from: shift))
+                                )
+                            } label: {
+                                Label("Duplicate Shift", systemImage: "doc.on.doc")
                             }
-                            .contextMenu {
-                                Button {
-                                    destination = HistoryEditorDestination(kind: .editShift(shift))
-                                } label: {
-                                    Label("Edit Shift", systemImage: "pencil")
-                                }
 
-                                Button {
-                                    destination = HistoryEditorDestination(
-                                        kind: .newShift(ShiftEditorSeed.duplicate(from: shift))
-                                    )
-                                } label: {
-                                    Label("Duplicate Shift", systemImage: "doc.on.doc")
-                                }
+                            Button {
+                                destination = HistoryEditorDestination(
+                                    kind: .newScheduledShift(ShiftEditorSeed.scheduledCopy(from: shift))
+                                )
+                            } label: {
+                                Label("Schedule Again", systemImage: "calendar.badge.plus")
+                            }
 
-                                Button {
-                                    destination = HistoryEditorDestination(
-                                        kind: .newScheduledShift(ShiftEditorSeed.scheduledCopy(from: shift))
-                                    )
-                                } label: {
-                                    Label("Schedule Again", systemImage: "calendar.badge.plus")
-                                }
-
-                                Button(role: .destructive) {
-                                    deleteShift(shift)
-                                } label: {
-                                    Label("Delete Shift", systemImage: "trash")
-                                }
+                            Button(role: .destructive) {
+                                deleteShift(shift)
+                            } label: {
+                                Label("Delete Shift", systemImage: "trash")
                             }
                         }
+                        .historyListRow(bottom: 8)
                     }
                 }
-                .padding(18)
             }
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
         }
         .navigationTitle("History")
         .navigationBarTitleDisplayMode(.inline)
@@ -191,7 +203,7 @@ struct HistoryView: View {
                 }
             }
         }
-        .alert("Unable to Delete Shift", isPresented: deleteErrorIsPresented) {
+        .alert("Unable to Delete Entry", isPresented: deleteErrorIsPresented) {
             Button("OK", role: .cancel) {
                 deleteErrorText = nil
             }
@@ -266,6 +278,22 @@ struct HistoryView: View {
         } catch {
             deleteErrorText = error.localizedDescription
         }
+    }
+
+    private func deleteScheduledShift(_ shift: ScheduledShift) {
+        do {
+            try ShiftController.deleteScheduledShift(shift, in: modelContext)
+        } catch {
+            deleteErrorText = error.localizedDescription
+        }
+    }
+}
+
+private extension View {
+    func historyListRow(top: CGFloat = 0, bottom: CGFloat = 0) -> some View {
+        listRowInsets(EdgeInsets(top: top, leading: 18, bottom: bottom, trailing: 18))
+            .listRowSeparator(.hidden)
+            .listRowBackground(Color.clear)
     }
 }
 
@@ -409,7 +437,7 @@ private struct ShiftEditorView: View {
             Section {
                 BrandHeader(
                     eyebrow: editingShift == nil ? "Log Shift" : "Edit Shift",
-                    subtitle: "Adjust timing and notes without losing the clean ledger in Davis's Big Beautiful Money Tracker App.",
+                    subtitle: "Adjust timing and notes for your own work history without losing the clean ledger.",
                     mode: .gross,
                     compact: true
                 )
@@ -501,7 +529,7 @@ private struct ScheduledShiftEditorView: View {
             Section {
                 BrandHeader(
                     eyebrow: editingShift == nil ? "Schedule Shift" : "Edit Scheduled Shift",
-                    subtitle: "Future shifts open and close on their own, while still staying easy to tune.",
+                    subtitle: "Plan future shifts for your own schedule and let the app start and stop them automatically.",
                     mode: .gross,
                     compact: true
                 )

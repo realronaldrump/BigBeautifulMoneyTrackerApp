@@ -23,7 +23,7 @@ struct OnboardingView: View {
                 VStack(alignment: .leading, spacing: 24) {
                     BrandHeader(
                         eyebrow: "Welcome",
-                        subtitle: "Davis's Big Beautiful Money Tracker App starts beautifully: your current setup is prefilled, so you only need to confirm the basics.",
+                        subtitle: "Built for individual hourly workers tracking their own shifts and pay, with no employer setup, invitation, or account required.",
                         mode: .gross
                     )
                     .padding(.top, 24)
@@ -58,6 +58,21 @@ struct OnboardingView: View {
 
     private var formCard: some View {
         VStack(spacing: 18) {
+            GroupBox {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Made for individual hourly workers")
+                        .font(.system(size: 18, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.white)
+
+                    Text("Track your own shifts and earnings without joining a company, getting employer approval, or creating an account.")
+                        .font(.system(size: 15, weight: .medium, design: .rounded))
+                        .foregroundStyle(theme.secondaryText)
+                }
+            } label: {
+                Label("Who It's For", systemImage: "person.crop.circle.badge.checkmark")
+                    .foregroundStyle(.white)
+            }
+
             GroupBox {
                 VStack(alignment: .leading, spacing: 14) {
                     TextField("Your hourly pay", value: $hourlyRate, format: .currency(code: "USD"))

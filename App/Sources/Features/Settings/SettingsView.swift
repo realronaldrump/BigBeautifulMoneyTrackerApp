@@ -81,7 +81,7 @@ private struct SettingsContent: View {
                 Section {
                     BrandHeader(
                         eyebrow: "Settings",
-                        subtitle: "Davis's Big Beautiful Money Tracker App keeps your rules, rates, and reminders elegant while staying easy to tune.",
+                        subtitle: "Tune pay rules, take-home estimates, reminders, and privacy for your own work life.",
                         mode: preferences.selectedDisplayMode,
                         compact: true
                     )
@@ -203,9 +203,19 @@ private struct SettingsContent: View {
                     }
                 }
 
-                Section("Data") {
-                    Toggle("iCloud backup preference", isOn: $preferences.cloudSyncEnabled)
-                    Text("Cloud sync stays local-first. Your data remains private and on-device first.")
+                Section("Data & Access") {
+                    Text("Your shift and pay data stays on this device by default.")
+                    Text("The app does not require an account, employer login, or payroll-provider connection.")
+                        .font(.footnote)
+                        .foregroundStyle(theme.secondaryText)
+                    Text("If your iPhone uses Apple-managed backup services, app data may be included according to your device settings.")
+                        .font(.footnote)
+                        .foregroundStyle(theme.secondaryText)
+                }
+
+                Section("About This App") {
+                    Text("Davis's Big Beautiful Money Tracker App is for individual hourly workers tracking their own shifts and earnings.")
+                    Text("It is not tied to any employer, payroll provider, client, or organization, and it does not require an account.")
                         .font(.footnote)
                         .foregroundStyle(theme.secondaryText)
                 }
@@ -269,7 +279,7 @@ private struct RateEditorView: View {
             Section {
                 BrandHeader(
                     eyebrow: editingRate == nil ? "Add Rate" : "Edit Rate",
-                    subtitle: "Keep pay changes beautifully current in Davis's Big Beautiful Money Tracker App.",
+                    subtitle: "Keep your pay-rate history accurate for your personal shift tracking.",
                     mode: .gross,
                     compact: true
                 )

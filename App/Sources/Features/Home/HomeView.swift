@@ -523,7 +523,7 @@ private struct ActiveShiftToolsView: View {
             Section {
                 BrandHeader(
                     eyebrow: "Shift Tools",
-                    subtitle: "Tune timing and reminders beautifully inside Davis's Big Beautiful Money Tracker App.",
+                    subtitle: "Adjust timing, auto-stop, and reminders for the shift you're tracking right now.",
                     mode: .gross,
                     compact: true
                 )

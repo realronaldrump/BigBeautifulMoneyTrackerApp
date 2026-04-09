@@ -19,7 +19,7 @@ struct TemplatesView: View {
                 LazyVStack(spacing: 14) {
                     BrandHeader(
                         eyebrow: "Schedule Templates",
-                        subtitle: "Davis's Big Beautiful Money Tracker App keeps repeat shifts elegant, editable, and ready for reminders.",
+                        subtitle: "Build repeating shifts for your own workweek and keep reminders and projections ready without sign-up.",
                         mode: .gross,
                         compact: true
                     )
@@ -73,7 +73,7 @@ struct TemplatesView: View {
                 .font(.system(size: 28, weight: .bold, design: .rounded))
                 .foregroundStyle(.white)
 
-            Text("Build a repeating shift once, and Davis's Big Beautiful Money Tracker App can keep reminders and projections feeling automatic.")
+            Text("Build a repeating shift once, and the app can keep your personal schedule, reminders, and projections ready.")
                 .font(.system(size: 15, weight: .medium, design: .rounded))
                 .foregroundStyle(theme.secondaryText)
                 .multilineTextAlignment(.center)
@@ -114,7 +114,7 @@ private struct TemplateEditorView: View {
             Section {
                 BrandHeader(
                     eyebrow: editingTemplate == nil ? "New Template" : "Edit Template",
-                    subtitle: "Shape repeat shifts beautifully inside Davis's Big Beautiful Money Tracker App.",
+                    subtitle: "Shape repeating shifts for your own schedule and reminder flow.",
                     mode: .gross,
                     compact: true
                 )
