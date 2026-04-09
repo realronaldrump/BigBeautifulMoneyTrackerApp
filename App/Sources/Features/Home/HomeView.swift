@@ -45,6 +45,7 @@ struct HomeView: View {
                     ScrollView(showsIndicators: false) {
                         VStack(spacing: 24) {
                             topBar
+                            homeBrandHeader(preferences: preferences)
                             modeToggle(preferences: preferences)
 
                             if let openShift = activeShift {
@@ -165,18 +166,30 @@ struct HomeView: View {
         }
     }
 
+    private func homeBrandHeader(preferences: AppPreferences) -> some View {
+        BrandHeader(
+            eyebrow: activeShift == nil ? "Ready When You Are" : "Live Money Flow",
+            subtitle: activeShift == nil
+                ? "Davis's Big Beautiful Money Tracker App keeps every shift one tap away and every dollar beautifully legible."
+                : "Davis's Big Beautiful Money Tracker App keeps this shift live, elegant, and easy to scan in real time.",
+            mode: preferences.selectedDisplayMode,
+            compact: activeShift != nil
+        )
+    }
+
     private func restingContent(preferences: AppPreferences) -> some View {
         VStack(spacing: 26) {
-            Spacer(minLength: 40)
+            Spacer(minLength: 12)
 
-            VStack(spacing: 12) {
-                Text("Big Beautiful Money Tracker App")
-                    .font(.system(size: 18, weight: .medium, design: .rounded))
-                    .foregroundStyle(theme.secondaryText)
-
+            VStack(spacing: 10) {
                 Text("Off shift.")
                     .font(.system(size: 34, weight: .bold, design: .rounded))
                     .foregroundStyle(Color.white)
+
+                Text("The next tap starts a polished live ledger for today.")
+                    .font(.system(size: 16, weight: .medium, design: .rounded))
+                    .foregroundStyle(theme.secondaryText)
+                    .multilineTextAlignment(.center)
             }
 
             Button {
@@ -198,7 +211,7 @@ struct HomeView: View {
             }
             .buttonStyle(.plain)
 
-            Text("One tap to start. One tap to stop. Everything else stays out of the way.")
+            Text("One tap to start. One tap to stop. Davis's Big Beautiful Money Tracker App keeps the controls quiet so the money stays center stage.")
                 .font(.system(size: 15, weight: .medium, design: .rounded))
                 .foregroundStyle(theme.secondaryText)
                 .multilineTextAlignment(.center)
@@ -256,7 +269,7 @@ struct HomeView: View {
                     }
                 }
             }
-            .padding(.top, 40)
+            .padding(.top, 8)
 
             SummaryDrawer(snapshot: snapshot, mode: preferences.selectedDisplayMode)
 

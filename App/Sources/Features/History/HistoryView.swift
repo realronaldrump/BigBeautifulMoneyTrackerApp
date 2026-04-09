@@ -16,37 +16,47 @@ struct HistoryView: View {
     @State private var creatingShift = false
 
     var body: some View {
-        ScrollView {
-            LazyVStack(spacing: 14) {
-                if shifts.isEmpty {
-                    emptyState
-                } else {
-                    ForEach(shifts) { shift in
-                        Button {
-                            editingShift = shift
-                        } label: {
-                            ShiftCardView(shift: shift, takeHomeEstimate: takeHomeEstimate(for: shift))
-                        }
-                        .buttonStyle(.plain)
-                        .contextMenu {
+        ZStack {
+            MoneyBackground(mode: .gross)
+
+            ScrollView {
+                LazyVStack(spacing: 14) {
+                    BrandHeader(
+                        eyebrow: "Shift History",
+                        subtitle: "Davis's Big Beautiful Money Tracker App keeps every finished shift in a polished ledger you can adjust when reality needs a correction.",
+                        mode: .gross,
+                        compact: true
+                    )
+
+                    if shifts.isEmpty {
+                        emptyState
+                    } else {
+                        ForEach(shifts) { shift in
                             Button {
                                 editingShift = shift
                             } label: {
-                                Label("Edit Shift", systemImage: "pencil")
+                                ShiftCardView(shift: shift, takeHomeEstimate: takeHomeEstimate(for: shift))
                             }
+                            .buttonStyle(.plain)
+                            .contextMenu {
+                                Button {
+                                    editingShift = shift
+                                } label: {
+                                    Label("Edit Shift", systemImage: "pencil")
+                                }
 
-                            Button(role: .destructive) {
-                                try? ShiftController.deleteShift(shift, in: modelContext)
-                            } label: {
-                                Label("Delete Shift", systemImage: "trash")
+                                Button(role: .destructive) {
+                                    try? ShiftController.deleteShift(shift, in: modelContext)
+                                } label: {
+                                    Label("Delete Shift", systemImage: "trash")
+                                }
                             }
                         }
                     }
                 }
+                .padding(18)
             }
-            .padding(18)
         }
-        .background(Color.black.ignoresSafeArea())
         .navigationTitle("History")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -84,7 +94,7 @@ struct HistoryView: View {
                 .foregroundStyle(theme.secondaryText)
                 .multilineTextAlignment(.center)
         }
-        .padding(.top, 120)
+        .padding(.top, 72)
     }
 
     private func takeHomeEstimate(for shift: ShiftRecord) -> Double {
@@ -188,6 +198,17 @@ struct ShiftEditorView: View {
 
     var body: some View {
         Form {
+            Section {
+                BrandHeader(
+                    eyebrow: editingShift == nil ? "Manual Shift" : "Edit Shift",
+                    subtitle: "Adjust timing and notes without losing the clean ledger in Davis's Big Beautiful Money Tracker App.",
+                    mode: .gross,
+                    compact: true
+                )
+                .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 0))
+                .listRowBackground(Color.clear)
+            }
+
             Section("Timing") {
                 DatePicker("Start", selection: $startDate)
                 DatePicker("End", selection: $endDate, in: startDate...)
@@ -220,7 +241,7 @@ struct ShiftEditorView: View {
             }
         }
         .scrollContentBackground(.hidden)
-        .background(Color.black.ignoresSafeArea())
+        .background(MoneyBackground(mode: .gross))
         .navigationTitle(editingShift == nil ? "Manual Shift" : "Edit Shift")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {

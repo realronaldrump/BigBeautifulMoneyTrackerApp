@@ -21,15 +21,11 @@ struct OnboardingView: View {
 
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 24) {
-                    VStack(alignment: .leading, spacing: 14) {
-                        Text("Big Beautiful Money Tracker App")
-                            .font(.system(size: 38, weight: .heavy, design: .rounded))
-                            .foregroundStyle(.white)
-
-                        Text("I’ve already started this off around your setup: $33.29/hour, single filer, one income source. You only need to confirm the basics here.")
-                            .font(.system(size: 17, weight: .medium, design: .rounded))
-                            .foregroundStyle(theme.secondaryText)
-                    }
+                    BrandHeader(
+                        eyebrow: "Welcome",
+                        subtitle: "Davis's Big Beautiful Money Tracker App starts beautifully: your current setup is prefilled, so you only need to confirm the basics.",
+                        mode: .gross
+                    )
                     .padding(.top, 24)
 
                     formCard
@@ -103,10 +99,10 @@ struct OnboardingView: View {
         .padding(18)
         .background(
             RoundedRectangle(cornerRadius: 30, style: .continuous)
-                .fill(theme.panel.opacity(0.96))
+                .fill(theme.panelFill(for: .gross))
                 .overlay(
                     RoundedRectangle(cornerRadius: 30, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.06), lineWidth: 1)
+                        .strokeBorder(theme.brandStroke, lineWidth: 1)
                 )
         )
         .tint(theme.grossAccent)
