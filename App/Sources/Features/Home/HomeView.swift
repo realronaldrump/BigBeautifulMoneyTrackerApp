@@ -130,7 +130,6 @@ private struct HomeDashboardSceneView: View {
             ScrollView(showsIndicators: false) {
                 VStack(spacing: 24) {
                     topBar
-                    homeBrandHeader
                     modeToggle
 
                     if let activeShift {
@@ -224,17 +223,6 @@ private struct HomeDashboardSceneView: View {
         }
     }
 
-    private var homeBrandHeader: some View {
-        BrandHeader(
-            eyebrow: activeShift == nil ? "Ready When You Are" : "Live Money Flow",
-            subtitle: activeShift == nil
-                ? "Davis's Big Beautiful Money Tracker App keeps every shift one tap away and every dollar beautifully legible."
-                : "Davis's Big Beautiful Money Tracker App keeps this shift live, elegant, and easy to scan in real time.",
-            mode: preferences.selectedDisplayMode,
-            compact: activeShift != nil
-        )
-    }
-
     private var restingContent: some View {
         VStack(spacing: 26) {
             Spacer(minLength: 12)
@@ -244,7 +232,7 @@ private struct HomeDashboardSceneView: View {
                     .font(.system(size: 34, weight: .bold, design: .rounded))
                     .foregroundStyle(Color.white)
 
-                Text("The next tap starts a polished live ledger for today.")
+                Text("Tap to start today's shift.")
                     .font(.system(size: 16, weight: .medium, design: .rounded))
                     .foregroundStyle(theme.secondaryText)
                     .multilineTextAlignment(.center)
@@ -268,11 +256,6 @@ private struct HomeDashboardSceneView: View {
                     .shadow(color: theme.accent(for: preferences.selectedDisplayMode).opacity(0.32), radius: 26)
             }
             .buttonStyle(.plain)
-
-            Text("One tap to start. One tap to stop. Davis's Big Beautiful Money Tracker App keeps the controls quiet so the money stays center stage.")
-                .font(.system(size: 15, weight: .medium, design: .rounded))
-                .foregroundStyle(theme.secondaryText)
-                .multilineTextAlignment(.center)
 
             if let nextScheduledShift = scheduledShifts.first {
                 upcomingScheduledShiftCard(nextScheduledShift: nextScheduledShift)

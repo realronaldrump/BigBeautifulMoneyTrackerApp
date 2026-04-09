@@ -24,15 +24,14 @@ targets:
     sources:
       - path: App/Sources
       - path: Shared/Sources
-    resources:
       - path: App/Resources
     info:
       path: App/Info.plist
       properties:
         CFBundleDisplayName: Davis's Big Beautiful Money Tracker App
+        CFBundleIconName: AppIcon
         LSRequiresIPhoneOS: true
         NSSupportsLiveActivities: true
-        UIRequiresFullScreen: true
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
         UIApplicationSceneManifest:
@@ -63,7 +62,6 @@ targets:
     sources:
       - path: Widgets/Sources
       - path: Shared/Sources
-    resources:
       - path: Widgets/Resources
     info:
       path: Widgets/Info.plist

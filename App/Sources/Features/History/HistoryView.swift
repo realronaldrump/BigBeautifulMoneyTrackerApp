@@ -56,6 +56,7 @@ struct HistoryView: View {
     @Query private var templates: [ScheduleTemplate]
 
     @State private var destination: HistoryEditorDestination?
+    @State private var deleteErrorText: String?
 
     var body: some View {
         ZStack {
@@ -110,6 +111,13 @@ struct HistoryView: View {
                                 ShiftCardView(shift: shift, takeHomeEstimate: takeHomeEstimate(for: shift))
                             }
                             .buttonStyle(.plain)
+                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                Button(role: .destructive) {
+                                    deleteShift(shift)
+                                } label: {
+                                    Label("Delete Shift", systemImage: "trash")
+                                }
+                            }
                             .contextMenu {
                                 Button {
                                     destination = HistoryEditorDestination(kind: .editShift(shift))
@@ -134,7 +142,7 @@ struct HistoryView: View {
                                 }
 
                                 Button(role: .destructive) {
-                                    try? ShiftController.deleteShift(shift, in: modelContext)
+                                    deleteShift(shift)
                                 } label: {
                                     Label("Delete Shift", systemImage: "trash")
                                 }
@@ -182,6 +190,13 @@ struct HistoryView: View {
                     ScheduledShiftEditorView(editingShift: nil, seed: seed)
                 }
             }
+        }
+        .alert("Unable to Delete Shift", isPresented: deleteErrorIsPresented) {
+            Button("OK", role: .cancel) {
+                deleteErrorText = nil
+            }
+        } message: {
+            Text(deleteErrorText ?? "")
         }
     }
 
@@ -232,6 +247,25 @@ struct HistoryView: View {
         )
 
         return TaxEstimator.estimatedTakeHome(for: shift.grossEarnings, estimate: estimate)
+    }
+
+    private var deleteErrorIsPresented: Binding<Bool> {
+        Binding(
+            get: { deleteErrorText != nil },
+            set: { isPresented in
+                if !isPresented {
+                    deleteErrorText = nil
+                }
+            }
+        )
+    }
+
+    private func deleteShift(_ shift: ShiftRecord) {
+        do {
+            try ShiftController.deleteShift(shift, in: modelContext)
+        } catch {
+            deleteErrorText = error.localizedDescription
+        }
     }
 }
 

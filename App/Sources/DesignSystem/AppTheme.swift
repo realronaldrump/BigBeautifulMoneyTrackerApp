@@ -138,18 +138,17 @@ private struct BrandSeal: View {
     let mode: EarningsDisplayMode
 
     var body: some View {
-        ZStack {
-            Circle()
-                .fill(theme.metallicGradient)
-                .frame(width: 34, height: 34)
-
-            Circle()
-                .fill(theme.trueBlack)
-                .frame(width: 26, height: 26)
-
-            Image(systemName: mode == .gross ? "dollarsign.circle.fill" : "chart.line.uptrend.xyaxis.circle.fill")
-                .font(.system(size: 14, weight: .bold))
-                .foregroundStyle(theme.accent(for: mode))
-        }
+        Image("BrandLogo")
+            .resizable()
+            .interpolation(.high)
+            .scaledToFit()
+            .frame(width: 38, height: 38)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(theme.brandStroke, lineWidth: 1)
+            }
+            .shadow(color: theme.accent(for: mode).opacity(0.18), radius: 10, y: 4)
+            .accessibilityHidden(true)
     }
 }
