@@ -397,6 +397,17 @@ private struct ActiveShiftToolsView: View {
 
     var body: some View {
         Form {
+            Section {
+                BrandHeader(
+                    eyebrow: "Shift Tools",
+                    subtitle: "Tune timing and reminders beautifully inside Davis's Big Beautiful Money Tracker App.",
+                    mode: .gross,
+                    compact: true
+                )
+                .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 0))
+                .listRowBackground(Color.clear)
+            }
+
             Section("Fix Start Time") {
                 DatePicker("Shift started", selection: $startDate)
                 Text("Use this only if you need to correct when you actually clocked in.")
@@ -424,6 +435,8 @@ private struct ActiveShiftToolsView: View {
                 }
             }
         }
+        .scrollContentBackground(.hidden)
+        .background(MoneyBackground(mode: .gross))
         .navigationTitle("Shift Tools")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {

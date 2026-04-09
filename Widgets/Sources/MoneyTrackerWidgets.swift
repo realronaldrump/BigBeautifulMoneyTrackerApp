@@ -132,8 +132,25 @@ struct MoneyTrackerWidgetView: View {
         entry.mode == .gross ? entry.snapshot.currentGross : entry.snapshot.currentTakeHome
     }
 
+    private var widgetBackground: LinearGradient {
+        LinearGradient(
+            colors: [
+                Color.black,
+                Color(red: 0.08, green: 0.10, blue: 0.12),
+                Color(red: 0.16, green: 0.23, blue: 0.19)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
     private var smallView: some View {
         VStack(alignment: .leading, spacing: 10) {
+            Text("Davis's Big Beautiful")
+                .font(.system(size: 10, weight: .semibold, design: .rounded))
+                .foregroundStyle(.tertiary)
+                .lineLimit(2)
+
             Text(entry.mode == .gross ? "Gross" : "Take Home")
                 .font(.system(size: 12, weight: .semibold, design: .rounded))
                 .foregroundStyle(.secondary)
@@ -147,12 +164,17 @@ struct MoneyTrackerWidgetView: View {
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .containerBackground(.black, for: .widget)
+        .containerBackground(widgetBackground, for: .widget)
     }
 
     private var mediumView: some View {
         HStack(alignment: .top, spacing: 14) {
             VStack(alignment: .leading, spacing: 8) {
+                Text("Davis's Big Beautiful Money Tracker App")
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(2)
+
                 Text(entry.mode == .gross ? "Current Shift" : "Estimated Net")
                     .font(.system(size: 12, weight: .semibold, design: .rounded))
                     .foregroundStyle(.secondary)
@@ -173,12 +195,12 @@ struct MoneyTrackerWidgetView: View {
                 stat("All Time", entry.mode == .gross ? entry.snapshot.allTimeGross : entry.snapshot.allTimeTakeHome)
             }
         }
-        .containerBackground(.black, for: .widget)
+        .containerBackground(widgetBackground, for: .widget)
     }
 
     private var accessoryView: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(entry.mode == .gross ? "Money" : "Net")
+            Text("Davis's")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
             Text(amount, format: .currency(code: "USD"))
@@ -208,9 +230,16 @@ struct MoneyShiftActivityView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(context.state.mode == .gross ? "Current Gross" : "Estimated Net")
-                .font(.system(size: 12, weight: .semibold, design: .rounded))
-                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(context.attributes.title)
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(2)
+
+                Text(context.state.mode == .gross ? "Current Gross" : "Estimated Net")
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.secondary)
+            }
 
             Text(context.state.syncedAmount, format: .currency(code: "USD"))
                 .font(.system(size: 28, weight: .heavy, design: .rounded))
@@ -226,7 +255,7 @@ struct MoneyShiftActivityView: View {
             .foregroundStyle(.secondary)
         }
         .padding()
-        .activityBackgroundTint(.black)
+        .activityBackgroundTint(Color(red: 0.08, green: 0.10, blue: 0.12))
         .activitySystemActionForegroundColor(.white)
     }
 }
@@ -244,8 +273,8 @@ struct MoneyTrackerWidget: Widget {
         StaticConfiguration(kind: "MoneyTrackerWidget", provider: MoneyTrackerWidgetProvider()) { entry in
             MoneyTrackerWidgetView(entry: entry)
         }
-        .configurationDisplayName("Money Tracker")
-        .description("See your current shift, pay period, and projected paycheck.")
+        .configurationDisplayName("Davis's Big Beautiful Money Tracker App")
+        .description("See live shift totals and projected pay from Davis's Big Beautiful Money Tracker App.")
         .supportedFamilies([.systemSmall, .systemMedium, .accessoryRectangular])
     }
 }

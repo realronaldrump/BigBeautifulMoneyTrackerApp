@@ -29,7 +29,7 @@ targets:
     info:
       path: App/Info.plist
       properties:
-        CFBundleDisplayName: Big Beautiful Money Tracker App
+        CFBundleDisplayName: Davis's Big Beautiful Money Tracker App
         LSRequiresIPhoneOS: true
         NSSupportsLiveActivities: true
         UIRequiresFullScreen: true
@@ -68,7 +68,7 @@ targets:
     info:
       path: Widgets/Info.plist
       properties:
-        CFBundleDisplayName: Big Beautiful Money Tracker App Widgets
+        CFBundleDisplayName: Davis's Big Beautiful Money Tracker App Widgets
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
     entitlements:

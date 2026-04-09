@@ -11,7 +11,7 @@ enum LiveActivityManager {
     ) {
         guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
 
-        let attributes = ShiftActivityAttributes(title: "Big Beautiful Money Tracker App")
+        let attributes = ShiftActivityAttributes(title: "Davis's Big Beautiful Money Tracker App")
         let contentState = ShiftActivityAttributes.ContentState(
             mode: mode,
             syncedAmount: amount,
