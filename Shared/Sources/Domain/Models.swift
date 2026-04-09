@@ -111,8 +111,8 @@ final class NightDifferentialRule {
 
     init(
         id: UUID = UUID(),
-        startHour: Int = 19,
-        endHour: Int = 7,
+        startHour: Int = 18,
+        endHour: Int = 6,
         percentIncrease: Double = 0.07,
         isEnabled: Bool = true
     ) {

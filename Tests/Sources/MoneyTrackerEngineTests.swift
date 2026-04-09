@@ -38,16 +38,16 @@ final class MoneyTrackerEngineTests: XCTestCase {
             start: start,
             end: end,
             payRates: [PayRateSchedule(effectiveDate: start, hourlyRate: 50)],
-            nightRule: NightDifferentialRule(startHour: 19, endHour: 7, percentIncrease: 0.07, isEnabled: true),
+            nightRule: NightDifferentialRule(startHour: 18, endHour: 6, percentIncrease: 0.07, isEnabled: true),
             overtimeRule: nil,
             historicalShifts: [],
             calendar: calendar
         )
 
-        XCTAssertEqual(result.regularHours, 1, accuracy: 0.001)
-        XCTAssertEqual(result.nightHours, 1, accuracy: 0.001)
-        XCTAssertEqual(result.nightPremiumEarnings, 3.5, accuracy: 0.001)
-        XCTAssertEqual(result.grossEarnings, 103.5, accuracy: 0.001)
+        XCTAssertEqual(result.regularHours, 0, accuracy: 0.001)
+        XCTAssertEqual(result.nightHours, 2, accuracy: 0.001)
+        XCTAssertEqual(result.nightPremiumEarnings, 7, accuracy: 0.001)
+        XCTAssertEqual(result.grossEarnings, 107, accuracy: 0.001)
     }
 
     func testRateChangeBoundary() {
