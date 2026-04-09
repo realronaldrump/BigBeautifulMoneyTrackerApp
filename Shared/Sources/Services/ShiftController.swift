@@ -4,6 +4,7 @@ import SwiftData
 enum ShiftControllerError: LocalizedError {
     case missingPayRate
     case noOpenShift
+    case invalidShiftRange
     case invalidScheduledEnd
 
     var errorDescription: String? {
@@ -12,20 +13,46 @@ enum ShiftControllerError: LocalizedError {
             "Add an hourly rate before tracking a shift."
         case .noOpenShift:
             "There isn’t an active shift to end."
+        case .invalidShiftRange:
+            "The shift end needs to be later than the start."
         case .invalidScheduledEnd:
             "The planned end needs to be later than the shift start."
         }
     }
 }
 
+struct ScheduledShiftAutomationResult {
+    var autoCompletedShifts: [ShiftRecord] = []
+    var startedShift: OpenShiftState?
+}
+
 @MainActor
 enum ShiftController {
-    static func startShift(in context: ModelContext, at date: Date = .now) throws {
+    private static let defaultAutoEndReminderOffsets = [30, 15, 5]
+
+    @discardableResult
+    static func startShift(
+        in context: ModelContext,
+        at date: Date = .now,
+        note: String = "",
+        scheduledEndDate: Date? = nil,
+        reminderOffsets: [Int] = []
+    ) throws -> OpenShiftState {
         try DataBootstrapper.seedIfNeeded(in: context)
-        if try DataBootstrapper.first(OpenShiftState.self, in: context) == nil {
-            context.insert(OpenShiftState(startDate: date))
-            try context.save()
+        if let existingShift = try DataBootstrapper.first(OpenShiftState.self, in: context) {
+            return existingShift
         }
+
+        if let scheduledEndDate, scheduledEndDate <= date {
+            throw ShiftControllerError.invalidScheduledEnd
+        }
+
+        let openShift = OpenShiftState(startDate: date, note: note)
+        openShift.scheduledEndDate = scheduledEndDate
+        openShift.scheduledReminderOffsets = scheduledEndDate == nil ? [] : reminderOffsets
+        context.insert(openShift)
+        try context.save()
+        return openShift
     }
 
     @discardableResult
@@ -75,6 +102,10 @@ enum ShiftController {
         note: String = ""
     ) throws {
         try DataBootstrapper.seedIfNeeded(in: context)
+        guard endDate > startDate else {
+            throw ShiftControllerError.invalidShiftRange
+        }
+
         let payRates = try context.fetch(FetchDescriptor<PayRateSchedule>())
         guard !payRates.isEmpty else {
             throw ShiftControllerError.missingPayRate
@@ -119,7 +150,36 @@ enum ShiftController {
         try context.save()
     }
 
+    static func saveScheduledShift(
+        in context: ModelContext,
+        editing shift: ScheduledShift?,
+        startDate: Date,
+        endDate: Date,
+        note: String = ""
+    ) throws {
+        try DataBootstrapper.seedIfNeeded(in: context)
+        guard endDate > startDate else {
+            throw ShiftControllerError.invalidShiftRange
+        }
+
+        if let shift {
+            shift.startDate = startDate
+            shift.endDate = endDate
+            shift.note = note
+            shift.updatedAt = .now
+        } else {
+            context.insert(ScheduledShift(startDate: startDate, endDate: endDate, note: note))
+        }
+
+        try context.save()
+    }
+
     static func deleteShift(_ shift: ShiftRecord, in context: ModelContext) throws {
+        context.delete(shift)
+        try context.save()
+    }
+
+    static func deleteScheduledShift(_ shift: ScheduledShift, in context: ModelContext) throws {
         context.delete(shift)
         try context.save()
     }
@@ -153,6 +213,75 @@ enum ShiftController {
         }
 
         return try endShift(in: context, at: scheduledEndDate)
+    }
+
+    static func reconcileScheduledShifts(in context: ModelContext, at date: Date = .now) throws -> ScheduledShiftAutomationResult {
+        try DataBootstrapper.seedIfNeeded(in: context)
+
+        guard try DataBootstrapper.first(OpenShiftState.self, in: context) == nil else {
+            return ScheduledShiftAutomationResult()
+        }
+
+        let scheduledDescriptor = FetchDescriptor<ScheduledShift>(
+            sortBy: [SortDescriptor(\ScheduledShift.startDate)]
+        )
+        let scheduledShifts = try context.fetch(scheduledDescriptor)
+        guard !scheduledShifts.isEmpty else {
+            return ScheduledShiftAutomationResult()
+        }
+
+        guard scheduledShifts.contains(where: { $0.startDate <= date }) else {
+            return ScheduledShiftAutomationResult()
+        }
+
+        let payRates = try context.fetch(FetchDescriptor<PayRateSchedule>())
+        guard !payRates.isEmpty else {
+            throw ShiftControllerError.missingPayRate
+        }
+
+        let nightRule = try DataBootstrapper.first(NightDifferentialRule.self, in: context) ?? NightDifferentialRule()
+        let overtimeRule = try DataBootstrapper.first(OvertimeRuleSet.self, in: context)
+        var completedShifts = try context.fetch(
+            FetchDescriptor<ShiftRecord>(sortBy: [SortDescriptor(\ShiftRecord.startDate)])
+        )
+        var result = ScheduledShiftAutomationResult()
+
+        for scheduledShift in scheduledShifts {
+            if scheduledShift.endDate <= date {
+                let completedShift = makeShiftRecord(
+                    from: scheduledShift,
+                    payRates: payRates,
+                    nightRule: nightRule,
+                    overtimeRule: overtimeRule,
+                    existingShifts: completedShifts
+                )
+
+                context.insert(completedShift)
+                try recordMilestones(for: completedShift, existingShifts: completedShifts, in: context)
+                completedShifts.append(completedShift)
+                result.autoCompletedShifts.append(completedShift)
+                context.delete(scheduledShift)
+                continue
+            }
+
+            guard scheduledShift.startDate <= date else {
+                break
+            }
+
+            let startedShift = OpenShiftState(startDate: scheduledShift.startDate, note: scheduledShift.note)
+            startedShift.scheduledEndDate = scheduledShift.endDate
+            startedShift.scheduledReminderOffsets = defaultAutoEndReminderOffsets
+            context.insert(startedShift)
+            context.delete(scheduledShift)
+            result.startedShift = startedShift
+            break
+        }
+
+        if !result.autoCompletedShifts.isEmpty || result.startedShift != nil {
+            try context.save()
+        }
+
+        return result
     }
 
     static func dashboardSnapshot(in context: ModelContext, at date: Date = .now) throws -> DashboardSnapshot {
@@ -249,5 +378,29 @@ enum ShiftController {
         if newWeekGross > previousBestPeriod {
             context.insert(MilestoneEvent(kind: .weeklyRecord, amount: newWeekGross, shiftIdentifier: newShift.id))
         }
+    }
+
+    private static func makeShiftRecord(
+        from scheduledShift: ScheduledShift,
+        payRates: [PayRateSchedule],
+        nightRule: NightDifferentialRule,
+        overtimeRule: OvertimeRuleSet?,
+        existingShifts: [ShiftRecord]
+    ) -> ShiftRecord {
+        let breakdown = EarningsEngine.calculate(
+            start: scheduledShift.startDate,
+            end: scheduledShift.endDate,
+            payRates: payRates,
+            nightRule: nightRule,
+            overtimeRule: overtimeRule,
+            historicalShifts: existingShifts
+        )
+
+        return ShiftRecord(
+            startDate: scheduledShift.startDate,
+            endDate: scheduledShift.endDate,
+            note: scheduledShift.note,
+            breakdown: breakdown
+        )
     }
 }

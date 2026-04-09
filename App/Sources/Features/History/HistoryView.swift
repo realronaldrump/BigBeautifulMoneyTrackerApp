@@ -1,19 +1,61 @@
 import SwiftData
 import SwiftUI
 
+private struct ShiftEditorSeed {
+    let startDate: Date
+    let endDate: Date
+    let note: String
+
+    static func duplicate(from shift: ShiftRecord) -> ShiftEditorSeed {
+        ShiftEditorSeed(
+            startDate: shift.startDate,
+            endDate: shift.endDate,
+            note: shift.note
+        )
+    }
+
+    static func scheduledCopy(from shift: ShiftRecord, referenceDate: Date = .now, calendar: Calendar = .current) -> ShiftEditorSeed {
+        let startComponents = calendar.dateComponents([.weekday, .hour, .minute], from: shift.startDate)
+        let nextStart = calendar.nextDate(
+            after: referenceDate,
+            matching: startComponents,
+            matchingPolicy: .nextTimePreservingSmallerComponents
+        ) ?? referenceDate.addingTimeInterval(60 * 60)
+
+        let normalizedStart = calendar.date(bySetting: .second, value: 0, of: nextStart) ?? nextStart
+        return ShiftEditorSeed(
+            startDate: normalizedStart,
+            endDate: normalizedStart.addingTimeInterval(shift.endDate.timeIntervalSince(shift.startDate)),
+            note: shift.note
+        )
+    }
+}
+
+private struct HistoryEditorDestination: Identifiable {
+    enum Kind {
+        case editShift(ShiftRecord)
+        case newShift(ShiftEditorSeed?)
+        case editScheduledShift(ScheduledShift)
+        case newScheduledShift(ShiftEditorSeed?)
+    }
+
+    let id = UUID()
+    let kind: Kind
+}
+
 struct HistoryView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(AppTheme.self) private var theme
     @Environment(\.dismiss) private var dismiss
 
     @Query(sort: \ShiftRecord.startDate, order: .reverse) private var shifts: [ShiftRecord]
+    @Query(sort: \ScheduledShift.startDate) private var scheduledShifts: [ScheduledShift]
     @Query private var paySchedules: [PaySchedule]
     @Query private var taxProfiles: [TaxProfile]
     @Query private var payRates: [PayRateSchedule]
     @Query private var templates: [ScheduleTemplate]
 
-    @State private var editingShift: ShiftRecord?
-    @State private var creatingShift = false
+    @State private var destination: HistoryEditorDestination?
 
     var body: some View {
         ZStack {
@@ -23,26 +65,72 @@ struct HistoryView: View {
                 LazyVStack(spacing: 14) {
                     BrandHeader(
                         eyebrow: "Shift History",
-                        subtitle: "Davis's Big Beautiful Money Tracker App keeps every finished shift in a polished ledger you can adjust when reality needs a correction.",
+                        subtitle: "Reuse old shifts, queue future ones, and keep the finished ledger polished inside Davis's Big Beautiful Money Tracker App.",
                         mode: .gross,
                         compact: true
                     )
 
-                    if shifts.isEmpty {
+                    if scheduledShifts.isEmpty, shifts.isEmpty {
                         emptyState
-                    } else {
+                    }
+
+                    if !scheduledShifts.isEmpty {
+                        sectionHeader(title: "Upcoming Schedule", systemImage: "calendar.badge.clock")
+
+                        ForEach(scheduledShifts) { shift in
+                            Button {
+                                destination = HistoryEditorDestination(kind: .editScheduledShift(shift))
+                            } label: {
+                                ScheduledShiftCardView(shift: shift)
+                            }
+                            .buttonStyle(.plain)
+                            .contextMenu {
+                                Button {
+                                    destination = HistoryEditorDestination(kind: .editScheduledShift(shift))
+                                } label: {
+                                    Label("Edit Schedule", systemImage: "calendar")
+                                }
+
+                                Button(role: .destructive) {
+                                    try? ShiftController.deleteScheduledShift(shift, in: modelContext)
+                                } label: {
+                                    Label("Delete Schedule", systemImage: "trash")
+                                }
+                            }
+                        }
+                    }
+
+                    if !shifts.isEmpty {
+                        sectionHeader(title: "Completed Shifts", systemImage: "clock.arrow.circlepath")
+
                         ForEach(shifts) { shift in
                             Button {
-                                editingShift = shift
+                                destination = HistoryEditorDestination(kind: .editShift(shift))
                             } label: {
                                 ShiftCardView(shift: shift, takeHomeEstimate: takeHomeEstimate(for: shift))
                             }
                             .buttonStyle(.plain)
                             .contextMenu {
                                 Button {
-                                    editingShift = shift
+                                    destination = HistoryEditorDestination(kind: .editShift(shift))
                                 } label: {
                                     Label("Edit Shift", systemImage: "pencil")
+                                }
+
+                                Button {
+                                    destination = HistoryEditorDestination(
+                                        kind: .newShift(ShiftEditorSeed.duplicate(from: shift))
+                                    )
+                                } label: {
+                                    Label("Duplicate Shift", systemImage: "doc.on.doc")
+                                }
+
+                                Button {
+                                    destination = HistoryEditorDestination(
+                                        kind: .newScheduledShift(ShiftEditorSeed.scheduledCopy(from: shift))
+                                    )
+                                } label: {
+                                    Label("Schedule Again", systemImage: "calendar.badge.plus")
                                 }
 
                                 Button(role: .destructive) {
@@ -64,21 +152,35 @@ struct HistoryView: View {
                 Button("Done") { dismiss() }
             }
             ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    creatingShift = true
+                Menu {
+                    Button {
+                        destination = HistoryEditorDestination(kind: .newShift(nil))
+                    } label: {
+                        Label("Log Completed Shift", systemImage: "plus")
+                    }
+
+                    Button {
+                        destination = HistoryEditorDestination(kind: .newScheduledShift(nil))
+                    } label: {
+                        Label("Schedule Future Shift", systemImage: "calendar.badge.plus")
+                    }
                 } label: {
                     Image(systemName: "plus")
                 }
             }
         }
-        .sheet(item: $editingShift) { shift in
+        .sheet(item: $destination) { destination in
             NavigationStack {
-                ShiftEditorView(editingShift: shift)
-            }
-        }
-        .sheet(isPresented: $creatingShift) {
-            NavigationStack {
-                ShiftEditorView(editingShift: nil)
+                switch destination.kind {
+                case .editShift(let shift):
+                    ShiftEditorView(editingShift: shift)
+                case .newShift(let seed):
+                    ShiftEditorView(editingShift: nil, seed: seed)
+                case .editScheduledShift(let shift):
+                    ScheduledShiftEditorView(editingShift: shift)
+                case .newScheduledShift(let seed):
+                    ScheduledShiftEditorView(editingShift: nil, seed: seed)
+                }
             }
         }
     }
@@ -89,12 +191,22 @@ struct HistoryView: View {
                 .font(.system(size: 28, weight: .bold, design: .rounded))
                 .foregroundStyle(.white)
 
-            Text("Completed shifts land here automatically. Manual corrections stay secondary, but they’re ready whenever you need them.")
+            Text("Completed shifts land here automatically, and future shifts can live here before they start.")
                 .font(.system(size: 15, weight: .medium, design: .rounded))
                 .foregroundStyle(theme.secondaryText)
                 .multilineTextAlignment(.center)
         }
         .padding(.top, 72)
+    }
+
+    private func sectionHeader(title: String, systemImage: String) -> some View {
+        HStack(spacing: 8) {
+            Label(title, systemImage: systemImage)
+                .font(.system(size: 14, weight: .bold, design: .rounded))
+                .foregroundStyle(.white)
+            Spacer()
+        }
+        .padding(.top, 8)
     }
 
     private func takeHomeEstimate(for shift: ShiftRecord) -> Double {
@@ -178,7 +290,69 @@ private struct ShiftCardView: View {
     }
 }
 
-struct ShiftEditorView: View {
+private struct ScheduledShiftCardView: View {
+    @Environment(AppTheme.self) private var theme
+
+    let shift: ScheduledShift
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(shift.startDate.formatted(date: .abbreviated, time: .omitted))
+                        .font(.system(size: 19, weight: .bold, design: .rounded))
+                        .foregroundStyle(.white)
+
+                    Text("\(shift.startDate.formatted(date: .omitted, time: .shortened)) - \(shift.endDate.formatted(date: .omitted, time: .shortened))")
+                        .font(.system(size: 14, weight: .medium, design: .rounded))
+                        .foregroundStyle(theme.secondaryText)
+                }
+
+                Spacer()
+
+                Text("Auto")
+                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                    .foregroundStyle(Color.black)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(theme.takeHomeAccent)
+                    .clipShape(Capsule())
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Label(
+                    "\(shift.duration / 3600, format: .number.precision(.fractionLength(2))) hrs",
+                    systemImage: "clock"
+                )
+
+                HStack(spacing: 12) {
+                    Label("Auto start", systemImage: "play.circle")
+                    Label("Auto stop", systemImage: "stop.circle")
+                }
+            }
+            .font(.system(size: 12, weight: .medium, design: .rounded))
+            .foregroundStyle(theme.secondaryText)
+
+            if !shift.note.isEmpty {
+                Text(shift.note)
+                    .font(.system(size: 13, weight: .medium, design: .rounded))
+                    .foregroundStyle(Color.white.opacity(0.88))
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(18)
+        .background(
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .fill(theme.panel.opacity(0.96))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 28, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.06), lineWidth: 1)
+                )
+        )
+    }
+}
+
+private struct ShiftEditorView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
 
@@ -189,18 +363,18 @@ struct ShiftEditorView: View {
     @State private var note: String
     @State private var errorText: String?
 
-    init(editingShift: ShiftRecord?) {
+    init(editingShift: ShiftRecord?, seed: ShiftEditorSeed? = nil) {
         self.editingShift = editingShift
-        _startDate = State(initialValue: editingShift?.startDate ?? .now.addingTimeInterval(-8 * 60 * 60))
-        _endDate = State(initialValue: editingShift?.endDate ?? .now)
-        _note = State(initialValue: editingShift?.note ?? "")
+        _startDate = State(initialValue: editingShift?.startDate ?? seed?.startDate ?? .now.addingTimeInterval(-8 * 60 * 60))
+        _endDate = State(initialValue: editingShift?.endDate ?? seed?.endDate ?? .now)
+        _note = State(initialValue: editingShift?.note ?? seed?.note ?? "")
     }
 
     var body: some View {
         Form {
             Section {
                 BrandHeader(
-                    eyebrow: editingShift == nil ? "Manual Shift" : "Edit Shift",
+                    eyebrow: editingShift == nil ? "Log Shift" : "Edit Shift",
                     subtitle: "Adjust timing and notes without losing the clean ledger in Davis's Big Beautiful Money Tracker App.",
                     mode: .gross,
                     compact: true
@@ -242,7 +416,7 @@ struct ShiftEditorView: View {
         }
         .scrollContentBackground(.hidden)
         .background(MoneyBackground(mode: .gross))
-        .navigationTitle(editingShift == nil ? "Manual Shift" : "Edit Shift")
+        .navigationTitle(editingShift == nil ? "Log Shift" : "Edit Shift")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
@@ -252,6 +426,102 @@ struct ShiftEditorView: View {
                 Button("Save") {
                     do {
                         try ShiftController.saveManualShift(
+                            in: modelContext,
+                            editing: editingShift,
+                            startDate: startDate,
+                            endDate: endDate,
+                            note: note
+                        )
+                        dismiss()
+                    } catch {
+                        errorText = error.localizedDescription
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct ScheduledShiftEditorView: View {
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.dismiss) private var dismiss
+
+    let editingShift: ScheduledShift?
+
+    @State private var startDate: Date
+    @State private var endDate: Date
+    @State private var note: String
+    @State private var errorText: String?
+
+    init(editingShift: ScheduledShift?, seed: ShiftEditorSeed? = nil) {
+        self.editingShift = editingShift
+        let defaultStart = seed?.startDate ?? .now.addingTimeInterval(24 * 60 * 60)
+        let defaultEnd = seed?.endDate ?? defaultStart.addingTimeInterval(8 * 60 * 60)
+        _startDate = State(initialValue: editingShift?.startDate ?? defaultStart)
+        _endDate = State(initialValue: editingShift?.endDate ?? defaultEnd)
+        _note = State(initialValue: editingShift?.note ?? seed?.note ?? "")
+    }
+
+    var body: some View {
+        Form {
+            Section {
+                BrandHeader(
+                    eyebrow: editingShift == nil ? "Schedule Shift" : "Edit Scheduled Shift",
+                    subtitle: "Future shifts open and close on their own, while still staying easy to tune.",
+                    mode: .gross,
+                    compact: true
+                )
+                .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 0))
+                .listRowBackground(Color.clear)
+            }
+
+            Section("Timing") {
+                DatePicker("Start", selection: $startDate)
+                DatePicker("End", selection: $endDate, in: startDate...)
+
+                Text("When the start time arrives, this shift opens automatically and uses the end time for auto-stop.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("Notes") {
+                TextField("Optional note", text: $note, axis: .vertical)
+            }
+
+            if let editingShift {
+                Section {
+                    Button(role: .destructive) {
+                        do {
+                            try ShiftController.deleteScheduledShift(editingShift, in: modelContext)
+                            dismiss()
+                        } catch {
+                            errorText = error.localizedDescription
+                        }
+                    } label: {
+                        Text("Delete this scheduled shift")
+                    }
+                }
+            }
+
+            if let errorText {
+                Section {
+                    Text(errorText)
+                        .foregroundStyle(.red)
+                }
+            }
+        }
+        .scrollContentBackground(.hidden)
+        .background(MoneyBackground(mode: .gross))
+        .navigationTitle(editingShift == nil ? "Schedule Shift" : "Edit Scheduled Shift")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Cancel") { dismiss() }
+            }
+            ToolbarItem(placement: .confirmationAction) {
+                Button("Save") {
+                    do {
+                        try ShiftController.saveScheduledShift(
                             in: modelContext,
                             editing: editingShift,
                             startDate: startDate,

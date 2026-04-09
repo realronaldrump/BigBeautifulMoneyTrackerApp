@@ -1,4 +1,5 @@
 import XCTest
+import SwiftData
 @testable import BigBeautifulMoneyTracker
 
 final class MoneyTrackerEngineTests: XCTestCase {
@@ -148,6 +149,63 @@ final class MoneyTrackerEngineTests: XCTestCase {
         XCTAssertEqual(projection.payPeriodGross, 600, accuracy: 0.001)
         XCTAssertEqual(projection.projectedGross, 600, accuracy: 0.001)
         XCTAssertEqual(projection.confidenceLabel, "Earned so far")
+    }
+
+    @MainActor
+    func testScheduledShiftStartsOpenShiftWhenDue() throws {
+        let container = AppModelContainerFactory.makeInMemoryContainer()
+        let context = container.mainContext
+        try DataBootstrapper.seedIfNeeded(in: context)
+
+        let payRateStart = makeDate(year: 2026, month: 4, day: 1, hour: 0)
+        context.insert(PayRateSchedule(effectiveDate: payRateStart, hourlyRate: 50))
+
+        let start = makeDate(year: 2026, month: 4, day: 8, hour: 7)
+        let end = makeDate(year: 2026, month: 4, day: 8, hour: 19)
+        context.insert(ScheduledShift(startDate: start, endDate: end, note: "ICU"))
+        try context.save()
+
+        let result = try ShiftController.reconcileScheduledShifts(
+            in: context,
+            at: makeDate(year: 2026, month: 4, day: 8, hour: 9)
+        )
+
+        XCTAssertNotNil(result.startedShift)
+        XCTAssertTrue(result.autoCompletedShifts.isEmpty)
+        XCTAssertEqual(result.startedShift?.startDate, start)
+        XCTAssertEqual(result.startedShift?.scheduledEndDate, end)
+        XCTAssertEqual(result.startedShift?.note, "ICU")
+        XCTAssertEqual(try context.fetch(FetchDescriptor<ScheduledShift>()).count, 0)
+        XCTAssertEqual(try context.fetch(FetchDescriptor<OpenShiftState>()).count, 1)
+    }
+
+    @MainActor
+    func testOverdueScheduledShiftIsLoggedToHistoryWhenReconciled() throws {
+        let container = AppModelContainerFactory.makeInMemoryContainer()
+        let context = container.mainContext
+        try DataBootstrapper.seedIfNeeded(in: context)
+
+        let payRateStart = makeDate(year: 2026, month: 4, day: 1, hour: 0)
+        context.insert(PayRateSchedule(effectiveDate: payRateStart, hourlyRate: 50))
+
+        let start = makeDate(year: 2026, month: 4, day: 7, hour: 18)
+        let end = makeDate(year: 2026, month: 4, day: 7, hour: 20)
+        context.insert(ScheduledShift(startDate: start, endDate: end, note: "Auto logged"))
+        try context.save()
+
+        let result = try ShiftController.reconcileScheduledShifts(
+            in: context,
+            at: makeDate(year: 2026, month: 4, day: 7, hour: 22)
+        )
+
+        let loggedShift = try XCTUnwrap(result.autoCompletedShifts.first)
+        XCTAssertNil(result.startedShift)
+        XCTAssertEqual(result.autoCompletedShifts.count, 1)
+        XCTAssertEqual(loggedShift.note, "Auto logged")
+        XCTAssertEqual(loggedShift.totalHours, 2, accuracy: 0.001)
+        XCTAssertEqual(loggedShift.grossEarnings, 100, accuracy: 0.001)
+        XCTAssertEqual(try context.fetch(FetchDescriptor<ShiftRecord>()).count, 1)
+        XCTAssertEqual(try context.fetch(FetchDescriptor<ScheduledShift>()).count, 0)
     }
 
     private func makeDate(year: Int, month: Int, day: Int, hour: Int, minute: Int = 0) -> Date {

@@ -10,11 +10,9 @@ private enum HomeSheet: String, Identifiable {
 }
 
 struct HomeView: View {
-    @Environment(\.modelContext) private var modelContext
-    @Environment(AppTheme.self) private var theme
-
     @Query private var preferences: [AppPreferences]
     @Query private var openShifts: [OpenShiftState]
+    @Query(sort: \ScheduledShift.startDate) private var scheduledShifts: [ScheduledShift]
     @Query(sort: \ShiftRecord.startDate, order: .reverse) private var shifts: [ShiftRecord]
 
     @State private var presentedSheet: HomeSheet?
@@ -24,94 +22,154 @@ struct HomeView: View {
     private var activeShift: OpenShiftState? { openShifts.first }
 
     var body: some View {
-        if let preferences = preferences.first {
-            TimelineView(.periodic(from: .now, by: activeShift == nil ? 60 : 1)) { context in
-                let snapshot = (try? ShiftController.dashboardSnapshot(in: modelContext, at: context.date)) ?? .empty
-                let displayedAmount = preferences.selectedDisplayMode == .gross ? snapshot.currentGross : snapshot.currentTakeHome
-                let activitySyncKey = [
-                    activeShift?.id.uuidString ?? "none",
-                    String(Calendar.current.component(.minute, from: context.date)),
-                    preferences.selectedDisplayMode.rawValue,
-                ].joined(separator: "-")
-                let autoStopKey = [
-                    activeShift?.id.uuidString ?? "none",
-                    String(Int(context.date.timeIntervalSince1970)),
-                    String(Int(activeShift?.scheduledEndDate?.timeIntervalSince1970 ?? 0)),
-                ].joined(separator: "-")
-
-                ZStack(alignment: .top) {
-                    MoneyBackground(mode: preferences.selectedDisplayMode)
-
-                    ScrollView(showsIndicators: false) {
-                        VStack(spacing: 24) {
-                            topBar
-                            homeBrandHeader(preferences: preferences)
-                            modeToggle(preferences: preferences)
-
-                            if let openShift = activeShift {
-                                activeShiftContent(
-                                    preferences: preferences,
-                                    openShift: openShift,
-                                    snapshot: snapshot,
-                                    displayedAmount: displayedAmount
-                                )
-                            } else {
-                                restingContent(preferences: preferences)
+        Group {
+            if let preferences = preferences.first {
+                HomeDashboardView(
+                    preferences: preferences,
+                    activeShift: activeShift,
+                    scheduledShifts: scheduledShifts,
+                    shifts: shifts,
+                    presentedSheet: $presentedSheet,
+                    milestoneText: $milestoneText,
+                    errorText: $errorText
+                )
+                .sheet(item: $presentedSheet) { sheet in
+                    switch sheet {
+                    case .history:
+                        NavigationStack { HistoryView() }
+                    case .settings:
+                        NavigationStack { SettingsView() }
+                    case .activeShiftTools:
+                        if let activeShift {
+                            NavigationStack {
+                                ActiveShiftToolsView(openShift: activeShift)
                             }
                         }
-                        .padding(.horizontal, 22)
-                        .padding(.top, 20)
-                        .padding(.bottom, 40)
                     }
+                }
+            } else {
+                ProgressView()
+                    .tint(.white)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Color.black.ignoresSafeArea())
+            }
+        }
+        .toolbar(.hidden, for: .navigationBar)
+    }
+}
 
-                    if let milestoneText {
-                        MilestoneBanner(text: milestoneText, mode: preferences.selectedDisplayMode)
-                            .padding(.top, 12)
-                            .transition(.move(edge: .top).combined(with: .opacity))
-                    }
-                }
-                .overlay(alignment: .bottom) {
-                    if let errorText {
-                        Text(errorText)
-                            .font(.system(size: 14, weight: .medium, design: .rounded))
-                            .foregroundStyle(Color.white)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 12)
-                            .background(theme.secondaryPanel)
-                            .clipShape(Capsule())
-                            .padding(.bottom, 16)
-                    }
-                }
-                .task(id: Int(snapshot.currentGross.rounded(.down))) {
-                    await handleMilestones(snapshot: snapshot, preferences: preferences)
-                }
-                .task(id: activitySyncKey) {
-                    syncLiveActivityIfNeeded(snapshot: snapshot, preferences: preferences)
-                }
-                .task(id: autoStopKey) {
-                    await handleScheduledAutoStop(at: context.date, preferences: preferences)
-                }
-            }
-            .toolbar(.hidden, for: .navigationBar)
-            .sheet(item: $presentedSheet) { sheet in
-                switch sheet {
-                case .history:
-                    NavigationStack { HistoryView() }
-                case .settings:
-                    NavigationStack { SettingsView() }
-                case .activeShiftTools:
+private struct HomeDashboardView: View {
+    let preferences: AppPreferences
+    let activeShift: OpenShiftState?
+    let scheduledShifts: [ScheduledShift]
+    let shifts: [ShiftRecord]
+
+    @Binding var presentedSheet: HomeSheet?
+    @Binding var milestoneText: String?
+    @Binding var errorText: String?
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: activeShift == nil ? 60 : 1)) { context in
+            HomeDashboardSceneView(
+                preferences: preferences,
+                activeShift: activeShift,
+                scheduledShifts: scheduledShifts,
+                shifts: shifts,
+                presentedSheet: $presentedSheet,
+                milestoneText: $milestoneText,
+                errorText: $errorText,
+                contextDate: context.date
+            )
+        }
+    }
+}
+
+private struct HomeDashboardSceneView: View {
+    @Environment(\.modelContext) private var modelContext
+    @Environment(AppTheme.self) private var theme
+
+    let preferences: AppPreferences
+    let activeShift: OpenShiftState?
+    let scheduledShifts: [ScheduledShift]
+    let shifts: [ShiftRecord]
+
+    @Binding var presentedSheet: HomeSheet?
+    @Binding var milestoneText: String?
+    @Binding var errorText: String?
+
+    let contextDate: Date
+
+    private var snapshot: DashboardSnapshot {
+        (try? ShiftController.dashboardSnapshot(in: modelContext, at: contextDate)) ?? .empty
+    }
+
+    private var displayedAmount: Double {
+        preferences.selectedDisplayMode == .gross ? snapshot.currentGross : snapshot.currentTakeHome
+    }
+
+    private var activitySyncKey: String {
+        let activeIdentifier = activeShift?.id.uuidString ?? "none"
+        let minute = Calendar.current.component(.minute, from: contextDate)
+        return "\(activeIdentifier)-\(minute)-\(preferences.selectedDisplayMode.rawValue)"
+    }
+
+    private var automationKey: String {
+        let activeIdentifier = activeShift?.id.uuidString ?? "none"
+        let scheduledEnd = Int(activeShift?.scheduledEndDate?.timeIntervalSince1970 ?? 0)
+        let scheduledIdentifier = scheduledShifts.first?.id.uuidString ?? "none"
+        let scheduledStart = Int(scheduledShifts.first?.startDate.timeIntervalSince1970 ?? 0)
+        let scheduledCount = scheduledShifts.count
+        let currentTime = Int(contextDate.timeIntervalSince1970)
+        return "\(activeIdentifier)-\(scheduledEnd)-\(scheduledIdentifier)-\(scheduledStart)-\(scheduledCount)-\(currentTime)"
+    }
+
+    var body: some View {
+        ZStack(alignment: .top) {
+            MoneyBackground(mode: preferences.selectedDisplayMode)
+
+            ScrollView(showsIndicators: false) {
+                VStack(spacing: 24) {
+                    topBar
+                    homeBrandHeader
+                    modeToggle
+
                     if let activeShift {
-                        NavigationStack {
-                            ActiveShiftToolsView(openShift: activeShift)
-                        }
+                        activeShiftContent(openShift: activeShift)
+                    } else {
+                        restingContent
                     }
                 }
+                .padding(.horizontal, 22)
+                .padding(.top, 20)
+                .padding(.bottom, 40)
             }
-        } else {
-            ProgressView()
-                .tint(.white)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color.black.ignoresSafeArea())
+
+            if let milestoneText {
+                MilestoneBanner(text: milestoneText, mode: preferences.selectedDisplayMode)
+                    .padding(.top, 12)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .overlay(alignment: .bottom) {
+            if let errorText {
+                Text(errorText)
+                    .font(.system(size: 14, weight: .medium, design: .rounded))
+                    .foregroundStyle(Color.white)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .background(theme.secondaryPanel)
+                    .clipShape(Capsule())
+                    .padding(.bottom, 16)
+            }
+        }
+        .task(id: Int(snapshot.currentGross.rounded(.down))) {
+            await handleMilestones()
+        }
+        .task(id: activitySyncKey) {
+            syncLiveActivityIfNeeded()
+        }
+        .task(id: automationKey) {
+            await handleShiftAutomation()
         }
     }
 
@@ -143,7 +201,7 @@ struct HomeView: View {
         .buttonStyle(.plain)
     }
 
-    private func modeToggle(preferences: AppPreferences) -> some View {
+    private var modeToggle: some View {
         HStack(spacing: 10) {
             ForEach(EarningsDisplayMode.allCases) { mode in
                 Button {
@@ -166,7 +224,7 @@ struct HomeView: View {
         }
     }
 
-    private func homeBrandHeader(preferences: AppPreferences) -> some View {
+    private var homeBrandHeader: some View {
         BrandHeader(
             eyebrow: activeShift == nil ? "Ready When You Are" : "Live Money Flow",
             subtitle: activeShift == nil
@@ -177,7 +235,7 @@ struct HomeView: View {
         )
     }
 
-    private func restingContent(preferences: AppPreferences) -> some View {
+    private var restingContent: some View {
         VStack(spacing: 26) {
             Spacer(minLength: 12)
 
@@ -216,16 +274,15 @@ struct HomeView: View {
                 .foregroundStyle(theme.secondaryText)
                 .multilineTextAlignment(.center)
 
+            if let nextScheduledShift = scheduledShifts.first {
+                upcomingScheduledShiftCard(nextScheduledShift: nextScheduledShift)
+            }
+
             Spacer(minLength: 120)
         }
     }
 
-    private func activeShiftContent(
-        preferences: AppPreferences,
-        openShift: OpenShiftState,
-        snapshot: DashboardSnapshot,
-        displayedAmount: Double
-    ) -> some View {
+    private func activeShiftContent(openShift: OpenShiftState) -> some View {
         VStack(spacing: 24) {
             VStack(spacing: 18) {
                 Text(preferences.selectedDisplayMode.title.uppercased())
@@ -302,7 +359,7 @@ struct HomeView: View {
         }
     }
 
-    private func handleMilestones(snapshot: DashboardSnapshot, preferences: AppPreferences) async {
+    private func handleMilestones() async {
         guard let activeShift, !activeShift.celebratedFirstHundred, snapshot.currentGross >= 100 else {
             return
         }
@@ -322,7 +379,7 @@ struct HomeView: View {
         }
     }
 
-    private func syncLiveActivityIfNeeded(snapshot: DashboardSnapshot, preferences: AppPreferences) {
+    private func syncLiveActivityIfNeeded() {
         guard preferences.liveActivitiesEnabled, let activeShift else {
             if activeShift == nil {
                 LiveActivityManager.end(finalAmount: snapshot.currentGross, mode: preferences.selectedDisplayMode)
@@ -338,22 +395,105 @@ struct HomeView: View {
         )
     }
 
-    private func handleScheduledAutoStop(at date: Date, preferences: AppPreferences) async {
+    private func handleShiftAutomation() async {
         do {
-            if let endedShift = try ShiftController.autoEndShiftIfNeeded(in: modelContext, at: date) {
-                HapticManager.shared.fire(.success, enabled: preferences.hapticsEnabled)
+            var bannerText: String?
+            var shouldFireHaptic = false
+
+            if let endedShift = try ShiftController.autoEndShiftIfNeeded(in: modelContext, at: contextDate) {
+                shouldFireHaptic = true
                 LiveActivityManager.end(finalAmount: endedShift.grossEarnings, mode: preferences.selectedDisplayMode)
                 await ReminderManager.shared.cancelActiveShiftNotifications()
                 await ReminderManager.shared.notifyShiftAutoStopped(at: endedShift.endDate)
+                bannerText = "Shift stopped at \(endedShift.endDate.formatted(date: .omitted, time: .shortened))"
+            }
+
+            let scheduleResult = try ShiftController.reconcileScheduledShifts(in: modelContext, at: contextDate)
+
+            if let startedShift = scheduleResult.startedShift {
+                shouldFireHaptic = true
+                await ReminderManager.shared.syncActiveShiftNotifications(for: startedShift)
+
+                if scheduleResult.autoCompletedShifts.isEmpty {
+                    bannerText = "Scheduled shift started at \(startedShift.startDate.formatted(date: .omitted, time: .shortened))"
+                } else {
+                    let completedCount = scheduleResult.autoCompletedShifts.count
+                    bannerText = completedCount == 1
+                        ? "Scheduled shift started. 1 earlier shift was logged."
+                        : "Scheduled shift started. \(completedCount) earlier shifts were logged."
+                }
+            } else if !scheduleResult.autoCompletedShifts.isEmpty {
+                shouldFireHaptic = true
+                bannerText = scheduleResult.autoCompletedShifts.count == 1
+                    ? "Scheduled shift added to history"
+                    : "\(scheduleResult.autoCompletedShifts.count) scheduled shifts added to history"
+            }
+
+            if shouldFireHaptic {
+                HapticManager.shared.fire(.success, enabled: preferences.hapticsEnabled)
+            }
+
+            if let bannerText {
                 await MainActor.run {
                     withAnimation(.spring(response: 0.42, dampingFraction: 0.84)) {
-                        milestoneText = "Shift stopped at \(endedShift.endDate.formatted(date: .omitted, time: .shortened))"
+                        milestoneText = bannerText
                     }
                 }
             }
         } catch {
             show(error.localizedDescription)
         }
+    }
+
+    private func upcomingScheduledShiftCard(nextScheduledShift: ScheduledShift) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(scheduledShifts.count == 1 ? "1 shift scheduled" : "\(scheduledShifts.count) shifts scheduled")
+                        .font(.system(size: 14, weight: .semibold, design: .rounded))
+                        .foregroundStyle(theme.secondaryText)
+
+                    Text(nextScheduledShift.startDate.formatted(date: .complete, time: .shortened))
+                        .font(.system(size: 20, weight: .bold, design: .rounded))
+                        .foregroundStyle(.white)
+                }
+
+                Spacer()
+
+                Button {
+                    presentedSheet = .history
+                } label: {
+                    Text("Manage")
+                        .font(.system(size: 14, weight: .semibold, design: .rounded))
+                        .foregroundStyle(Color.black)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+                        .background(theme.grossAccent)
+                        .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+            }
+
+            Text("Auto-starts at \(nextScheduledShift.startDate.formatted(date: .omitted, time: .shortened)) and auto-stops at \(nextScheduledShift.endDate.formatted(date: .omitted, time: .shortened)).")
+                .font(.system(size: 14, weight: .medium, design: .rounded))
+                .foregroundStyle(theme.secondaryText)
+
+            if !nextScheduledShift.note.isEmpty {
+                Text(nextScheduledShift.note)
+                    .font(.system(size: 13, weight: .medium, design: .rounded))
+                    .foregroundStyle(Color.white.opacity(0.88))
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(18)
+        .background(
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .fill(theme.panel.opacity(0.96))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 28, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.06), lineWidth: 1)
+                )
+        )
     }
 
     private func show(_ text: String) {

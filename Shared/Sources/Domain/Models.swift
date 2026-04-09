@@ -260,6 +260,34 @@ final class ScheduleTemplate {
 }
 
 @Model
+final class ScheduledShift {
+    @Attribute(.unique) var id: UUID
+    var startDate: Date
+    var endDate: Date
+    var note: String
+    var createdAt: Date
+    var updatedAt: Date
+
+    init(
+        id: UUID = UUID(),
+        startDate: Date,
+        endDate: Date,
+        note: String = ""
+    ) {
+        self.id = id
+        self.startDate = startDate
+        self.endDate = endDate
+        self.note = note
+        self.createdAt = .now
+        self.updatedAt = .now
+    }
+
+    var duration: TimeInterval {
+        endDate.timeIntervalSince(startDate)
+    }
+}
+
+@Model
 final class MilestoneEvent {
     @Attribute(.unique) var id: UUID
     var kindRawValue: String

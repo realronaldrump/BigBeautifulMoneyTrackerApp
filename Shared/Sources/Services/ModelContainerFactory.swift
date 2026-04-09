@@ -11,6 +11,7 @@ enum AppModelContainerFactory {
         TaxProfile.self,
         PaySchedule.self,
         ScheduleTemplate.self,
+        ScheduledShift.self,
         MilestoneEvent.self,
         AppPreferences.self,
     ])
