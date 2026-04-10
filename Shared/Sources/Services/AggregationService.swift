@@ -13,6 +13,14 @@ enum AggregationService {
         filtered(shifts, in: interval).reduce(0) { $0 + $1.nightPremiumEarnings }
     }
 
+    static func totalOvertimePremium(for shifts: [ShiftRecord], in interval: DateInterval? = nil) -> Double {
+        filtered(shifts, in: interval).reduce(0) { $0 + $1.overtimePremiumEarnings }
+    }
+
+    static func totalOvertimeHours(for shifts: [ShiftRecord], in interval: DateInterval? = nil) -> Double {
+        filtered(shifts, in: interval).reduce(0) { $0 + $1.overtimeHours }
+    }
+
     static func filtered(_ shifts: [ShiftRecord], in interval: DateInterval?) -> [ShiftRecord] {
         guard let interval else { return shifts }
         return shifts.filter { shift in
@@ -23,29 +31,13 @@ enum AggregationService {
     static func highestShift(in shifts: [ShiftRecord]) -> ShiftRecord? {
         shifts.max { $0.grossEarnings < $1.grossEarnings }
     }
+    static func averageShiftGross(for shifts: [ShiftRecord]) -> Double {
+        guard !shifts.isEmpty else { return 0 }
+        return totalGross(for: shifts) / Double(shifts.count)
+    }
 
-    static func highestPayPeriod(
-        in shifts: [ShiftRecord],
-        paySchedule: PaySchedule,
-        calendar: Calendar = .current
-    ) -> HighestPeriodRecord? {
-        let grouped = Dictionary(grouping: shifts) { shift in
-            ProjectionEngine.payPeriodInterval(for: shift.startDate, schedule: paySchedule, calendar: calendar).start
-        }
-
-        guard let best = grouped.max(by: { lhs, rhs in
-            totalGross(for: lhs.value) < totalGross(for: rhs.value)
-        }) else {
-            return nil
-        }
-
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .none
-        let interval = ProjectionEngine.payPeriodInterval(for: best.key, schedule: paySchedule, calendar: calendar)
-        return HighestPeriodRecord(
-            label: "\(formatter.string(from: interval.start)) - \(formatter.string(from: interval.end.addingTimeInterval(-1)))",
-            gross: totalGross(for: best.value)
-        )
+    static func averageShiftHours(for shifts: [ShiftRecord]) -> Double {
+        guard !shifts.isEmpty else { return 0 }
+        return totalHours(for: shifts) / Double(shifts.count)
     }
 }

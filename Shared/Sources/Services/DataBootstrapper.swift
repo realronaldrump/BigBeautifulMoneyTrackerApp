@@ -1,27 +1,25 @@
 import Foundation
 import SwiftData
 
-@MainActor
 enum DataBootstrapper {
     static func seedIfNeeded(in context: ModelContext) throws {
         if try first(AppPreferences.self, in: context) == nil {
             context.insert(AppPreferences())
         }
 
-        if try first(NightDifferentialRule.self, in: context) == nil {
-            context.insert(NightDifferentialRule())
-        }
-
-        if try first(OvertimeRuleSet.self, in: context) == nil {
-            context.insert(OvertimeRuleSet())
-        }
-
         if try first(TaxProfile.self, in: context) == nil {
             context.insert(TaxProfile())
         }
 
-        if try first(PaySchedule.self, in: context) == nil {
-            context.insert(PaySchedule())
+        let jobs = try JobService.ensureJobsSeeded(in: context)
+
+        if let preferences = try first(AppPreferences.self, in: context),
+           let preferredJobIdentifier = preferences.selectedHomeJobIdentifier,
+           jobs.contains(where: { $0.id == preferredJobIdentifier }) == false {
+            preferences.selectedHomeJobIdentifier = jobs.first?.id
+        } else if let preferences = try first(AppPreferences.self, in: context),
+                  preferences.selectedHomeJobIdentifier == nil {
+            preferences.selectedHomeJobIdentifier = jobs.first?.id
         }
 
         try context.save()

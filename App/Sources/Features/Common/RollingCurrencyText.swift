@@ -17,6 +17,5 @@ struct RollingCurrencyText: View {
             .multilineTextAlignment(.center)
             .lineLimit(1)
             .minimumScaleFactor(0.45)
-            .animation(.smooth(duration: 0.5), value: amount)
     }
 }

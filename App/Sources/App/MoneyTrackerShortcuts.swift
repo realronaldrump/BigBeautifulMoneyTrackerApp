@@ -3,7 +3,7 @@ import SwiftData
 
 struct StartShiftIntent: AppIntent {
     static let title: LocalizedStringResource = "Start Shift"
-    static let description = IntentDescription("Starts a new tracked shift.")
+    static let description = IntentDescription("Starts a new tracked shift for your selected home job.")
 
     func perform() async throws -> some IntentResult & ProvidesDialog {
         let container = AppModelContainerFactory.makeSharedContainer()
@@ -17,15 +17,15 @@ struct StartShiftIntent: AppIntent {
 
 struct EndShiftIntent: AppIntent {
     static let title: LocalizedStringResource = "End Shift"
-    static let description = IntentDescription("Ends the current tracked shift.")
+    static let description = IntentDescription("Ends all currently tracked shifts.")
 
     func perform() async throws -> some IntentResult & ProvidesDialog {
         let container = AppModelContainerFactory.makeSharedContainer()
         try await MainActor.run {
             let context = ModelContext(container)
-            _ = try ShiftController.endShift(in: context)
+            _ = try ShiftController.endAllShifts(in: context)
         }
-        return .result(dialog: IntentDialog("Shift ended."))
+        return .result(dialog: IntentDialog("Active jobs ended."))
     }
 }
 

@@ -2,8 +2,46 @@ import Foundation
 import SwiftData
 
 @Model
+final class JobProfile {
+    @Attribute(.unique) var id: UUID
+    var name: String
+    var accentRawValue: String
+    var sortOrder: Int
+    var isArchived: Bool
+    var createdAt: Date
+    var updatedAt: Date
+
+    init(
+        id: UUID = UUID(),
+        name: String = "Main Job",
+        accent: JobAccentStyle = .emerald,
+        sortOrder: Int = 0,
+        isArchived: Bool = false
+    ) {
+        self.id = id
+        self.name = name
+        self.accentRawValue = accent.rawValue
+        self.sortOrder = sortOrder
+        self.isArchived = isArchived
+        self.createdAt = .now
+        self.updatedAt = .now
+    }
+
+    var accent: JobAccentStyle {
+        get { JobAccentStyle(rawValue: accentRawValue) ?? .emerald }
+        set { accentRawValue = newValue.rawValue }
+    }
+
+    var displayName: String {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "Untitled Job" : trimmed
+    }
+}
+
+@Model
 final class ShiftRecord {
     @Attribute(.unique) var id: UUID
+    var job: JobProfile?
     var startDate: Date
     var endDate: Date
     var note: String
@@ -21,12 +59,14 @@ final class ShiftRecord {
 
     init(
         id: UUID = UUID(),
+        job: JobProfile? = nil,
         startDate: Date,
         endDate: Date,
         note: String = "",
         breakdown: EarningsBreakdown
     ) {
         self.id = id
+        self.job = job
         self.startDate = startDate
         self.endDate = endDate
         self.note = note
@@ -49,14 +89,16 @@ final class OpenShiftState {
     private static let defaultScheduledReminderOffsets = [30, 15, 5]
 
     @Attribute(.unique) var id: UUID
+    var job: JobProfile?
     var startDate: Date
     var note: String
     var celebratedFirstHundred: Bool
     var scheduledEndDate: Date?
     var scheduledReminderOffsetsRawValue: String?
 
-    init(id: UUID = UUID(), startDate: Date = .now, note: String = "") {
+    init(id: UUID = UUID(), job: JobProfile? = nil, startDate: Date = .now, note: String = "") {
         self.id = id
+        self.job = job
         self.startDate = startDate
         self.note = note
         self.celebratedFirstHundred = false
@@ -91,11 +133,13 @@ final class OpenShiftState {
 @Model
 final class PayRateSchedule {
     @Attribute(.unique) var id: UUID
+    var job: JobProfile?
     var effectiveDate: Date
     var hourlyRate: Double
 
-    init(id: UUID = UUID(), effectiveDate: Date, hourlyRate: Double) {
+    init(id: UUID = UUID(), job: JobProfile? = nil, effectiveDate: Date, hourlyRate: Double) {
         self.id = id
+        self.job = job
         self.effectiveDate = effectiveDate
         self.hourlyRate = hourlyRate
     }
@@ -104,6 +148,7 @@ final class PayRateSchedule {
 @Model
 final class NightDifferentialRule {
     @Attribute(.unique) var id: UUID
+    var job: JobProfile?
     var startHour: Int
     var endHour: Int
     var percentIncrease: Double
@@ -111,12 +156,14 @@ final class NightDifferentialRule {
 
     init(
         id: UUID = UUID(),
+        job: JobProfile? = nil,
         startHour: Int = 18,
         endHour: Int = 6,
         percentIncrease: Double = 0.07,
-        isEnabled: Bool = true
+        isEnabled: Bool = false
     ) {
         self.id = id
+        self.job = job
         self.startHour = startHour
         self.endHour = endHour
         self.percentIncrease = percentIncrease
@@ -127,6 +174,7 @@ final class NightDifferentialRule {
 @Model
 final class OvertimeRuleSet {
     @Attribute(.unique) var id: UUID
+    var job: JobProfile?
     var isEnabled: Bool
     var dailyThresholdHours: Double?
     var weeklyThresholdHours: Double?
@@ -136,6 +184,7 @@ final class OvertimeRuleSet {
 
     init(
         id: UUID = UUID(),
+        job: JobProfile? = nil,
         isEnabled: Bool = false,
         dailyThresholdHours: Double? = 8,
         weeklyThresholdHours: Double? = 40,
@@ -144,6 +193,7 @@ final class OvertimeRuleSet {
         precedence: OvertimePrecedence = .highestRateWins
     ) {
         self.id = id
+        self.job = job
         self.isEnabled = isEnabled
         self.dailyThresholdHours = dailyThresholdHours
         self.weeklyThresholdHours = weeklyThresholdHours
@@ -198,11 +248,13 @@ final class TaxProfile {
 @Model
 final class PaySchedule {
     @Attribute(.unique) var id: UUID
+    var job: JobProfile?
     var frequencyRawValue: String
     var anchorDate: Date
 
-    init(id: UUID = UUID(), frequency: PayFrequency = .biweekly, anchorDate: Date = .now) {
+    init(id: UUID = UUID(), job: JobProfile? = nil, frequency: PayFrequency = .biweekly, anchorDate: Date = .now) {
         self.id = id
+        self.job = job
         self.frequencyRawValue = frequency.rawValue
         self.anchorDate = anchorDate
     }
@@ -216,6 +268,7 @@ final class PaySchedule {
 @Model
 final class ScheduleTemplate {
     @Attribute(.unique) var id: UUID
+    var job: JobProfile?
     var name: String
     var weekdayRawValue: Int
     var startHour: Int
@@ -227,6 +280,7 @@ final class ScheduleTemplate {
 
     init(
         id: UUID = UUID(),
+        job: JobProfile? = nil,
         name: String,
         weekday: ScheduleWeekday,
         startHour: Int,
@@ -237,6 +291,7 @@ final class ScheduleTemplate {
         isEnabled: Bool = true
     ) {
         self.id = id
+        self.job = job
         self.name = name
         self.weekdayRawValue = weekday.rawValue
         self.startHour = startHour
@@ -262,6 +317,7 @@ final class ScheduleTemplate {
 @Model
 final class ScheduledShift {
     @Attribute(.unique) var id: UUID
+    var job: JobProfile?
     var startDate: Date
     var endDate: Date
     var note: String
@@ -270,11 +326,13 @@ final class ScheduledShift {
 
     init(
         id: UUID = UUID(),
+        job: JobProfile? = nil,
         startDate: Date,
         endDate: Date,
         note: String = ""
     ) {
         self.id = id
+        self.job = job
         self.startDate = startDate
         self.endDate = endDate
         self.note = note
@@ -288,37 +346,10 @@ final class ScheduledShift {
 }
 
 @Model
-final class MilestoneEvent {
-    @Attribute(.unique) var id: UUID
-    var kindRawValue: String
-    var recordedAt: Date
-    var amount: Double
-    var shiftIdentifier: UUID?
-
-    init(
-        id: UUID = UUID(),
-        kind: MilestoneKind,
-        recordedAt: Date = .now,
-        amount: Double,
-        shiftIdentifier: UUID? = nil
-    ) {
-        self.id = id
-        self.kindRawValue = kind.rawValue
-        self.recordedAt = recordedAt
-        self.amount = amount
-        self.shiftIdentifier = shiftIdentifier
-    }
-
-    var kind: MilestoneKind {
-        get { MilestoneKind(rawValue: kindRawValue) ?? .firstHundred }
-        set { kindRawValue = newValue.rawValue }
-    }
-}
-
-@Model
 final class AppPreferences {
     @Attribute(.unique) var id: UUID
     var selectedDisplayModeRawValue: String
+    var selectedHomeJobIdentifierRawValue: String?
     var hapticsEnabled: Bool
     var remindersEnabled: Bool
     var liveActivitiesEnabled: Bool
@@ -338,6 +369,7 @@ final class AppPreferences {
     ) {
         self.id = id
         self.selectedDisplayModeRawValue = selectedDisplayMode.rawValue
+        self.selectedHomeJobIdentifierRawValue = nil
         self.hapticsEnabled = hapticsEnabled
         self.remindersEnabled = remindersEnabled
         self.liveActivitiesEnabled = liveActivitiesEnabled
@@ -349,5 +381,15 @@ final class AppPreferences {
     var selectedDisplayMode: EarningsDisplayMode {
         get { EarningsDisplayMode(rawValue: selectedDisplayModeRawValue) ?? .gross }
         set { selectedDisplayModeRawValue = newValue.rawValue }
+    }
+
+    var selectedHomeJobIdentifier: UUID? {
+        get {
+            guard let selectedHomeJobIdentifierRawValue else { return nil }
+            return UUID(uuidString: selectedHomeJobIdentifierRawValue)
+        }
+        set {
+            selectedHomeJobIdentifierRawValue = newValue?.uuidString
+        }
     }
 }

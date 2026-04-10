@@ -8,27 +8,21 @@ struct MetricTile: View {
     let accent: Color
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: Spacing.sm) {
             Text(title.uppercased())
-                .font(.system(size: 11, weight: .semibold, design: .rounded))
+                .font(TypeStyle.micro)
                 .tracking(1.2)
                 .foregroundStyle(theme.tertiaryText)
 
             Text(value)
-                .font(.system(size: 20, weight: .semibold, design: .rounded))
+                .font(TypeStyle.title2)
                 .foregroundStyle(Color.white)
                 .lineLimit(2)
                 .minimumScaleFactor(0.75)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(theme.secondaryPanel.opacity(0.92))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 22, style: .continuous)
-                        .strokeBorder(accent.opacity(0.16), lineWidth: 1)
-                )
-        )
+        .padding(CornerRadius.cardSmall)
+        .glassCard(cornerRadius: CornerRadius.cardLarge, accent: accent)
     }
 }
+

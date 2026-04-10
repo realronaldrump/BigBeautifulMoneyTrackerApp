@@ -7,10 +7,10 @@ struct OnboardingView: View {
 
     @Query private var preferences: [AppPreferences]
     @Query private var taxProfiles: [TaxProfile]
-    @Query private var paySchedules: [PaySchedule]
+    @Query(sort: \JobProfile.sortOrder) private var jobs: [JobProfile]
     @Query private var payRates: [PayRateSchedule]
 
-    @State private var hourlyRate = 33.29
+    @State private var hourlyRateText = ""
     @State private var payFrequency: PayFrequency = .biweekly
     @State private var anchorDate = Calendar.current.startOfDay(for: .now)
     @State private var errorText: String?
@@ -46,6 +46,8 @@ struct OnboardingView: View {
                             .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
                     }
                     .buttonStyle(.plain)
+                    .disabled(!canBeginTracking)
+                    .opacity(canBeginTracking ? 1 : 0.7)
                 }
                 .padding(.horizontal, 22)
                 .padding(.bottom, 40)
@@ -75,7 +77,8 @@ struct OnboardingView: View {
 
             GroupBox {
                 VStack(alignment: .leading, spacing: 14) {
-                    TextField("Your hourly pay", value: $hourlyRate, format: .currency(code: "USD"))
+                    TextField("Your hourly pay", text: $hourlyRateText)
+                        .keyboardType(.decimalPad)
                     Picker("My paycheck arrives", selection: $payFrequency) {
                         ForEach(PayFrequency.allCases) { frequency in
                             Text(frequency.title).tag(frequency)
@@ -124,16 +127,20 @@ struct OnboardingView: View {
     }
 
     private func completeOnboarding() {
+        guard let hourlyRate = parsedHourlyRate, hourlyRate > 0 else {
+            errorText = "Enter your hourly pay before continuing."
+            return
+        }
+
         do {
             try DataBootstrapper.seedIfNeeded(in: modelContext)
 
             let hadPreferences = preferences.first != nil
             let hadTaxProfile = taxProfiles.first != nil
-            let hadPaySchedule = paySchedules.first != nil
+            let existingJobs = jobs.filter { !$0.isArchived }
 
             let preferences = preferences.first ?? AppPreferences()
             let taxProfile = taxProfiles.first ?? TaxProfile()
-            let paySchedule = paySchedules.first ?? PaySchedule()
 
             if !hadPreferences {
                 modelContext.insert(preferences)
@@ -141,12 +148,23 @@ struct OnboardingView: View {
             if !hadTaxProfile {
                 modelContext.insert(taxProfile)
             }
-            if !hadPaySchedule {
+
+            let job: JobProfile
+            if let existingJob = existingJobs.first {
+                job = existingJob
+            } else {
+                job = try JobService.createJob(in: modelContext, name: "Main Job", accent: .emerald, anchorDate: anchorDate)
+            }
+
+            let storedPaySchedules = try modelContext.fetch(FetchDescriptor<PaySchedule>())
+            let paySchedule = storedPaySchedules.first(where: { $0.job?.id == job.id }) ?? PaySchedule(job: job)
+            if storedPaySchedules.contains(where: { $0.job?.id == job.id }) == false {
                 modelContext.insert(paySchedule)
             }
 
             preferences.onboardingCompleted = true
             preferences.selectedDisplayMode = .gross
+            preferences.selectedHomeJobIdentifier = job.id
 
             taxProfile.filingStatus = .single
             taxProfile.usesStandardDeduction = true
@@ -157,11 +175,14 @@ struct OnboardingView: View {
             paySchedule.frequency = payFrequency
             paySchedule.anchorDate = anchorDate
 
-            if let existingRate = payRates.sorted(by: { $0.effectiveDate < $1.effectiveDate }).last {
+            if let existingRate = payRates
+                .filter({ $0.job?.id == job.id })
+                .sorted(by: { $0.effectiveDate < $1.effectiveDate })
+                .last {
                 existingRate.hourlyRate = hourlyRate
                 existingRate.effectiveDate = anchorDate
             } else {
-                modelContext.insert(PayRateSchedule(effectiveDate: anchorDate, hourlyRate: hourlyRate))
+                modelContext.insert(PayRateSchedule(job: job, effectiveDate: anchorDate, hourlyRate: hourlyRate))
             }
 
             try modelContext.save()
@@ -169,5 +190,17 @@ struct OnboardingView: View {
         } catch {
             errorText = error.localizedDescription
         }
+    }
+
+    private var parsedHourlyRate: Double? {
+        LocalizedNumericInput.decimalValue(from: hourlyRateText)
+    }
+
+    private var canBeginTracking: Bool {
+        guard let parsedHourlyRate else {
+            return false
+        }
+
+        return parsedHourlyRate > 0
     }
 }

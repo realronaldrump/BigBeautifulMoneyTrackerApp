@@ -79,15 +79,32 @@ enum OvertimePrecedence: String, Codable, CaseIterable, Identifiable {
     case weeklyFirst
 
     var id: String { rawValue }
+}
+
+enum JobAccentStyle: String, Codable, CaseIterable, Identifiable {
+    case emerald
+    case sky
+    case amber
+    case coral
+    case rose
+    case slate
+
+    var id: String { rawValue }
 
     var title: String {
         switch self {
-        case .highestRateWins:
-            "Highest Rate Wins"
-        case .dailyFirst:
-            "Daily First"
-        case .weeklyFirst:
-            "Weekly First"
+        case .emerald:
+            "Emerald"
+        case .sky:
+            "Sky"
+        case .amber:
+            "Amber"
+        case .coral:
+            "Coral"
+        case .rose:
+            "Rose"
+        case .slate:
+            "Slate"
         }
     }
 }
@@ -103,33 +120,75 @@ enum ScheduleWeekday: Int, Codable, CaseIterable, Identifiable {
 
     var id: Int { rawValue }
 
-    var shortTitle: String {
-        let calendar = Calendar.current
-        return calendar.shortWeekdaySymbols[rawValue - 1]
-    }
-
     var title: String {
         let calendar = Calendar.current
         return calendar.weekdaySymbols[rawValue - 1]
     }
 }
 
-enum MilestoneKind: String, Codable, CaseIterable, Identifiable {
-    case firstHundred
-    case weeklyRecord
-    case allTimeRecord
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .firstHundred:
-            "First $100"
-        case .weeklyRecord:
-            "Weekly Record"
-        case .allTimeRecord:
-            "All-Time Record"
+enum LocalizedNumericInput {
+    static func decimalValue(from text: String, locale: Locale = .current) -> Double? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return nil
         }
+
+        let formatter = NumberFormatter()
+        formatter.locale = locale
+        formatter.numberStyle = .decimal
+
+        if let value = formatter.number(from: trimmed)?.doubleValue {
+            return value
+        }
+
+        let allowedCharacters = CharacterSet(charactersIn: "0123456789-.,")
+        let sanitizedScalars = trimmed.unicodeScalars.filter { allowedCharacters.contains($0) }
+        var sanitized = String(String.UnicodeScalarView(sanitizedScalars))
+        guard !sanitized.isEmpty else {
+            return nil
+        }
+
+        let isNegative = sanitized.hasPrefix("-")
+        sanitized.removeAll { $0 == "-" }
+
+        let separatorCharacter: Character?
+        if let lastDot = sanitized.lastIndex(of: "."),
+           let lastComma = sanitized.lastIndex(of: ",") {
+            separatorCharacter = lastDot > lastComma ? "." : ","
+        } else if sanitized.contains(".") {
+            separatorCharacter = "."
+        } else if sanitized.contains(",") {
+            separatorCharacter = ","
+        } else {
+            separatorCharacter = nil
+        }
+
+        let localeDecimalSeparator = formatter.decimalSeparator ?? "."
+        let decimalIndex = separatorCharacter.flatMap { sanitized.lastIndex(of: $0) }
+        var normalizedDigits = ""
+
+        for index in sanitized.indices {
+            let character = sanitized[index]
+            if character.isNumber {
+                normalizedDigits.append(character)
+            } else if let decimalIndex, index == decimalIndex {
+                normalizedDigits.append(contentsOf: localeDecimalSeparator)
+            }
+        }
+
+        let normalized = (isNegative ? "-" : "") + normalizedDigits
+
+        return formatter.number(from: normalized)?.doubleValue
+    }
+
+    static func decimalText(for value: Double, locale: Locale = .current, maximumFractionDigits: Int = 2) -> String {
+        let formatter = NumberFormatter()
+        formatter.locale = locale
+        formatter.numberStyle = .decimal
+        formatter.minimumFractionDigits = 0
+        formatter.maximumFractionDigits = maximumFractionDigits
+
+        return formatter.string(from: NSNumber(value: value)) ?? value.formatted()
     }
 }
 
@@ -147,26 +206,76 @@ struct EarningsBreakdown: Codable, Equatable {
 
 struct TaxEstimate: Codable, Equatable {
     var annualizedGrossIncome: Double
-    var annualizedNetIncome: Double
     var estimatedWithholdingRate: Double
     var currentShiftNetEstimate: Double
 }
 
-struct EarningsTotals: Equatable {
-    var gross: Double
-    var takeHome: Double
-    var hours: Double
+enum PayPeriodAggregationState: Equatable {
+    case unified
+    case variesByJob
 }
 
-struct HighestPeriodRecord: Equatable {
-    var label: String
-    var gross: Double
+struct ActiveJobSnapshot: Identifiable, Equatable {
+    var id: UUID
+    var name: String
+    var accent: JobAccentStyle
+    var startDate: Date
+    var scheduledEndDate: Date?
+    var currentBreakdown: EarningsBreakdown
+    var currentGross: Double
+    var currentTakeHome: Double
+}
+
+struct SummaryRollup: Equatable {
+    var activeShiftCount: Int
+    var scheduledShiftCount: Int
+    var completedShiftCount: Int
+    var activeGross: Double
+    var activeTakeHome: Double
+    var payPeriodAggregation: PayPeriodAggregationState
+    var payPeriodGross: Double
+    var payPeriodTakeHome: Double
+    var payPeriodHours: Double
+    var payPeriodNightPremium: Double
+    var projectedGross: Double
+    var projectedTakeHome: Double
+    var allTimeGross: Double
+    var allTimeTakeHome: Double
+    var allTimeHours: Double
+    var weeklyGross: Double
+    var totalNightPremium: Double
+    var totalOvertimePremium: Double
+    var totalOvertimeHours: Double
+    var averageShiftGross: Double
+    var averageShiftHours: Double
+    var highestShiftGross: Double
+    var currentBlendedRate: Double
+}
+
+struct JobSummarySnapshot: Identifiable, Equatable {
+    var id: UUID
+    var name: String
+    var accent: JobAccentStyle
+    var currentBreakdown: EarningsBreakdown?
+    var annualizedGrossIncome: Double
+    var payPeriodInterval: DateInterval
+    var payScheduleFrequency: PayFrequency
+    var projectedConfidenceLabel: String
+    var rollup: SummaryRollup
+}
+
+struct SummarySnapshot: Equatable {
+    var combined: SummaryRollup
+    var projectedConfidenceLabel: String
+    var jobs: [JobSummarySnapshot]
 }
 
 struct DashboardSnapshot: Equatable {
     var currentBreakdown: EarningsBreakdown?
+    var activeJobs: [ActiveJobSnapshot]
     var currentGross: Double
     var currentTakeHome: Double
+    var payPeriodAggregation: PayPeriodAggregationState
     var payPeriodGross: Double
     var payPeriodTakeHome: Double
     var payPeriodHours: Double
@@ -176,6 +285,5 @@ struct DashboardSnapshot: Equatable {
     var projectedPaycheckGross: Double
     var projectedPaycheckTakeHome: Double
     var projectedConfidenceLabel: String
-    var weeklyGross: Double
     var allTimeHours: Double
 }

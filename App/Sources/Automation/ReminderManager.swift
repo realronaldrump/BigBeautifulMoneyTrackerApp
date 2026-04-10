@@ -20,7 +20,8 @@ final class ReminderManager {
         for template in templates where template.isEnabled {
             let content = UNMutableNotificationContent()
             content.title = "Upcoming shift"
-            content.body = "Your \(template.name) shift starts soon."
+            let prefix = template.job.map { "\($0.displayName): " } ?? ""
+            content.body = "\(prefix)\(template.name) starts soon."
             content.sound = .default
 
             var dateComponents = DateComponents()
@@ -34,54 +35,57 @@ final class ReminderManager {
         }
     }
 
-    func syncActiveShiftNotifications(for openShift: OpenShiftState) async {
+    func syncActiveShiftNotifications(for openShifts: [OpenShiftState]) async {
         await cancelActiveShiftNotifications()
-
-        guard let scheduledEndDate = openShift.scheduledEndDate else { return }
         await requestAuthorization()
 
         let formatter = DateFormatter()
         formatter.timeStyle = .short
         formatter.dateStyle = .none
-        let endTimeLabel = formatter.string(from: scheduledEndDate)
 
-        for offset in openShift.scheduledReminderOffsets where offset > 0 {
-            let fireDate = scheduledEndDate.addingTimeInterval(TimeInterval(-offset * 60))
-            guard fireDate > .now else { continue }
+        for openShift in openShifts {
+            guard let scheduledEndDate = openShift.scheduledEndDate else { continue }
+            let endTimeLabel = formatter.string(from: scheduledEndDate)
+            let jobPrefix = openShift.job.map { "\($0.displayName): " } ?? ""
 
-            let content = UNMutableNotificationContent()
-            content.title = "Shift ending soon"
-            content.body = "Your shift is set to end at \(endTimeLabel)."
-            content.sound = .default
+            for offset in openShift.scheduledReminderOffsets where offset > 0 {
+                let fireDate = scheduledEndDate.addingTimeInterval(TimeInterval(-offset * 60))
+                guard fireDate > .now else { continue }
 
-            let trigger = UNTimeIntervalNotificationTrigger(
-                timeInterval: max(1, fireDate.timeIntervalSinceNow),
-                repeats: false
-            )
-            let request = UNNotificationRequest(
-                identifier: "open-shift-\(openShift.id.uuidString)-\(offset)",
-                content: content,
-                trigger: trigger
-            )
-            try? await notificationCenter.add(request)
-        }
+                let content = UNMutableNotificationContent()
+                content.title = "Shift ending soon"
+                content.body = "\(jobPrefix)scheduled to end at \(endTimeLabel)."
+                content.sound = .default
 
-        if scheduledEndDate > .now {
-            let content = UNMutableNotificationContent()
-            content.title = "Shift end reached"
-            content.body = "Your shift was scheduled to end at \(endTimeLabel)."
-            content.sound = .default
+                let trigger = UNTimeIntervalNotificationTrigger(
+                    timeInterval: max(1, fireDate.timeIntervalSinceNow),
+                    repeats: false
+                )
+                let request = UNNotificationRequest(
+                    identifier: "open-shift-\(openShift.id.uuidString)-\(offset)",
+                    content: content,
+                    trigger: trigger
+                )
+                try? await notificationCenter.add(request)
+            }
 
-            let trigger = UNTimeIntervalNotificationTrigger(
-                timeInterval: max(1, scheduledEndDate.timeIntervalSinceNow),
-                repeats: false
-            )
-            let request = UNNotificationRequest(
-                identifier: "open-shift-\(openShift.id.uuidString)-end",
-                content: content,
-                trigger: trigger
-            )
-            try? await notificationCenter.add(request)
+            if scheduledEndDate > .now {
+                let content = UNMutableNotificationContent()
+                content.title = "Shift end reached"
+                content.body = "\(jobPrefix)scheduled to end at \(endTimeLabel)."
+                content.sound = .default
+
+                let trigger = UNTimeIntervalNotificationTrigger(
+                    timeInterval: max(1, scheduledEndDate.timeIntervalSinceNow),
+                    repeats: false
+                )
+                let request = UNNotificationRequest(
+                    identifier: "open-shift-\(openShift.id.uuidString)-end",
+                    content: content,
+                    trigger: trigger
+                )
+                try? await notificationCenter.add(request)
+            }
         }
     }
 

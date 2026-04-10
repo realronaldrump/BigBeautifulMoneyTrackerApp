@@ -15,21 +15,21 @@ struct SummaryDrawer: View {
                 .frame(width: 46, height: 5)
                 .padding(.top, 10)
 
-            VStack(spacing: 14) {
+            VStack(spacing: Spacing.md) {
                 HStack {
                     Text("Beneath The Ticker")
-                        .font(.system(size: 18, weight: .semibold, design: .rounded))
+                        .font(TypeStyle.title3)
                         .foregroundStyle(Color.white)
                     Spacer()
                     Text(isExpanded ? "Hide" : "Reveal")
-                        .font(.system(size: 13, weight: .medium, design: .rounded))
+                        .font(TypeStyle.caption)
                         .foregroundStyle(theme.secondaryText)
                 }
 
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                     MetricTile(
                         title: "Pay Period",
-                        value: display(snapshot.payPeriodGross, takeHome: snapshot.payPeriodTakeHome),
+                        value: payPeriodValue,
                         accent: theme.accent(for: mode)
                     )
                     MetricTile(
@@ -41,17 +41,19 @@ struct SummaryDrawer: View {
                     if isExpanded {
                         MetricTile(
                             title: "Hours This Cycle",
-                            value: snapshot.payPeriodHours.formatted(.number.precision(.fractionLength(1))) + " hrs",
+                            value: payPeriodMetric(
+                                snapshot.payPeriodHours.formatted(.number.precision(.fractionLength(1))) + " hrs"
+                            ),
                             accent: theme.accent(for: mode)
                         )
                         MetricTile(
                             title: "Projected Check",
-                            value: display(snapshot.projectedPaycheckGross, takeHome: snapshot.projectedPaycheckTakeHome) + "\n" + snapshot.projectedConfidenceLabel,
+                            value: projectedValue,
                             accent: theme.accent(for: mode)
                         )
                         MetricTile(
                             title: "Night Premium",
-                            value: snapshot.payPeriodNightPremium.formatted(.currency(code: "USD")),
+                            value: payPeriodMetric(snapshot.payPeriodNightPremium.formatted(.currency(code: "USD"))),
                             accent: theme.accent(for: mode)
                         )
                         MetricTile(
@@ -65,14 +67,7 @@ struct SummaryDrawer: View {
             .padding(.horizontal, 18)
             .padding(.bottom, 18)
         }
-        .background(
-            RoundedRectangle(cornerRadius: 30, style: .continuous)
-                .fill(theme.panel.opacity(0.96))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 30, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.06), lineWidth: 1)
-                )
-        )
+        .glassCard(cornerRadius: CornerRadius.cardLarge, accent: theme.accent(for: mode))
         .onTapGesture {
             withAnimation(.spring(response: 0.45, dampingFraction: 0.86)) {
                 isExpanded.toggle()
@@ -83,5 +78,27 @@ struct SummaryDrawer: View {
     private func display(_ gross: Double, takeHome: Double) -> String {
         let amount = mode == .gross ? gross : takeHome
         return amount.formatted(.currency(code: "USD"))
+    }
+
+    private var payPeriodValue: String {
+        payPeriodMetric(display(snapshot.payPeriodGross, takeHome: snapshot.payPeriodTakeHome))
+    }
+
+    private var projectedValue: String {
+        guard snapshot.payPeriodAggregation == .unified else {
+            return "Varies by job\nSee Summary"
+        }
+
+        return display(snapshot.projectedPaycheckGross, takeHome: snapshot.projectedPaycheckTakeHome)
+            + "\n"
+            + snapshot.projectedConfidenceLabel
+    }
+
+    private func payPeriodMetric(_ resolvedValue: String) -> String {
+        guard snapshot.payPeriodAggregation == .unified else {
+            return "Varies by job"
+        }
+
+        return resolvedValue
     }
 }

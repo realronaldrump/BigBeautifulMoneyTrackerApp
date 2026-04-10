@@ -17,6 +17,7 @@
 		2EC3DAAC8E4837653B01AF25 /* ShiftActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 901AD27FB3709E9B428100F3 /* ShiftActivityAttributes.swift */; };
 		349E878087E58CE74AD02FCC /* ProjectionEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10780152B03F10E19A80E5D /* ProjectionEngine.swift */; };
 		36697D855B1EE5EB05A675D7 /* DataBootstrapper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B603D3512289418D6BAFB50 /* DataBootstrapper.swift */; };
+		3AC047F3CD6D3882894751D1 /* JobInitialBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CA398C7A3C0993943D3BD32 /* JobInitialBadge.swift */; };
 		3D1B6EDAA0CC51C916BA8C1C /* ShiftActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 901AD27FB3709E9B428100F3 /* ShiftActivityAttributes.swift */; };
 		3E42F5EFE31177FA53BD67A4 /* SharedTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01B22CAA9BA4B9C4C741C970 /* SharedTypes.swift */; };
 		4060A369F2414E362390EA1B /* ShiftController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4B29FD43FC3E03F8439CE6B /* ShiftController.swift */; };
@@ -28,16 +29,20 @@
 		67075AD2D706B8443FB9EC25 /* RollingCurrencyText.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5BCF505C82EA2941D3097364 /* RollingCurrencyText.swift */; };
 		6903104608E1540DE66714BB /* EarningsEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = B51002DA3DDBCB87BC12024E /* EarningsEngine.swift */; };
 		6A59FF91FAB790821C8E5DFD /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 6C63B487E520BB088AEEF80D /* Assets.xcassets */; };
+		6DA627ABE84400327BADCD87 /* SummaryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8815E6411A1EFC6A0A7A42C6 /* SummaryView.swift */; };
 		6F59E2C1C0E933CFBE488AFB /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72FC659281BA65A56A15F91B /* OnboardingView.swift */; };
 		700EA711F1D75604419352F9 /* SharedConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 178598229E5BD008C8B2D0D4 /* SharedConstants.swift */; };
 		767EB6C6F469AF6D4E6B612A /* MoneyTrackerShortcuts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6DD8261EF1F5EF3A6CB10651 /* MoneyTrackerShortcuts.swift */; };
+		79A3BF4FC486766EA45D1509 /* JobAccentPalette.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBBC82F9E0FA6186E7A734CE /* JobAccentPalette.swift */; };
 		7ABC6858B4DE3481A3B4C6CA /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9ADB18FA9F92E3D60AB4293E /* Models.swift */; };
 		7BBA94BF80EBAD82D1B6EE09 /* MoneyTrackerEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9545A5E62D01D46BA2FBB8D /* MoneyTrackerEngineTests.swift */; };
 		9CBB52C7AF8768A8742F0A97 /* EarningsEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = B51002DA3DDBCB87BC12024E /* EarningsEngine.swift */; };
 		9D2ABC486E07766DFC32CFB5 /* ModelContainerFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6C94312478F761905736621 /* ModelContainerFactory.swift */; };
 		9E8C96CE6ADD75280665BAFC /* TemplatesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAA4E8B587E7EF0357D5DBFF /* TemplatesView.swift */; };
+		A2D4C0734C807BA8534B7560 /* JobService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57EBF12AAF51D48C6D507FB3 /* JobService.swift */; };
 		A3D63223195513BBB4247A6A /* BigBeautifulMoneyTrackerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29D7B1AEF3E54493B27A850D /* BigBeautifulMoneyTrackerApp.swift */; };
 		A5B2F7ACEB10E3CA2FF8CBF4 /* TaxEstimator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D2F93B7E5B59A42A0A6D6F2 /* TaxEstimator.swift */; };
+		A6C4127A32C79B0776180564 /* PulseAura.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7EF73C3A77D4B77940075392 /* PulseAura.swift */; };
 		A9C9AB1E29EF7F5377C21EA4 /* HapticManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1DE0ECBC20AFF2C014C48A1 /* HapticManager.swift */; };
 		B7C7C8312873E0A83FFE2F6B /* AggregationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 609E94722DF52B0B79865C29 /* AggregationService.swift */; };
 		B90DDB8ED8F3F066AF4BE6FE /* HistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7C6480BC46625FEDF8BFB7E /* HistoryView.swift */; };
@@ -53,6 +58,7 @@
 		EBE90F1C6DEC5627D060C926 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9ADB18FA9F92E3D60AB4293E /* Models.swift */; };
 		F485D80A5508407B6C75AD52 /* LiveActivityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0D64AF572535E621793DA7F /* LiveActivityManager.swift */; };
 		F5B3C2343B9AED3D0FB781CB /* DataBootstrapper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B603D3512289418D6BAFB50 /* DataBootstrapper.swift */; };
+		FA6A32D77416AACA9DD37016 /* JobService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57EBF12AAF51D48C6D507FB3 /* JobService.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -97,6 +103,8 @@
 		2B603D3512289418D6BAFB50 /* DataBootstrapper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataBootstrapper.swift; sourceTree = "<group>"; };
 		2DD7DE6232BF82BD65C94F47 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		37EA3FFF9A4FAF675E799D31 /* MoneyTrackerWidgets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoneyTrackerWidgets.swift; sourceTree = "<group>"; };
+		4CA398C7A3C0993943D3BD32 /* JobInitialBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JobInitialBadge.swift; sourceTree = "<group>"; };
+		57EBF12AAF51D48C6D507FB3 /* JobService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JobService.swift; sourceTree = "<group>"; };
 		5BCF505C82EA2941D3097364 /* RollingCurrencyText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RollingCurrencyText.swift; sourceTree = "<group>"; };
 		5D9FD3990BAA8AD4F6A93768 /* BigBeautifulMoneyTrackerTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = BigBeautifulMoneyTrackerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		609E94722DF52B0B79865C29 /* AggregationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AggregationService.swift; sourceTree = "<group>"; };
@@ -105,8 +113,10 @@
 		6DD8261EF1F5EF3A6CB10651 /* MoneyTrackerShortcuts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoneyTrackerShortcuts.swift; sourceTree = "<group>"; };
 		72FC659281BA65A56A15F91B /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		751904045AF860B35193929A /* ReminderManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReminderManager.swift; sourceTree = "<group>"; };
+		7EF73C3A77D4B77940075392 /* PulseAura.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PulseAura.swift; sourceTree = "<group>"; };
 		818DAF58F9BBD8324AB4FBBD /* MetricTile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetricTile.swift; sourceTree = "<group>"; };
 		8788FC074A315A5185BD5256 /* AppNotificationDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppNotificationDelegate.swift; sourceTree = "<group>"; };
+		8815E6411A1EFC6A0A7A42C6 /* SummaryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SummaryView.swift; sourceTree = "<group>"; };
 		8D606036C020E8AE5F2C85BC /* BigBeautifulMoneyTrackerWidgets.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = BigBeautifulMoneyTrackerWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		901AD27FB3709E9B428100F3 /* ShiftActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShiftActivityAttributes.swift; sourceTree = "<group>"; };
 		9ADB18FA9F92E3D60AB4293E /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
@@ -120,6 +130,7 @@
 		B9545A5E62D01D46BA2FBB8D /* MoneyTrackerEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoneyTrackerEngineTests.swift; sourceTree = "<group>"; };
 		BA854895C6BF1C471B25059A /* AppTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTheme.swift; sourceTree = "<group>"; };
 		C1DE0ECBC20AFF2C014C48A1 /* HapticManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HapticManager.swift; sourceTree = "<group>"; };
+		CBBC82F9E0FA6186E7A734CE /* JobAccentPalette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JobAccentPalette.swift; sourceTree = "<group>"; };
 		E4536CD38ACEC77D56EA1BB0 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
 		E6C94312478F761905736621 /* ModelContainerFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelContainerFactory.swift; sourceTree = "<group>"; };
 		E7C6480BC46625FEDF8BFB7E /* HistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryView.swift; sourceTree = "<group>"; };
@@ -197,7 +208,10 @@
 			isa = PBXGroup;
 			children = (
 				BA854895C6BF1C471B25059A /* AppTheme.swift */,
+				CBBC82F9E0FA6186E7A734CE /* JobAccentPalette.swift */,
+				4CA398C7A3C0993943D3BD32 /* JobInitialBadge.swift */,
 				B424C0E9252148F6CF3D2326 /* MoneyBackground.swift */,
+				7EF73C3A77D4B77940075392 /* PulseAura.swift */,
 			);
 			path = DesignSystem;
 			sourceTree = "<group>";
@@ -261,6 +275,14 @@
 			path = Shared/Sources;
 			sourceTree = "<group>";
 		};
+		A29881675F7AEF319DF333BE /* Summary */ = {
+			isa = PBXGroup;
+			children = (
+				8815E6411A1EFC6A0A7A42C6 /* SummaryView.swift */,
+			);
+			path = Summary;
+			sourceTree = "<group>";
+		};
 		A2E3FC758DE090D1A1E9A8FF = {
 			isa = PBXGroup;
 			children = (
@@ -317,6 +339,7 @@
 				66B65D81D975A9AA24C99EFA /* Home */,
 				0309BEAC53B037DE6CC7ADF3 /* Onboarding */,
 				72DF2F28ACB47BE6BD8584D6 /* Settings */,
+				A29881675F7AEF319DF333BE /* Summary */,
 				C73E69AC0FD790D48EB27E32 /* Templates */,
 			);
 			path = Features;
@@ -328,6 +351,7 @@
 				609E94722DF52B0B79865C29 /* AggregationService.swift */,
 				2B603D3512289418D6BAFB50 /* DataBootstrapper.swift */,
 				B51002DA3DDBCB87BC12024E /* EarningsEngine.swift */,
+				57EBF12AAF51D48C6D507FB3 /* JobService.swift */,
 				E6C94312478F761905736621 /* ModelContainerFactory.swift */,
 				B10780152B03F10E19A80E5D /* ProjectionEngine.swift */,
 				A4B29FD43FC3E03F8439CE6B /* ShiftController.swift */,
@@ -473,6 +497,9 @@
 				A9C9AB1E29EF7F5377C21EA4 /* HapticManager.swift in Sources */,
 				B90DDB8ED8F3F066AF4BE6FE /* HistoryView.swift in Sources */,
 				D42A3D83F47FB03101E425A9 /* HomeView.swift in Sources */,
+				79A3BF4FC486766EA45D1509 /* JobAccentPalette.swift in Sources */,
+				3AC047F3CD6D3882894751D1 /* JobInitialBadge.swift in Sources */,
+				A2D4C0734C807BA8534B7560 /* JobService.swift in Sources */,
 				F485D80A5508407B6C75AD52 /* LiveActivityManager.swift in Sources */,
 				CFFD138395CD876094D8A43E /* MetricTile.swift in Sources */,
 				21C9B704148FE89722FD3A2D /* MilestoneBanner.swift in Sources */,
@@ -482,6 +509,7 @@
 				767EB6C6F469AF6D4E6B612A /* MoneyTrackerShortcuts.swift in Sources */,
 				6F59E2C1C0E933CFBE488AFB /* OnboardingView.swift in Sources */,
 				349E878087E58CE74AD02FCC /* ProjectionEngine.swift in Sources */,
+				A6C4127A32C79B0776180564 /* PulseAura.swift in Sources */,
 				0DA778022258C71D137220CD /* ReminderManager.swift in Sources */,
 				67075AD2D706B8443FB9EC25 /* RollingCurrencyText.swift in Sources */,
 				BE7C49CAA6C362B8F389F3D6 /* RootView.swift in Sources */,
@@ -491,6 +519,7 @@
 				3D1B6EDAA0CC51C916BA8C1C /* ShiftActivityAttributes.swift in Sources */,
 				4060A369F2414E362390EA1B /* ShiftController.swift in Sources */,
 				65D6EB19CB6843A1C0E4BB73 /* SummaryDrawer.swift in Sources */,
+				6DA627ABE84400327BADCD87 /* SummaryView.swift in Sources */,
 				05FBEA34874BA0227D9EEBFD /* TaxEstimator.swift in Sources */,
 				9E8C96CE6ADD75280665BAFC /* TemplatesView.swift in Sources */,
 			);
@@ -511,6 +540,7 @@
 				1059A93FCAB797CE887C1C64 /* AggregationService.swift in Sources */,
 				F5B3C2343B9AED3D0FB781CB /* DataBootstrapper.swift in Sources */,
 				6903104608E1540DE66714BB /* EarningsEngine.swift in Sources */,
+				FA6A32D77416AACA9DD37016 /* JobService.swift in Sources */,
 				9D2ABC486E07766DFC32CFB5 /* ModelContainerFactory.swift in Sources */,
 				7ABC6858B4DE3481A3B4C6CA /* Models.swift in Sources */,
 				0826CB1DDC8E09E124FB672D /* MoneyTrackerWidgets.swift in Sources */,
@@ -636,7 +666,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 3;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = CZ3N26YJ75;
 				ENABLE_NS_ASSERTIONS = NO;
@@ -651,7 +681,7 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.1;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -720,7 +750,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 3;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = CZ3N26YJ75;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -741,7 +771,7 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.1;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;

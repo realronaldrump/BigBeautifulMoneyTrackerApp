@@ -3,6 +3,7 @@ import SwiftData
 
 enum AppModelContainerFactory {
     static let schema = Schema([
+        JobProfile.self,
         ShiftRecord.self,
         OpenShiftState.self,
         PayRateSchedule.self,
@@ -12,7 +13,6 @@ enum AppModelContainerFactory {
         PaySchedule.self,
         ScheduleTemplate.self,
         ScheduledShift.self,
-        MilestoneEvent.self,
         AppPreferences.self,
     ])
 

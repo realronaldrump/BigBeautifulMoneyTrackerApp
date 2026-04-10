@@ -4,6 +4,7 @@ import Foundation
 @MainActor
 enum LiveActivityManager {
     static func startOrUpdate(
+        title: String,
         startDate: Date,
         amount: Double,
         rate: Double,
@@ -11,7 +12,7 @@ enum LiveActivityManager {
     ) {
         guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
 
-        let attributes = ShiftActivityAttributes(title: "Davis's Big Beautiful Money Tracker App")
+        let attributes = ShiftActivityAttributes(title: title)
         let contentState = ShiftActivityAttributes.ContentState(
             mode: mode,
             syncedAmount: amount,

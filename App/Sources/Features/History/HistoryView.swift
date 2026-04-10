@@ -2,12 +2,14 @@ import SwiftData
 import SwiftUI
 
 private struct ShiftEditorSeed {
+    let jobIdentifier: UUID?
     let startDate: Date
     let endDate: Date
     let note: String
 
     static func duplicate(from shift: ShiftRecord) -> ShiftEditorSeed {
         ShiftEditorSeed(
+            jobIdentifier: shift.job?.id,
             startDate: shift.startDate,
             endDate: shift.endDate,
             note: shift.note
@@ -24,6 +26,7 @@ private struct ShiftEditorSeed {
 
         let normalizedStart = calendar.date(bySetting: .second, value: 0, of: nextStart) ?? nextStart
         return ShiftEditorSeed(
+            jobIdentifier: shift.job?.id,
             startDate: normalizedStart,
             endDate: normalizedStart.addingTimeInterval(shift.endDate.timeIntervalSince(shift.startDate)),
             note: shift.note
@@ -46,10 +49,10 @@ private struct HistoryEditorDestination: Identifiable {
 struct HistoryView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(AppTheme.self) private var theme
-    @Environment(\.dismiss) private var dismiss
 
     @Query(sort: \ShiftRecord.startDate, order: .reverse) private var shifts: [ShiftRecord]
     @Query(sort: \ScheduledShift.startDate) private var scheduledShifts: [ScheduledShift]
+    @Query(sort: \JobProfile.sortOrder) private var jobs: [JobProfile]
     @Query private var paySchedules: [PaySchedule]
     @Query private var taxProfiles: [TaxProfile]
     @Query private var payRates: [PayRateSchedule]
@@ -65,7 +68,7 @@ struct HistoryView: View {
             List {
                     BrandHeader(
                         eyebrow: "Shift History",
-                        subtitle: "Review completed shifts, schedule future work, and keep a personal earnings ledger without a company account.",
+                        subtitle: "Review completed shifts, schedule future work, and keep a personal earnings ledger.",
                         mode: .gross,
                         compact: true
                     )
@@ -119,7 +122,11 @@ struct HistoryView: View {
                         Button {
                             destination = HistoryEditorDestination(kind: .editShift(shift))
                         } label: {
-                            ShiftCardView(shift: shift, takeHomeEstimate: takeHomeEstimate(for: shift))
+                            ShiftCardView(
+                                shift: shift,
+                                takeHomeEstimate: takeHomeEstimate(for: shift),
+                                bestShiftGross: shifts.map(\.grossEarnings).max() ?? 0
+                            )
                         }
                         .buttonStyle(.plain)
                         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
@@ -164,13 +171,11 @@ struct HistoryView: View {
             }
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
+            .safeAreaPadding(.bottom, 120)
         }
         .navigationTitle("History")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                Button("Done") { dismiss() }
-            }
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
                     Button {
@@ -193,13 +198,13 @@ struct HistoryView: View {
             NavigationStack {
                 switch destination.kind {
                 case .editShift(let shift):
-                    ShiftEditorView(editingShift: shift)
+                    ShiftEditorView(editingShift: shift, availableJobs: jobs.filter { !$0.isArchived })
                 case .newShift(let seed):
-                    ShiftEditorView(editingShift: nil, seed: seed)
+                    ShiftEditorView(editingShift: nil, seed: seed, availableJobs: jobs.filter { !$0.isArchived })
                 case .editScheduledShift(let shift):
-                    ScheduledShiftEditorView(editingShift: shift)
+                    ScheduledShiftEditorView(editingShift: shift, availableJobs: jobs.filter { !$0.isArchived })
                 case .newScheduledShift(let seed):
-                    ScheduledShiftEditorView(editingShift: nil, seed: seed)
+                    ScheduledShiftEditorView(editingShift: nil, seed: seed, availableJobs: jobs.filter { !$0.isArchived })
                 }
             }
         }
@@ -237,28 +242,19 @@ struct HistoryView: View {
     }
 
     private func takeHomeEstimate(for shift: ShiftRecord) -> Double {
-        guard
-            let paySchedule = paySchedules.first,
-            let taxProfile = taxProfiles.first
-        else {
+        guard let taxProfile = taxProfiles.first else {
             return shift.grossEarnings
         }
 
-        let currentRate = payRates.max(by: { $0.effectiveDate < $1.effectiveDate })?.hourlyRate ?? 0
-        let ytdGross = AggregationService.totalGross(for: shifts.filter {
-            Calendar.current.isDate($0.startDate, equalTo: shift.startDate, toGranularity: .year)
-        })
-
-        let estimate = TaxEstimator.estimate(
-            currentGross: 0,
-            yearToDateGrossExcludingCurrentShift: ytdGross,
-            payFrequency: paySchedule.frequency,
+        return TaxEstimator.estimatedTakeHome(
+            for: shift,
+            allShifts: shifts,
+            payRates: payRates,
+            paySchedules: paySchedules,
+            templates: templates,
             taxProfile: taxProfile,
-            currentHourlyRate: currentRate,
-            templates: templates
+            calendar: Calendar.current
         )
-
-        return TaxEstimator.estimatedTakeHome(for: shift.grossEarnings, estimate: estimate)
     }
 
     private var deleteErrorIsPresented: Binding<Bool> {
@@ -302,11 +298,21 @@ private struct ShiftCardView: View {
 
     let shift: ShiftRecord
     let takeHomeEstimate: Double
+    var bestShiftGross: Double = 0
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: Spacing.md) {
             HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: Spacing.xs) {
+                    if let job = shift.job {
+                        HStack(spacing: Spacing.sm) {
+                            JobInitialBadge(name: job.displayName, accent: job.accent.color, size: 22)
+                            Text(job.displayName)
+                                .font(.system(size: 12, weight: .bold, design: .rounded))
+                                .foregroundStyle(job.accent.color)
+                        }
+                    }
+
                     Text(shift.startDate.formatted(date: .abbreviated, time: .omitted))
                         .font(.system(size: 19, weight: .bold, design: .rounded))
                         .foregroundStyle(.white)
@@ -320,7 +326,7 @@ private struct ShiftCardView: View {
 
                 VStack(alignment: .trailing, spacing: 5) {
                     Text(shift.grossEarnings, format: .currency(code: "USD"))
-                        .font(.system(size: 24, weight: .bold, design: .rounded))
+                        .font(TypeStyle.title)
                         .foregroundStyle(theme.grossAccent)
                     Text(takeHomeEstimate, format: .currency(code: "USD"))
                         .font(.system(size: 14, weight: .semibold, design: .rounded))
@@ -339,16 +345,21 @@ private struct ShiftCardView: View {
             }
             .font(.system(size: 12, weight: .medium, design: .rounded))
             .foregroundStyle(theme.secondaryText)
+
+            // Earnings bar — width relative to best shift
+            if bestShiftGross > 0 {
+                GeometryReader { geometry in
+                    let fraction = min(shift.grossEarnings / bestShiftGross, 1.0)
+                    let barColor = shift.job?.accent.color ?? theme.grossAccent
+                    RoundedRectangle(cornerRadius: 3, style: .continuous)
+                        .fill(barColor.opacity(0.5))
+                        .frame(width: geometry.size.width * fraction, height: 4)
+                }
+                .frame(height: 4)
+            }
         }
         .padding(18)
-        .background(
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .fill(theme.panel.opacity(0.96))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 28, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.06), lineWidth: 1)
-                )
-        )
+        .glassCard(cornerRadius: CornerRadius.cardLarge, accent: shift.job?.accent.color ?? theme.grossAccent)
     }
 }
 
@@ -358,9 +369,18 @@ private struct ScheduledShiftCardView: View {
     let shift: ScheduledShift
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: Spacing.md) {
             HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: Spacing.xs) {
+                    if let job = shift.job {
+                        HStack(spacing: Spacing.sm) {
+                            JobInitialBadge(name: job.displayName, accent: job.accent.color, size: 22)
+                            Text(job.displayName)
+                                .font(.system(size: 12, weight: .bold, design: .rounded))
+                                .foregroundStyle(job.accent.color)
+                        }
+                    }
+
                     Text(shift.startDate.formatted(date: .abbreviated, time: .omitted))
                         .font(.system(size: 19, weight: .bold, design: .rounded))
                         .foregroundStyle(.white)
@@ -373,15 +393,16 @@ private struct ScheduledShiftCardView: View {
                 Spacer()
 
                 Text("Auto")
-                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                    .font(TypeStyle.caption)
+                    .fontWeight(.bold)
                     .foregroundStyle(Color.black)
                     .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
+                    .padding(.vertical, Spacing.sm)
                     .background(theme.takeHomeAccent)
                     .clipShape(Capsule())
             }
 
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: Spacing.sm) {
                 Label(
                     "\(shift.duration / 3600, format: .number.precision(.fractionLength(2))) hrs",
                     systemImage: "clock"
@@ -397,20 +418,13 @@ private struct ScheduledShiftCardView: View {
 
             if !shift.note.isEmpty {
                 Text(shift.note)
-                    .font(.system(size: 13, weight: .medium, design: .rounded))
+                    .font(TypeStyle.caption)
                     .foregroundStyle(Color.white.opacity(0.88))
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(18)
-        .background(
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .fill(theme.panel.opacity(0.96))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 28, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.06), lineWidth: 1)
-                )
-        )
+        .glassCard(cornerRadius: CornerRadius.cardLarge, accent: shift.job?.accent.color ?? .white)
     }
 }
 
@@ -419,14 +433,18 @@ private struct ShiftEditorView: View {
     @Environment(\.dismiss) private var dismiss
 
     let editingShift: ShiftRecord?
+    let availableJobs: [JobProfile]
 
+    @State private var selectedJobIdentifier: UUID?
     @State private var startDate: Date
     @State private var endDate: Date
     @State private var note: String
     @State private var errorText: String?
 
-    init(editingShift: ShiftRecord?, seed: ShiftEditorSeed? = nil) {
+    init(editingShift: ShiftRecord?, seed: ShiftEditorSeed? = nil, availableJobs: [JobProfile]) {
         self.editingShift = editingShift
+        self.availableJobs = availableJobs
+        _selectedJobIdentifier = State(initialValue: editingShift?.job?.id ?? seed?.jobIdentifier ?? availableJobs.first?.id)
         _startDate = State(initialValue: editingShift?.startDate ?? seed?.startDate ?? .now.addingTimeInterval(-8 * 60 * 60))
         _endDate = State(initialValue: editingShift?.endDate ?? seed?.endDate ?? .now)
         _note = State(initialValue: editingShift?.note ?? seed?.note ?? "")
@@ -446,6 +464,13 @@ private struct ShiftEditorView: View {
             }
 
             Section("Timing") {
+                if availableJobs.count > 1 {
+                    Picker("Job", selection: $selectedJobIdentifier) {
+                        ForEach(availableJobs) { job in
+                            Text(job.displayName).tag(Optional(job.id))
+                        }
+                    }
+                }
                 DatePicker("Start", selection: $startDate)
                 DatePicker("End", selection: $endDate, in: startDate...)
             }
@@ -487,9 +512,14 @@ private struct ShiftEditorView: View {
             ToolbarItem(placement: .confirmationAction) {
                 Button("Save") {
                     do {
+                        guard let job = availableJobs.first(where: { $0.id == selectedJobIdentifier }) else {
+                            errorText = "Pick a job before saving."
+                            return
+                        }
                         try ShiftController.saveManualShift(
                             in: modelContext,
                             editing: editingShift,
+                            job: job,
                             startDate: startDate,
                             endDate: endDate,
                             note: note
@@ -509,16 +539,20 @@ private struct ScheduledShiftEditorView: View {
     @Environment(\.dismiss) private var dismiss
 
     let editingShift: ScheduledShift?
+    let availableJobs: [JobProfile]
 
+    @State private var selectedJobIdentifier: UUID?
     @State private var startDate: Date
     @State private var endDate: Date
     @State private var note: String
     @State private var errorText: String?
 
-    init(editingShift: ScheduledShift?, seed: ShiftEditorSeed? = nil) {
+    init(editingShift: ScheduledShift?, seed: ShiftEditorSeed? = nil, availableJobs: [JobProfile]) {
         self.editingShift = editingShift
+        self.availableJobs = availableJobs
         let defaultStart = seed?.startDate ?? .now.addingTimeInterval(24 * 60 * 60)
         let defaultEnd = seed?.endDate ?? defaultStart.addingTimeInterval(8 * 60 * 60)
+        _selectedJobIdentifier = State(initialValue: editingShift?.job?.id ?? seed?.jobIdentifier ?? availableJobs.first?.id)
         _startDate = State(initialValue: editingShift?.startDate ?? defaultStart)
         _endDate = State(initialValue: editingShift?.endDate ?? defaultEnd)
         _note = State(initialValue: editingShift?.note ?? seed?.note ?? "")
@@ -538,6 +572,13 @@ private struct ScheduledShiftEditorView: View {
             }
 
             Section("Timing") {
+                if availableJobs.count > 1 {
+                    Picker("Job", selection: $selectedJobIdentifier) {
+                        ForEach(availableJobs) { job in
+                            Text(job.displayName).tag(Optional(job.id))
+                        }
+                    }
+                }
                 DatePicker("Start", selection: $startDate)
                 DatePicker("End", selection: $endDate, in: startDate...)
 
@@ -583,9 +624,14 @@ private struct ScheduledShiftEditorView: View {
             ToolbarItem(placement: .confirmationAction) {
                 Button("Save") {
                     do {
+                        guard let job = availableJobs.first(where: { $0.id == selectedJobIdentifier }) else {
+                            errorText = "Pick a job before saving."
+                            return
+                        }
                         try ShiftController.saveScheduledShift(
                             in: modelContext,
                             editing: editingShift,
+                            job: job,
                             startDate: startDate,
                             endDate: endDate,
                             note: note

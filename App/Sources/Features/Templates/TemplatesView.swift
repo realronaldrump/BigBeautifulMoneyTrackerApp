@@ -2,14 +2,36 @@ import SwiftData
 import SwiftUI
 
 struct TemplatesView: View {
-    @Environment(\.modelContext) private var modelContext
     @Environment(AppTheme.self) private var theme
 
     @Query(sort: \ScheduleTemplate.weekdayRawValue) private var templates: [ScheduleTemplate]
+    @Query(sort: \JobProfile.sortOrder) private var jobs: [JobProfile]
     @Query private var preferences: [AppPreferences]
 
     @State private var editingTemplate: ScheduleTemplate?
     @State private var creatingTemplate = false
+
+    let selectedJobID: UUID?
+
+    init(selectedJobID: UUID? = nil) {
+        self.selectedJobID = selectedJobID
+    }
+
+    private var activeJobs: [JobProfile] {
+        jobs.filter { !$0.isArchived }
+    }
+
+    private var displayedTemplates: [ScheduleTemplate] {
+        templates.filter { template in
+            guard let selectedJobID else { return true }
+            return template.job?.id == selectedJobID
+        }
+    }
+
+    private var selectedJobName: String? {
+        guard let selectedJobID else { return nil }
+        return activeJobs.first(where: { $0.id == selectedJobID })?.displayName
+    }
 
     var body: some View {
         ZStack {
@@ -18,16 +40,18 @@ struct TemplatesView: View {
             ScrollView {
                 LazyVStack(spacing: 14) {
                     BrandHeader(
-                        eyebrow: "Schedule Templates",
-                        subtitle: "Build repeating shifts for your own workweek and keep reminders and projections ready without sign-up.",
+                        eyebrow: selectedJobName ?? "Schedule Templates",
+                        subtitle: selectedJobName == nil
+                            ? "Build repeating shifts for one or many jobs and keep reminders and projections ready."
+                            : "Build repeating shifts for \(selectedJobName!).",
                         mode: .gross,
                         compact: true
                     )
 
-                    if templates.isEmpty {
+                    if displayedTemplates.isEmpty {
                         emptyState
                     } else {
-                        ForEach(templates) { template in
+                        ForEach(displayedTemplates) { template in
                             Button {
                                 editingTemplate = template
                             } label: {
@@ -40,7 +64,7 @@ struct TemplatesView: View {
                 .padding(18)
             }
         }
-        .navigationTitle("Templates")
+        .navigationTitle(selectedJobName ?? "Templates")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -49,13 +73,26 @@ struct TemplatesView: View {
                 } label: {
                     Image(systemName: "plus")
                 }
+                .disabled(activeJobs.isEmpty)
             }
         }
         .sheet(item: $editingTemplate) { template in
-            NavigationStack { TemplateEditorView(editingTemplate: template) }
+            NavigationStack {
+                TemplateEditorView(
+                    editingTemplate: template,
+                    preselectedJobID: selectedJobID,
+                    availableJobs: activeJobs
+                )
+            }
         }
         .sheet(isPresented: $creatingTemplate) {
-            NavigationStack { TemplateEditorView(editingTemplate: nil) }
+            NavigationStack {
+                TemplateEditorView(
+                    editingTemplate: nil,
+                    preselectedJobID: selectedJobID,
+                    availableJobs: activeJobs
+                )
+            }
         }
         .onDisappear {
             Task {
@@ -73,7 +110,7 @@ struct TemplatesView: View {
                 .font(.system(size: 28, weight: .bold, design: .rounded))
                 .foregroundStyle(.white)
 
-            Text("Build a repeating shift once, and the app can keep your personal schedule, reminders, and projections ready.")
+            Text("Build a repeating shift once, and the app can keep reminders and projections ready for the right job.")
                 .font(.system(size: 15, weight: .medium, design: .rounded))
                 .foregroundStyle(theme.secondaryText)
                 .multilineTextAlignment(.center)
@@ -87,7 +124,10 @@ private struct TemplateEditorView: View {
     @Environment(\.dismiss) private var dismiss
 
     let editingTemplate: ScheduleTemplate?
+    let preselectedJobID: UUID?
+    let availableJobs: [JobProfile]
 
+    @State private var selectedJobID: UUID?
     @State private var name: String
     @State private var weekday: ScheduleWeekday
     @State private var startHour: Int
@@ -97,8 +137,11 @@ private struct TemplateEditorView: View {
     @State private var reminderMinutesBefore: Int
     @State private var isEnabled: Bool
 
-    init(editingTemplate: ScheduleTemplate?) {
+    init(editingTemplate: ScheduleTemplate?, preselectedJobID: UUID?, availableJobs: [JobProfile]) {
         self.editingTemplate = editingTemplate
+        self.preselectedJobID = preselectedJobID
+        self.availableJobs = availableJobs
+        _selectedJobID = State(initialValue: editingTemplate?.job?.id ?? preselectedJobID ?? availableJobs.first?.id)
         _name = State(initialValue: editingTemplate?.name ?? "Standard Shift")
         _weekday = State(initialValue: editingTemplate?.weekday ?? .monday)
         _startHour = State(initialValue: editingTemplate?.startHour ?? 7)
@@ -114,12 +157,22 @@ private struct TemplateEditorView: View {
             Section {
                 BrandHeader(
                     eyebrow: editingTemplate == nil ? "New Template" : "Edit Template",
-                    subtitle: "Shape repeating shifts for your own schedule and reminder flow.",
+                    subtitle: "Shape repeating shifts and reminder timing for the correct job.",
                     mode: .gross,
                     compact: true
                 )
                 .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 0))
                 .listRowBackground(Color.clear)
+            }
+
+            if preselectedJobID == nil {
+                Section("Job") {
+                    Picker("Template belongs to", selection: $selectedJobID) {
+                        ForEach(availableJobs) { job in
+                            Text(job.displayName).tag(Optional(job.id))
+                        }
+                    }
+                }
             }
 
             TextField("Template name", text: $name)
@@ -143,34 +196,49 @@ private struct TemplateEditorView: View {
             }
             ToolbarItem(placement: .confirmationAction) {
                 Button("Save") {
-                    if let editingTemplate {
-                        editingTemplate.name = name
-                        editingTemplate.weekday = weekday
-                        editingTemplate.startHour = startHour
-                        editingTemplate.startMinute = startMinute
-                        editingTemplate.endHour = endHour
-                        editingTemplate.endMinute = endMinute
-                        editingTemplate.reminderMinutesBefore = reminderMinutesBefore
-                        editingTemplate.isEnabled = isEnabled
-                    } else {
-                        modelContext.insert(
-                            ScheduleTemplate(
-                                name: name,
-                                weekday: weekday,
-                                startHour: startHour,
-                                startMinute: startMinute,
-                                endHour: endHour,
-                                endMinute: endMinute,
-                                reminderMinutesBefore: reminderMinutesBefore,
-                                isEnabled: isEnabled
-                            )
-                        )
-                    }
-                    try? modelContext.save()
-                    dismiss()
+                    save()
                 }
+                .disabled(resolvedJob == nil)
             }
         }
+    }
+
+    private var resolvedJob: JobProfile? {
+        availableJobs.first(where: { $0.id == selectedJobID })
+    }
+
+    private func save() {
+        guard let resolvedJob else {
+            return
+        }
+
+        if let editingTemplate {
+            editingTemplate.job = resolvedJob
+            editingTemplate.name = name
+            editingTemplate.weekday = weekday
+            editingTemplate.startHour = startHour
+            editingTemplate.startMinute = startMinute
+            editingTemplate.endHour = endHour
+            editingTemplate.endMinute = endMinute
+            editingTemplate.reminderMinutesBefore = reminderMinutesBefore
+            editingTemplate.isEnabled = isEnabled
+        } else {
+            modelContext.insert(
+                ScheduleTemplate(
+                    job: resolvedJob,
+                    name: name,
+                    weekday: weekday,
+                    startHour: startHour,
+                    startMinute: startMinute,
+                    endHour: endHour,
+                    endMinute: endMinute,
+                    reminderMinutesBefore: reminderMinutesBefore,
+                    isEnabled: isEnabled
+                )
+            )
+        }
+        try? modelContext.save()
+        dismiss()
     }
 
     private var startTimeBinding: Binding<Date> {
@@ -205,9 +273,25 @@ private struct TemplateCardView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(template.name)
-                .font(.system(size: 20, weight: .bold, design: .rounded))
-                .foregroundStyle(.white)
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: Spacing.sm) {
+                    if let job = template.job {
+                        HStack(spacing: Spacing.sm) {
+                            JobInitialBadge(name: job.displayName, accent: job.accent.color, size: 22)
+                            Text(job.displayName)
+                                .font(.system(size: 12, weight: .bold, design: .rounded))
+                                .foregroundStyle(job.accent.color)
+                        }
+                    }
+
+                    Text(template.name)
+                        .font(TypeStyle.title2)
+                        .fontWeight(.bold)
+                        .foregroundStyle(.white)
+                }
+
+                Spacer()
+            }
 
             Text("\(template.weekday.title) • \(templateTimeLabel(hour: template.startHour, minute: template.startMinute)) - \(templateTimeLabel(hour: template.endHour, minute: template.endMinute))")
                 .font(.system(size: 14, weight: .medium, design: .rounded))
@@ -222,14 +306,7 @@ private struct TemplateCardView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(18)
-        .background(
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .fill(theme.panelFill(for: .gross))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 28, style: .continuous)
-                        .strokeBorder(theme.brandStroke, lineWidth: 1)
-                )
-        )
+        .glassCard(cornerRadius: CornerRadius.cardLarge, accent: template.job?.accent.color ?? .white)
     }
 }
 

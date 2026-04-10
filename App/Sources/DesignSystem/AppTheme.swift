@@ -1,6 +1,34 @@
 import Observation
 import SwiftUI
 
+// MARK: - Design Tokens
+
+enum CornerRadius {
+    static let cardLarge: CGFloat = 28
+    static let cardSmall: CGFloat = 16
+}
+
+enum Spacing {
+    static let xs: CGFloat = 4
+    static let sm: CGFloat = 8
+    static let md: CGFloat = 14
+    static let lg: CGFloat = 20
+    static let xl: CGFloat = 28
+}
+
+enum TypeStyle {
+    static let headline: Font = .system(size: 34, weight: .bold, design: .rounded)
+    static let title: Font = .system(size: 24, weight: .bold, design: .rounded)
+    static let title2: Font = .system(size: 20, weight: .semibold, design: .rounded)
+    static let title3: Font = .system(size: 18, weight: .semibold, design: .rounded)
+    static let body: Font = .system(size: 16, weight: .medium, design: .rounded)
+    static let callout: Font = .system(size: 15, weight: .medium, design: .rounded)
+    static let caption: Font = .system(size: 13, weight: .medium, design: .rounded)
+    static let micro: Font = .system(size: 11, weight: .semibold, design: .rounded)
+}
+
+// MARK: - Theme
+
 @MainActor
 @Observable
 final class AppTheme {
@@ -33,18 +61,6 @@ final class AppTheme {
         }
     }
 
-    var metallicGradient: LinearGradient {
-        LinearGradient(
-            colors: [
-                Color.white.opacity(0.95),
-                takeHomeAccent.opacity(0.82),
-                roseAccent.opacity(0.72)
-            ],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-    }
-
     var brandStroke: LinearGradient {
         LinearGradient(
             colors: [
@@ -73,10 +89,75 @@ final class AppTheme {
     func glow(for mode: EarningsDisplayMode) -> LinearGradient {
         let accent = accent(for: mode)
         return LinearGradient(
-            colors: [accent.opacity(0.52), complementaryAccent(for: mode).opacity(0.16), .clear],
+            colors: [accent.opacity(0.18), complementaryAccent(for: mode).opacity(0.06), .clear],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
         )
+    }
+}
+
+// MARK: - Glass Card Modifier
+
+struct GlassCard: ViewModifier {
+    let cornerRadius: CGFloat
+    let accent: Color
+    let hasShadow: Bool
+
+    init(
+        cornerRadius: CGFloat = CornerRadius.cardLarge,
+        accent: Color = .white,
+        hasShadow: Bool = true
+    ) {
+        self.cornerRadius = cornerRadius
+        self.accent = accent
+        self.hasShadow = hasShadow
+    }
+
+    func body(content: Content) -> some View {
+        content
+            .background(
+                ZStack {
+                    // Base translucent fill
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                        .fill(.ultraThinMaterial)
+                        .environment(\.colorScheme, .dark)
+
+                    // Tinted overlay so cards stay rich on pure-dark backgrounds
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                        .fill(Color(red: 0.08, green: 0.09, blue: 0.11).opacity(0.55))
+
+                    // Inner light edge (top-left highlight)
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                        .strokeBorder(
+                            LinearGradient(
+                                colors: [
+                                    Color.white.opacity(0.18),
+                                    Color.white.opacity(0.06),
+                                    accent.opacity(0.08),
+                                    Color.clear
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 1
+                        )
+                }
+            )
+            .shadow(
+                color: hasShadow ? accent.opacity(0.10) : .clear,
+                radius: hasShadow ? 20 : 0,
+                y: hasShadow ? 8 : 0
+            )
+    }
+}
+
+extension View {
+    func glassCard(
+        cornerRadius: CGFloat = CornerRadius.cardLarge,
+        accent: Color = .white,
+        hasShadow: Bool = true
+    ) -> some View {
+        modifier(GlassCard(cornerRadius: cornerRadius, accent: accent, hasShadow: hasShadow))
     }
 }
 
@@ -113,21 +194,27 @@ struct BrandHeader: View {
         }
         .padding(compact ? 18 : 22)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: compact ? 28 : 34, style: .continuous)
-                .fill(theme.panelFill(for: mode))
-                .overlay(
-                    RoundedRectangle(cornerRadius: compact ? 28 : 34, style: .continuous)
-                        .strokeBorder(theme.brandStroke, lineWidth: 1)
-                )
-                .overlay(alignment: .topTrailing) {
-                    Circle()
-                        .fill(theme.glow(for: mode))
-                        .frame(width: compact ? 96 : 130, height: compact ? 96 : 130)
-                        .blur(radius: compact ? 24 : 32)
-                        .offset(x: compact ? 10 : 18, y: compact ? -16 : -22)
-                }
-        )
+        .background {
+            ZStack {
+                RoundedRectangle(cornerRadius: CornerRadius.cardLarge, style: .continuous)
+                    .fill(.ultraThinMaterial)
+                    .environment(\.colorScheme, .dark)
+
+                RoundedRectangle(cornerRadius: CornerRadius.cardLarge, style: .continuous)
+                    .fill(theme.panelFill(for: mode))
+
+                RoundedRectangle(cornerRadius: CornerRadius.cardLarge, style: .continuous)
+                    .strokeBorder(theme.brandStroke, lineWidth: 1)
+
+                Circle()
+                    .fill(theme.glow(for: mode))
+                    .frame(width: compact ? 96 : 130, height: compact ? 96 : 130)
+                    .blur(radius: compact ? 24 : 32)
+                    .offset(x: compact ? 10 : 18, y: compact ? -16 : -22)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: CornerRadius.cardLarge, style: .continuous))
+        }
         .shadow(color: theme.accent(for: mode).opacity(compact ? 0.14 : 0.20), radius: compact ? 18 : 28, y: 12)
     }
 }
