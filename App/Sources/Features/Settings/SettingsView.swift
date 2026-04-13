@@ -38,6 +38,7 @@ struct SettingsView: View {
 }
 
 private struct SettingsContent: View {
+    @Environment(\.modelContext) private var modelContext
     @Environment(AppTheme.self) private var theme
 
     @Bindable var preferences: AppPreferences
@@ -47,6 +48,8 @@ private struct SettingsContent: View {
     let templates: [ScheduleTemplate]
 
     @Binding var creatingJob: Bool
+    @State private var jobPendingDeletion: JobProfile?
+    @State private var deleteErrorText: String?
 
     var body: some View {
         ZStack {
@@ -91,6 +94,22 @@ private struct SettingsContent: View {
                                         .foregroundStyle(theme.secondaryText)
                                 }
                             }
+                        }
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            Button(role: .destructive) {
+                                jobPendingDeletion = job
+                            } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
+                            .disabled(jobs.count <= 1)
+                        }
+                        .contextMenu {
+                            Button(role: .destructive) {
+                                jobPendingDeletion = job
+                            } label: {
+                                Label("Delete Job", systemImage: "trash")
+                            }
+                            .disabled(jobs.count <= 1)
                         }
                     }
 
@@ -185,6 +204,67 @@ private struct SettingsContent: View {
         .scrollContentBackground(.hidden)
         .safeAreaPadding(.bottom, 120)
         .tint(theme.grossAccent)
+        .confirmationDialog(
+            "Delete Job?",
+            isPresented: deleteConfirmationIsPresented,
+            titleVisibility: .visible
+        ) {
+            if let jobPendingDeletion {
+                Button("Delete \(jobPendingDeletion.displayName)", role: .destructive) {
+                    archiveJob(jobPendingDeletion)
+                }
+            }
+            Button("Cancel", role: .cancel) {
+                jobPendingDeletion = nil
+            }
+        } message: {
+            Text("This removes the job from active tracking and clears future schedules and templates. Completed shifts stay in History.")
+        }
+        .alert("Unable to Delete Job", isPresented: deleteErrorIsPresented) {
+            Button("OK") {
+                deleteErrorText = nil
+            }
+        } message: {
+            Text(deleteErrorText ?? "")
+        }
+    }
+
+    private var deleteConfirmationIsPresented: Binding<Bool> {
+        Binding(
+            get: { jobPendingDeletion != nil },
+            set: { isPresented in
+                if !isPresented {
+                    jobPendingDeletion = nil
+                }
+            }
+        )
+    }
+
+    private var deleteErrorIsPresented: Binding<Bool> {
+        Binding(
+            get: { deleteErrorText != nil },
+            set: { isPresented in
+                if !isPresented {
+                    deleteErrorText = nil
+                }
+            }
+        )
+    }
+
+    private func archiveJob(_ job: JobProfile) {
+        jobPendingDeletion = nil
+
+        do {
+            try JobService.archiveJob(job, in: modelContext)
+            Task {
+                await ReminderManager.shared.syncShiftReminders(
+                    templates: templates,
+                    isEnabled: preferences.remindersEnabled
+                )
+            }
+        } catch {
+            deleteErrorText = error.localizedDescription
+        }
     }
 }
 
@@ -263,6 +343,8 @@ private struct JobSettingsView: View {
 }
 
 private struct JobSettingsForm: View {
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.dismiss) private var dismiss
     @Environment(AppTheme.self) private var theme
 
     @Bindable var job: JobProfile
@@ -271,8 +353,15 @@ private struct JobSettingsForm: View {
     @Bindable var nightRule: NightDifferentialRule
     @Bindable var overtimeRule: OvertimeRuleSet
 
+    @Query private var preferences: [AppPreferences]
+    @Query(sort: \JobProfile.sortOrder) private var jobs: [JobProfile]
+    @Query private var templates: [ScheduleTemplate]
+
     @Binding var editingRate: PayRateSchedule?
     @Binding var creatingRate: Bool
+
+    @State private var confirmingDeletion = false
+    @State private var deleteErrorText: String?
 
     var body: some View {
         Form {
@@ -435,7 +524,88 @@ private struct JobSettingsForm: View {
             } header: {
                 settingsLabel("Templates", icon: "calendar.badge.plus", color: Color(red: 0.30, green: 0.72, blue: 0.68))
             }
+
+            Section {
+                Button(role: .destructive) {
+                    confirmingDeletion = true
+                } label: {
+                    HStack(spacing: 12) {
+                        SettingsSectionIcon(icon: "trash.fill", color: theme.roseAccent)
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Delete this job")
+                                .font(.system(size: 16, weight: .semibold, design: .rounded))
+                            Text("Past shifts stay in History")
+                                .font(.footnote)
+                                .foregroundStyle(theme.secondaryText)
+                        }
+
+                        Spacer()
+                    }
+                }
+                .disabled(activeJobCount <= 1)
+            } header: {
+                settingsLabel("Remove Job", icon: "trash.fill", color: theme.roseAccent)
+            } footer: {
+                Text(removeJobFooter)
+            }
         }
+        .confirmationDialog(
+            "Delete \(job.displayName)?",
+            isPresented: $confirmingDeletion,
+            titleVisibility: .visible
+        ) {
+            Button("Delete \(job.displayName)", role: .destructive) {
+                archiveJob()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Completed shifts stay in History. Future schedules and templates for this job are removed.")
+        }
+        .alert("Unable to Delete Job", isPresented: deleteErrorIsPresented) {
+            Button("OK") {
+                deleteErrorText = nil
+            }
+        } message: {
+            Text(deleteErrorText ?? "")
+        }
+    }
+
+    private var deleteErrorIsPresented: Binding<Bool> {
+        Binding(
+            get: { deleteErrorText != nil },
+            set: { isPresented in
+                if !isPresented {
+                    deleteErrorText = nil
+                }
+            }
+        )
+    }
+
+    private func archiveJob() {
+        do {
+            try JobService.archiveJob(job, in: modelContext)
+            Task {
+                await ReminderManager.shared.syncShiftReminders(
+                    templates: templates,
+                    isEnabled: preferences.first?.remindersEnabled ?? false
+                )
+            }
+            dismiss()
+        } catch {
+            deleteErrorText = error.localizedDescription
+        }
+    }
+
+    private var activeJobCount: Int {
+        jobs.filter { !$0.isArchived }.count
+    }
+
+    private var removeJobFooter: String {
+        if activeJobCount <= 1 {
+            return "Add another job before deleting this one."
+        }
+        return "This removes \(job.displayName) from active tracking and clears future schedules and templates for it."
     }
 
     private var nightBonusStartBinding: Binding<Date> {

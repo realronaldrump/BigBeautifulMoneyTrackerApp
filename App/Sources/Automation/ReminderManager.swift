@@ -14,10 +14,15 @@ final class ReminderManager {
     }
 
     func syncShiftReminders(templates: [ScheduleTemplate], isEnabled: Bool) async {
-        notificationCenter.removePendingNotificationRequests(withIdentifiers: templates.map { "template-\($0.id.uuidString)" })
+        let activeTemplates = templates.filter { $0.job?.isArchived != true }
+        let templateIdentifiers = activeTemplates.map { "template-\($0.id.uuidString)" }
+        let pendingIdentifiers = await pendingTemplateIdentifiers()
+        notificationCenter.removePendingNotificationRequests(
+            withIdentifiers: Array(Set(templateIdentifiers + pendingIdentifiers))
+        )
         guard isEnabled else { return }
 
-        for template in templates where template.isEnabled {
+        for template in activeTemplates where template.isEnabled {
             let content = UNMutableNotificationContent()
             content.title = "Upcoming shift"
             let prefix = template.job.map { "\($0.displayName): " } ?? ""
@@ -118,6 +123,17 @@ final class ReminderManager {
                 let identifiers = requests
                     .map(\.identifier)
                     .filter { $0.hasPrefix("open-shift-") }
+                continuation.resume(returning: identifiers)
+            }
+        }
+    }
+
+    private func pendingTemplateIdentifiers() async -> [String] {
+        await withCheckedContinuation { continuation in
+            notificationCenter.getPendingNotificationRequests { requests in
+                let identifiers = requests
+                    .map(\.identifier)
+                    .filter { $0.hasPrefix("template-") }
                 continuation.resume(returning: identifiers)
             }
         }

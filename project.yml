@@ -30,6 +30,8 @@ targets:
       properties:
         CFBundleDisplayName: Davis's Big Beautiful Money Tracker App
         CFBundleIconName: AppIcon
+        CFBundleShortVersionString: "1.1"
+        CFBundleVersion: "3"
         LSRequiresIPhoneOS: true
         NSSupportsLiveActivities: true
         UISupportedInterfaceOrientations:
@@ -67,6 +69,8 @@ targets:
       path: Widgets/Info.plist
       properties:
         CFBundleDisplayName: Davis's Big Beautiful Money Tracker App Widgets
+        CFBundleShortVersionString: "1.1"
+        CFBundleVersion: "3"
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
     entitlements:

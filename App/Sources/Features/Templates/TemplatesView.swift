@@ -23,6 +23,7 @@ struct TemplatesView: View {
 
     private var displayedTemplates: [ScheduleTemplate] {
         templates.filter { template in
+            guard template.job?.isArchived != true else { return false }
             guard let selectedJobID else { return true }
             return template.job?.id == selectedJobID
         }

@@ -424,15 +424,25 @@ enum ShiftController {
             FetchDescriptor<ShiftRecord>(sortBy: [SortDescriptor(\ShiftRecord.startDate)])
         )
         var result = ScheduledShiftAutomationResult()
+        var discardedArchivedSchedules = false
 
         for scheduledShift in scheduledShifts {
             guard scheduledShift.startDate <= date else {
                 break
             }
 
-            let job = scheduledShift.job.flatMap { job in
-                allJobs.first(where: { $0.id == job.id })
-            } ?? allJobs.first
+            let job: JobProfile?
+            if let scheduledJob = scheduledShift.job {
+                guard !scheduledJob.isArchived,
+                      let activeJob = allJobs.first(where: { $0.id == scheduledJob.id }) else {
+                    context.delete(scheduledShift)
+                    discardedArchivedSchedules = true
+                    continue
+                }
+                job = activeJob
+            } else {
+                job = allJobs.first
+            }
 
             guard let job else { continue }
 
@@ -480,7 +490,7 @@ enum ShiftController {
             activeJobIdentifiers.insert(job.id)
         }
 
-        if !result.autoCompletedShifts.isEmpty || !result.startedShifts.isEmpty {
+        if discardedArchivedSchedules || !result.autoCompletedShifts.isEmpty || !result.startedShifts.isEmpty {
             try context.save()
         }
 
@@ -621,13 +631,13 @@ enum ShiftController {
         SnapshotData(
             jobs: try JobService.jobs(in: context),
             completedShifts: try context.fetch(FetchDescriptor<ShiftRecord>()),
-            openShifts: try context.fetch(FetchDescriptor<OpenShiftState>()),
-            scheduledShifts: try context.fetch(FetchDescriptor<ScheduledShift>()),
+            openShifts: try context.fetch(FetchDescriptor<OpenShiftState>()).filter { $0.job?.isArchived != true },
+            scheduledShifts: try context.fetch(FetchDescriptor<ScheduledShift>()).filter { $0.job?.isArchived != true },
             payRates: try context.fetch(FetchDescriptor<PayRateSchedule>()),
             nightRules: try context.fetch(FetchDescriptor<NightDifferentialRule>()),
             overtimeRules: try context.fetch(FetchDescriptor<OvertimeRuleSet>()),
             paySchedules: try context.fetch(FetchDescriptor<PaySchedule>()),
-            templates: try context.fetch(FetchDescriptor<ScheduleTemplate>()),
+            templates: try context.fetch(FetchDescriptor<ScheduleTemplate>()).filter { $0.job?.isArchived != true },
             taxProfile: try DataBootstrapper.first(TaxProfile.self, in: context) ?? TaxProfile(),
             preferences: try DataBootstrapper.first(AppPreferences.self, in: context)
         )

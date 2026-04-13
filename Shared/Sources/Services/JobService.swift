@@ -3,11 +3,17 @@ import SwiftData
 
 enum JobServiceError: LocalizedError {
     case maxJobsReached
+    case cannotDeleteOnlyActiveJob
+    case cannotDeleteJobWithActiveShift(jobName: String)
 
     var errorDescription: String? {
         switch self {
         case .maxJobsReached:
             "You can keep up to six jobs in the app."
+        case .cannotDeleteOnlyActiveJob:
+            "Add another job before deleting this one."
+        case .cannotDeleteJobWithActiveShift(let jobName):
+            "End the active shift for \(jobName) before deleting this job."
         }
     }
 }
@@ -93,6 +99,54 @@ enum JobService {
         ensureConfiguration(for: newJob, in: context, anchorDate: anchorDate)
         try context.save()
         return newJob
+    }
+
+    static func archiveJob(_ job: JobProfile, in context: ModelContext) throws {
+        guard !job.isArchived else {
+            return
+        }
+
+        let activeJobs = try jobs(in: context)
+        guard activeJobs.count > 1 else {
+            throw JobServiceError.cannotDeleteOnlyActiveJob
+        }
+
+        let openShifts = try context.fetch(FetchDescriptor<OpenShiftState>())
+        guard openShifts.contains(where: { $0.job?.id == job.id }) == false else {
+            throw JobServiceError.cannotDeleteJobWithActiveShift(jobName: job.displayName)
+        }
+
+        for scheduledShift in try context.fetch(FetchDescriptor<ScheduledShift>()) where scheduledShift.job?.id == job.id {
+            context.delete(scheduledShift)
+        }
+
+        for template in try context.fetch(FetchDescriptor<ScheduleTemplate>()) where template.job?.id == job.id {
+            context.delete(template)
+        }
+
+        job.isArchived = true
+        job.updatedAt = .now
+
+        let remainingJobs = activeJobs
+            .filter { $0.id != job.id }
+            .sorted {
+                if $0.sortOrder == $1.sortOrder {
+                    return $0.createdAt < $1.createdAt
+                }
+                return $0.sortOrder < $1.sortOrder
+            }
+
+        for (index, remainingJob) in remainingJobs.enumerated() where remainingJob.sortOrder != index {
+            remainingJob.sortOrder = index
+            remainingJob.updatedAt = .now
+        }
+
+        if let preferences = try DataBootstrapper.first(AppPreferences.self, in: context),
+           preferences.selectedHomeJobIdentifier == nil || preferences.selectedHomeJobIdentifier == job.id {
+            preferences.selectedHomeJobIdentifier = remainingJobs.first?.id
+        }
+
+        try context.save()
     }
 
     static func configuration(

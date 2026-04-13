@@ -362,6 +362,72 @@ final class MoneyTrackerEngineTests: XCTestCase {
     }
 
     @MainActor
+    func testArchiveJobKeepsHistoryAndRemovesFutureAutomation() throws {
+        let container = AppModelContainerFactory.makeInMemoryContainer()
+        let context = container.mainContext
+        try DataBootstrapper.seedIfNeeded(in: context)
+
+        let defaultJob = try XCTUnwrap(try JobService.jobs(in: context).first)
+        let oldJob = try JobService.createJob(
+            in: context,
+            name: "Old Job",
+            accent: .coral,
+            anchorDate: makeDate(year: 2026, month: 4, day: 1, hour: 0)
+        )
+        let preferences = try XCTUnwrap(try DataBootstrapper.first(AppPreferences.self, in: context))
+        preferences.selectedHomeJobIdentifier = oldJob.id
+
+        context.insert(
+            ShiftRecord(
+                job: oldJob,
+                startDate: makeDate(year: 2026, month: 4, day: 3, hour: 9),
+                endDate: makeDate(year: 2026, month: 4, day: 3, hour: 17),
+                breakdown: makeBreakdown(hours: 8, gross: 240)
+            )
+        )
+        context.insert(
+            ScheduleTemplate(
+                job: oldJob,
+                name: "Old Standard",
+                weekday: .monday,
+                startHour: 9,
+                endHour: 17
+            )
+        )
+        context.insert(
+            ScheduledShift(
+                job: oldJob,
+                startDate: makeDate(year: 2026, month: 4, day: 10, hour: 9),
+                endDate: makeDate(year: 2026, month: 4, day: 10, hour: 17)
+            )
+        )
+        try context.save()
+
+        try JobService.archiveJob(oldJob, in: context)
+
+        XCTAssertFalse(try JobService.jobs(in: context).contains { $0.id == oldJob.id })
+        XCTAssertTrue(try XCTUnwrap(try JobService.jobs(in: context, includeArchived: true).first { $0.id == oldJob.id }).isArchived)
+        XCTAssertEqual(preferences.selectedHomeJobIdentifier, defaultJob.id)
+        XCTAssertEqual(try context.fetch(FetchDescriptor<ShiftRecord>()).filter { $0.job?.id == oldJob.id }.count, 1)
+        XCTAssertEqual(try context.fetch(FetchDescriptor<ScheduleTemplate>()).filter { $0.job?.id == oldJob.id }.count, 0)
+        XCTAssertEqual(try context.fetch(FetchDescriptor<ScheduledShift>()).filter { $0.job?.id == oldJob.id }.count, 0)
+    }
+
+    @MainActor
+    func testArchiveJobRefusesOnlyActiveJob() throws {
+        let container = AppModelContainerFactory.makeInMemoryContainer()
+        let context = container.mainContext
+        try DataBootstrapper.seedIfNeeded(in: context)
+
+        let defaultJob = try XCTUnwrap(try JobService.jobs(in: context).first)
+
+        XCTAssertThrowsError(try JobService.archiveJob(defaultJob, in: context)) { error in
+            XCTAssertEqual(error.localizedDescription, "Add another job before deleting this one.")
+        }
+        XCTAssertFalse(defaultJob.isArchived)
+    }
+
+    @MainActor
     func testCombinedTakeHomeUsesSharedAnnualizedIncome() throws {
         let container = AppModelContainerFactory.makeInMemoryContainer()
         let context = container.mainContext
