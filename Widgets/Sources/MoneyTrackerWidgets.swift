@@ -210,7 +210,7 @@ struct MoneyShiftActivityView: View {
                     .foregroundStyle(.tertiary)
                     .lineLimit(2)
 
-                Text(context.state.mode == .gross ? "Current Gross" : "Estimated Net")
+                Text(context.state.amountLabel)
                     .font(.system(size: 12, weight: .semibold, design: .rounded))
                     .foregroundStyle(.secondary)
             }
@@ -227,10 +227,47 @@ struct MoneyShiftActivityView: View {
             }
             .font(.system(size: 13, weight: .medium, design: .rounded))
             .foregroundStyle(.secondary)
+
+            LiveActivitySyncStatus(
+                isStale: context.isStale,
+                lastSyncedDate: context.state.lastSyncedDate
+            )
         }
         .padding()
         .activityBackgroundTint(Color(red: 0.08, green: 0.10, blue: 0.12))
         .activitySystemActionForegroundColor(.white)
+    }
+}
+
+private struct LiveActivitySyncStatus: View {
+    let isStale: Bool
+    let lastSyncedDate: Date
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Circle()
+                .fill(isStale ? Color.yellow : Color.green)
+                .frame(width: 6, height: 6)
+
+            if isStale {
+                Text("Open app to refresh")
+            } else {
+                HStack(spacing: 3) {
+                    Text("Updated")
+                    Text(lastSyncedDate, style: .relative)
+                }
+            }
+        }
+        .font(.system(size: 11, weight: .semibold, design: .rounded))
+        .foregroundStyle(isStale ? Color.yellow : Color.white.opacity(0.58))
+        .lineLimit(1)
+        .minimumScaleFactor(0.75)
+    }
+}
+
+private extension ShiftActivityAttributes.ContentState {
+    var amountLabel: String {
+        mode == .gross ? "Synced Gross" : "Synced Net"
     }
 }
 
@@ -260,15 +297,31 @@ struct MoneyShiftActivity: Widget {
         } dynamicIsland: { context in
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
-                    Text("Shift")
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Shift")
+                        Text("\(context.state.currentRate, format: .currency(code: "USD"))/hr")
+                            .foregroundStyle(.secondary)
+                    }
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
                 }
                 DynamicIslandExpandedRegion(.center) {
-                    Text(context.state.syncedAmount, format: .currency(code: "USD"))
-                        .font(.system(size: 18, weight: .bold, design: .rounded))
+                    VStack(spacing: 2) {
+                        Text(context.state.amountLabel)
+                            .font(.system(size: 11, weight: .semibold, design: .rounded))
+                            .foregroundStyle(.secondary)
+                        Text(context.state.syncedAmount, format: .currency(code: "USD"))
+                            .font(.system(size: 18, weight: .bold, design: .rounded))
+                    }
                 }
                 DynamicIslandExpandedRegion(.trailing) {
                     Text(context.state.startDate, style: .timer)
                         .font(.system(size: 12, weight: .medium, design: .rounded))
+                }
+                DynamicIslandExpandedRegion(.bottom) {
+                    LiveActivitySyncStatus(
+                        isStale: context.isStale,
+                        lastSyncedDate: context.state.lastSyncedDate
+                    )
                 }
             } compactLeading: {
                 Text("$$")

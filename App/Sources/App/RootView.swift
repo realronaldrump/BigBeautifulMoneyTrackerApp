@@ -52,6 +52,7 @@ private enum AppTab: String, CaseIterable, Identifiable {
 
 struct RootView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.scenePhase) private var scenePhase
     @Query private var preferences: [AppPreferences]
     @Query(sort: \JobProfile.sortOrder) private var jobs: [JobProfile]
 
@@ -67,6 +68,26 @@ struct RootView: View {
         .task {
             try? DataBootstrapper.seedIfNeeded(in: modelContext)
         }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active {
+                syncLiveActivityForCurrentState()
+            }
+        }
+    }
+
+    private func syncLiveActivityForCurrentState() {
+        guard let preferences = preferences.first, preferences.onboardingCompleted else { return }
+
+        guard let snapshot = try? ShiftController.dashboardSnapshot(in: modelContext, at: .now) else { return }
+        guard preferences.liveActivitiesEnabled else {
+            let finalAmount = preferences.selectedDisplayMode == .gross
+                ? snapshot.currentGross
+                : snapshot.currentTakeHome
+            LiveActivityManager.end(finalAmount: finalAmount, mode: preferences.selectedDisplayMode)
+            return
+        }
+
+        LiveActivityManager.sync(for: snapshot, mode: preferences.selectedDisplayMode)
     }
 }
 

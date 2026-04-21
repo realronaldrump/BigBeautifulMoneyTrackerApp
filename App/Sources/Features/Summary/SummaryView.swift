@@ -8,8 +8,12 @@ struct SummaryView: View {
 
     @Query private var preferences: [AppPreferences]
     @Query private var taxProfiles: [TaxProfile]
+    @Query(sort: \JobProfile.sortOrder) private var jobs: [JobProfile]
+    @Query(sort: \OpenShiftState.startDate) private var openShifts: [OpenShiftState]
     @Query private var paySchedules: [PaySchedule]
     @Query(sort: \PayRateSchedule.effectiveDate, order: .reverse) private var payRates: [PayRateSchedule]
+    @Query private var nightRules: [NightDifferentialRule]
+    @Query private var overtimeRules: [OvertimeRuleSet]
     @Query private var templates: [ScheduleTemplate]
     @Query(sort: \ShiftRecord.startDate, order: .reverse) private var shifts: [ShiftRecord]
 
@@ -23,6 +27,21 @@ struct SummaryView: View {
 
     private var accent: Color {
         theme.accent(for: mode)
+    }
+
+    private var payPeriodArchive: PayPeriodArchiveSnapshot {
+        PayPeriodService.archiveSnapshot(
+            asOf: .now,
+            jobs: jobs,
+            completedShifts: shifts,
+            openShifts: openShifts,
+            paySchedules: paySchedules,
+            payRates: payRates,
+            nightRules: nightRules,
+            overtimeRules: overtimeRules,
+            templates: templates,
+            taxProfile: taxProfiles.first ?? TaxProfile()
+        )
     }
 
     var body: some View {
@@ -48,6 +67,10 @@ struct SummaryView: View {
                             payRates: payRates,
                             templates: templates
                         )
+                    }
+
+                    if !payPeriodArchive.sections.isEmpty {
+                        PayPeriodArchivePreviewCard(snapshot: payPeriodArchive, mode: mode)
                     }
 
                     // MARK: - Combined card

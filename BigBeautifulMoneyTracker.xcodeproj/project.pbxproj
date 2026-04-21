@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		03195469BDE44813E6B9D6F0 /* PayPeriodPDFExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83BC045E5BAD13CF326F1168 /* PayPeriodPDFExporter.swift */; };
 		05FBEA34874BA0227D9EEBFD /* TaxEstimator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D2F93B7E5B59A42A0A6D6F2 /* TaxEstimator.swift */; };
 		0826CB1DDC8E09E124FB672D /* MoneyTrackerWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37EA3FFF9A4FAF675E799D31 /* MoneyTrackerWidgets.swift */; };
 		0DA778022258C71D137220CD /* ReminderManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 751904045AF860B35193929A /* ReminderManager.swift */; };
@@ -24,6 +25,7 @@
 		4B5FDADEE36FC71901B6A9AB /* ProjectionEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10780152B03F10E19A80E5D /* ProjectionEngine.swift */; };
 		4D367F0404907AA478BA82C0 /* MoneyBackground.swift in Sources */ = {isa = PBXBuildFile; fileRef = B424C0E9252148F6CF3D2326 /* MoneyBackground.swift */; };
 		500B0A4AFBF645E483DD1440 /* SharedTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01B22CAA9BA4B9C4C741C970 /* SharedTypes.swift */; };
+		596E4954D061F15BFC62CE8C /* PayPeriodService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B39EDB9E4E6522E139D271EB /* PayPeriodService.swift */; };
 		5EEAAE6DDB74F377C3DBC71C /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 03E3047D09D6A5171738D07F /* PrivacyInfo.xcprivacy */; };
 		65D6EB19CB6843A1C0E4BB73 /* SummaryDrawer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 050FBDA9C687E87718B7AB00 /* SummaryDrawer.swift */; };
 		67075AD2D706B8443FB9EC25 /* RollingCurrencyText.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5BCF505C82EA2941D3097364 /* RollingCurrencyText.swift */; };
@@ -41,6 +43,7 @@
 		9E8C96CE6ADD75280665BAFC /* TemplatesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAA4E8B587E7EF0357D5DBFF /* TemplatesView.swift */; };
 		A2D4C0734C807BA8534B7560 /* JobService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57EBF12AAF51D48C6D507FB3 /* JobService.swift */; };
 		A3D63223195513BBB4247A6A /* BigBeautifulMoneyTrackerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29D7B1AEF3E54493B27A850D /* BigBeautifulMoneyTrackerApp.swift */; };
+		A5447E7F94F869A3C0C47200 /* PayPeriodViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3118303F124DA21C492C622 /* PayPeriodViews.swift */; };
 		A5B2F7ACEB10E3CA2FF8CBF4 /* TaxEstimator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D2F93B7E5B59A42A0A6D6F2 /* TaxEstimator.swift */; };
 		A6C4127A32C79B0776180564 /* PulseAura.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7EF73C3A77D4B77940075392 /* PulseAura.swift */; };
 		A9C9AB1E29EF7F5377C21EA4 /* HapticManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1DE0ECBC20AFF2C014C48A1 /* HapticManager.swift */; };
@@ -51,6 +54,7 @@
 		BE8ADBD3AD03B13E9F620AED /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2DD7DE6232BF82BD65C94F47 /* SettingsView.swift */; };
 		CE75CFC8BF704E859438EDB8 /* AppTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA854895C6BF1C471B25059A /* AppTheme.swift */; };
 		CFFD138395CD876094D8A43E /* MetricTile.swift in Sources */ = {isa = PBXBuildFile; fileRef = 818DAF58F9BBD8324AB4FBBD /* MetricTile.swift */; };
+		D102A98ADD58F30B1123CDD5 /* PayPeriodService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B39EDB9E4E6522E139D271EB /* PayPeriodService.swift */; };
 		D2CBBAC129DC4E0E841AF262 /* BigBeautifulMoneyTrackerWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 8D606036C020E8AE5F2C85BC /* BigBeautifulMoneyTrackerWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		D42A3D83F47FB03101E425A9 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4536CD38ACEC77D56EA1BB0 /* HomeView.swift */; };
 		D7ADEAF6544C8FAAC50B9B68 /* ShiftController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4B29FD43FC3E03F8439CE6B /* ShiftController.swift */; };
@@ -115,6 +119,7 @@
 		751904045AF860B35193929A /* ReminderManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReminderManager.swift; sourceTree = "<group>"; };
 		7EF73C3A77D4B77940075392 /* PulseAura.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PulseAura.swift; sourceTree = "<group>"; };
 		818DAF58F9BBD8324AB4FBBD /* MetricTile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetricTile.swift; sourceTree = "<group>"; };
+		83BC045E5BAD13CF326F1168 /* PayPeriodPDFExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PayPeriodPDFExporter.swift; sourceTree = "<group>"; };
 		8788FC074A315A5185BD5256 /* AppNotificationDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppNotificationDelegate.swift; sourceTree = "<group>"; };
 		8815E6411A1EFC6A0A7A42C6 /* SummaryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SummaryView.swift; sourceTree = "<group>"; };
 		8D606036C020E8AE5F2C85BC /* BigBeautifulMoneyTrackerWidgets.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = BigBeautifulMoneyTrackerWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -125,12 +130,14 @@
 		A4B29FD43FC3E03F8439CE6B /* ShiftController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShiftController.swift; sourceTree = "<group>"; };
 		AAA4E8B587E7EF0357D5DBFF /* TemplatesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TemplatesView.swift; sourceTree = "<group>"; };
 		B10780152B03F10E19A80E5D /* ProjectionEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectionEngine.swift; sourceTree = "<group>"; };
+		B39EDB9E4E6522E139D271EB /* PayPeriodService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PayPeriodService.swift; sourceTree = "<group>"; };
 		B424C0E9252148F6CF3D2326 /* MoneyBackground.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoneyBackground.swift; sourceTree = "<group>"; };
 		B51002DA3DDBCB87BC12024E /* EarningsEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EarningsEngine.swift; sourceTree = "<group>"; };
 		B9545A5E62D01D46BA2FBB8D /* MoneyTrackerEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoneyTrackerEngineTests.swift; sourceTree = "<group>"; };
 		BA854895C6BF1C471B25059A /* AppTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTheme.swift; sourceTree = "<group>"; };
 		C1DE0ECBC20AFF2C014C48A1 /* HapticManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HapticManager.swift; sourceTree = "<group>"; };
 		CBBC82F9E0FA6186E7A734CE /* JobAccentPalette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JobAccentPalette.swift; sourceTree = "<group>"; };
+		D3118303F124DA21C492C622 /* PayPeriodViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PayPeriodViews.swift; sourceTree = "<group>"; };
 		E4536CD38ACEC77D56EA1BB0 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
 		E6C94312478F761905736621 /* ModelContainerFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelContainerFactory.swift; sourceTree = "<group>"; };
 		E7C6480BC46625FEDF8BFB7E /* HistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryView.swift; sourceTree = "<group>"; };
@@ -278,6 +285,8 @@
 		A29881675F7AEF319DF333BE /* Summary */ = {
 			isa = PBXGroup;
 			children = (
+				83BC045E5BAD13CF326F1168 /* PayPeriodPDFExporter.swift */,
+				D3118303F124DA21C492C622 /* PayPeriodViews.swift */,
 				8815E6411A1EFC6A0A7A42C6 /* SummaryView.swift */,
 			);
 			path = Summary;
@@ -353,6 +362,7 @@
 				B51002DA3DDBCB87BC12024E /* EarningsEngine.swift */,
 				57EBF12AAF51D48C6D507FB3 /* JobService.swift */,
 				E6C94312478F761905736621 /* ModelContainerFactory.swift */,
+				B39EDB9E4E6522E139D271EB /* PayPeriodService.swift */,
 				B10780152B03F10E19A80E5D /* ProjectionEngine.swift */,
 				A4B29FD43FC3E03F8439CE6B /* ShiftController.swift */,
 				1D2F93B7E5B59A42A0A6D6F2 /* TaxEstimator.swift */,
@@ -508,6 +518,9 @@
 				4D367F0404907AA478BA82C0 /* MoneyBackground.swift in Sources */,
 				767EB6C6F469AF6D4E6B612A /* MoneyTrackerShortcuts.swift in Sources */,
 				6F59E2C1C0E933CFBE488AFB /* OnboardingView.swift in Sources */,
+				03195469BDE44813E6B9D6F0 /* PayPeriodPDFExporter.swift in Sources */,
+				D102A98ADD58F30B1123CDD5 /* PayPeriodService.swift in Sources */,
+				A5447E7F94F869A3C0C47200 /* PayPeriodViews.swift in Sources */,
 				349E878087E58CE74AD02FCC /* ProjectionEngine.swift in Sources */,
 				A6C4127A32C79B0776180564 /* PulseAura.swift in Sources */,
 				0DA778022258C71D137220CD /* ReminderManager.swift in Sources */,
@@ -544,6 +557,7 @@
 				9D2ABC486E07766DFC32CFB5 /* ModelContainerFactory.swift in Sources */,
 				7ABC6858B4DE3481A3B4C6CA /* Models.swift in Sources */,
 				0826CB1DDC8E09E124FB672D /* MoneyTrackerWidgets.swift in Sources */,
+				596E4954D061F15BFC62CE8C /* PayPeriodService.swift in Sources */,
 				4B5FDADEE36FC71901B6A9AB /* ProjectionEngine.swift in Sources */,
 				700EA711F1D75604419352F9 /* SharedConstants.swift in Sources */,
 				500B0A4AFBF645E483DD1440 /* SharedTypes.swift in Sources */,

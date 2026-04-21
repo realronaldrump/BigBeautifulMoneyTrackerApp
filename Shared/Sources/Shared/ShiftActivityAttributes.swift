@@ -7,6 +7,7 @@ struct ShiftActivityAttributes: ActivityAttributes {
         var syncedAmount: Double
         var currentRate: Double
         var startDate: Date
+        var lastSyncedDate: Date
     }
 
     var title: String

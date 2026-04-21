@@ -690,24 +690,15 @@ private struct HomeDashboardSceneView: View {
     }
 
     private func syncLiveActivity(for dashboardSnapshot: DashboardSnapshot) {
-        guard preferences.liveActivitiesEnabled, !dashboardSnapshot.activeJobs.isEmpty else {
-            if dashboardSnapshot.activeJobs.isEmpty {
-                LiveActivityManager.end(finalAmount: dashboardSnapshot.currentGross, mode: preferences.selectedDisplayMode)
-            }
+        guard preferences.liveActivitiesEnabled else {
+            let finalAmount = preferences.selectedDisplayMode == .gross
+                ? dashboardSnapshot.currentGross
+                : dashboardSnapshot.currentTakeHome
+            LiveActivityManager.end(finalAmount: finalAmount, mode: preferences.selectedDisplayMode)
             return
         }
 
-        let title = dashboardSnapshot.activeJobs.count == 1
-            ? dashboardSnapshot.activeJobs[0].name
-            : "\(dashboardSnapshot.activeJobs.count) Jobs Active"
-
-        LiveActivityManager.startOrUpdate(
-            title: title,
-            startDate: dashboardSnapshot.activeJobs.map(\.startDate).min() ?? .now,
-            amount: preferences.selectedDisplayMode == .gross ? dashboardSnapshot.currentGross : dashboardSnapshot.currentTakeHome,
-            rate: dashboardSnapshot.currentBreakdown?.effectiveRate ?? 0,
-            mode: preferences.selectedDisplayMode
-        )
+        LiveActivityManager.sync(for: dashboardSnapshot, mode: preferences.selectedDisplayMode)
     }
 
     private func handleShiftAutomation() async {
