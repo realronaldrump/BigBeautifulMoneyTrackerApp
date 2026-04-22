@@ -23,11 +23,11 @@ struct PayPeriodArchivePreviewCard: View {
                             .tracking(1.4)
                             .foregroundStyle(theme.accent(for: mode).opacity(0.78))
 
-                        Text("Estimated Pay Summaries")
+                        Text("Big Beautiful Summaries")
                             .font(TypeStyle.title2)
                             .foregroundStyle(.white)
 
-                        Text("Review recent pay cycles and export a clean PDF for any period.")
+                        Text("Review recent pay cycles and export a Big Beautiful PDF for any period.")
                             .font(TypeStyle.caption)
                             .foregroundStyle(theme.secondaryText)
                             .fixedSize(horizontal: false, vertical: true)
@@ -60,7 +60,7 @@ struct PayPeriodArchivePreviewCard: View {
                                 .font(.system(size: 26, weight: .heavy, design: .rounded))
                                 .foregroundStyle(theme.accent(for: mode))
 
-                            Text("\(latestSummary.totalHours.asHours) • \(latestSummary.shiftCount) shifts")
+                            Text(latestSummary.displaySummaryContext)
                                 .font(TypeStyle.caption)
                                 .foregroundStyle(theme.secondaryText)
                         }
@@ -69,7 +69,7 @@ struct PayPeriodArchivePreviewCard: View {
                     HStack(spacing: 8) {
                         PayPeriodPill(text: "\(snapshot.sections.count) views", color: theme.accent(for: mode))
                         PayPeriodPill(text: "Last 12 months", color: theme.takeHomeAccent)
-                        PayPeriodPill(text: "PDF export", color: theme.roseAccent)
+                        PayPeriodPill(text: "Big Beautiful Export", color: theme.roseAccent)
                     }
                 } else {
                     Text("Pay summaries appear here once shifts are logged.")
@@ -231,6 +231,30 @@ private struct PayPeriodSummaryCard: View {
         summary.isCombined ? theme.accent(for: mode) : summary.accent.color
     }
 
+    private var metricItems: [(String, String, String)] {
+        if summary.isSupplementOnly {
+            return [
+                ("Supplements", summary.supplementMetricLabel, "plus.rectangle.on.folder"),
+                ("Taxable", summary.supplementalTaxableTotal.asCurrency, "banknote"),
+                ("Non-Taxable", summary.supplementalNonTaxableTotal.asCurrency, "checkmark.shield"),
+            ]
+        }
+
+        var items: [(String, String, String)] = [
+            ("Hours", summary.totalHours.asHours, "clock"),
+            ("Shifts", "\(summary.shiftCount)", "checkmark.circle"),
+        ]
+
+        if summary.nightPremiumEarnings > 0 {
+            items.append(("Night", summary.nightPremiumEarnings.asCurrency, "moon.stars"))
+        }
+        if summary.overtimePremiumEarnings > 0 {
+            items.append(("OT", summary.overtimePremiumEarnings.asCurrency, "sparkles"))
+        }
+
+        return items
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.md) {
             HStack(alignment: .top, spacing: Spacing.md) {
@@ -258,20 +282,15 @@ private struct PayPeriodSummaryCard: View {
                         .font(.system(size: 24, weight: .heavy, design: .rounded))
                         .foregroundStyle(theme.accent(for: mode))
 
-                    Text(mode == .gross ? "gross" : "est. take-home")
+                    Text(summary.displayModeCaption(for: mode).lowercased())
                         .font(TypeStyle.micro)
                         .foregroundStyle(theme.tertiaryText)
                 }
             }
 
             HStack(spacing: 10) {
-                metric("Hours", summary.totalHours.asHours, systemImage: "clock")
-                metric("Shifts", "\(summary.shiftCount)", systemImage: "checkmark.circle")
-                if summary.nightPremiumEarnings > 0 {
-                    metric("Night", summary.nightPremiumEarnings.asCurrency, systemImage: "moon.stars")
-                }
-                if summary.overtimePremiumEarnings > 0 {
-                    metric("OT", summary.overtimePremiumEarnings.asCurrency, systemImage: "sparkles")
+                ForEach(Array(metricItems.enumerated()), id: \.offset) { _, item in
+                    metric(item.0, item.1, systemImage: item.2)
                 }
             }
         }
@@ -318,6 +337,28 @@ struct PayPeriodDetailView: View {
         summary.isCombined ? theme.accent(for: mode) : summary.accent.color
     }
 
+    private var metricTileItems: [(String, String, Color)] {
+        if summary.isSupplementOnly {
+            return [
+                (summary.displayMetricTitle(for: .gross), summary.displayGrossAmount.asCurrency, theme.grossAccent),
+                (summary.displayMetricTitle(for: .takeHome), summary.displayTakeHomeAmount.asCurrency, theme.takeHomeAccent),
+                ("Supplement Total", summary.supplementalTotal.asCurrency, accent),
+                ("Taxable Portion", summary.supplementalTaxableTotal.asCurrency, accent),
+                ("Non-Taxable Portion", summary.supplementalNonTaxableTotal.asCurrency, theme.takeHomeAccent),
+                ("Effective Rate", summary.displayHourlyRate.map { $0.asHourlyRate } ?? "Unavailable", accent),
+            ]
+        }
+
+        return [
+            (summary.displayMetricTitle(for: .gross), summary.displayGrossAmount.asCurrency, theme.grossAccent),
+            (summary.displayMetricTitle(for: .takeHome, condensed: true), summary.displayTakeHomeAmount.asCurrency, theme.takeHomeAccent),
+            ("Hours", summary.totalHours.asHours, accent),
+            ("Shifts", "\(summary.shiftCount)", accent),
+            ("Effective Rate", summary.displayHourlyRate.map { $0.asHourlyRate } ?? "Unavailable", accent),
+            ("Best Shift", summary.bestShiftGross.asCurrency, accent),
+        ]
+    }
+
     var body: some View {
         ZStack {
             MoneyBackground(mode: mode)
@@ -326,6 +367,10 @@ struct PayPeriodDetailView: View {
                 VStack(spacing: Spacing.lg) {
                     heroCard
                     metricsGrid
+                    if hasSupplementalContent {
+                        supplementalCard
+                        effectiveEarningsCard
+                    }
                     breakdownCard
 
                     if !summary.shifts.isEmpty {
@@ -370,7 +415,7 @@ struct PayPeriodDetailView: View {
                         .font(TypeStyle.title2)
                         .foregroundStyle(.white)
 
-                    Text("Estimated personal pay summary")
+                    Text("Big Beautiful Summary")
                         .font(TypeStyle.caption)
                         .foregroundStyle(theme.secondaryText)
                 }
@@ -390,7 +435,7 @@ struct PayPeriodDetailView: View {
                     .foregroundStyle(theme.accent(for: mode))
                     .minimumScaleFactor(0.7)
 
-                Text(mode == .gross ? "Gross earnings" : "Estimated take-home")
+                Text(summary.displayModeCaption(for: mode))
                     .font(TypeStyle.caption)
                     .foregroundStyle(theme.tertiaryText)
             }
@@ -406,13 +451,66 @@ struct PayPeriodDetailView: View {
 
     private var metricsGrid: some View {
         LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-            PayPeriodMetricTile(title: "Gross", value: summary.grossEarnings.asCurrency, accent: theme.grossAccent)
-            PayPeriodMetricTile(title: "Est. Take-Home", value: summary.estimatedTakeHome.asCurrency, accent: theme.takeHomeAccent)
-            PayPeriodMetricTile(title: "Hours", value: summary.totalHours.asHours, accent: accent)
-            PayPeriodMetricTile(title: "Shifts", value: "\(summary.shiftCount)", accent: accent)
-            PayPeriodMetricTile(title: "Effective Rate", value: summary.effectiveHourlyRate.asHourlyRate, accent: accent)
-            PayPeriodMetricTile(title: "Best Shift", value: summary.bestShiftGross.asCurrency, accent: accent)
+            ForEach(Array(metricTileItems.enumerated()), id: \.offset) { _, item in
+                PayPeriodMetricTile(title: item.0, value: item.1, accent: item.2)
+            }
         }
+    }
+
+    private var hasSupplementalContent: Bool {
+        summary.hasSupplementalCompensation
+    }
+
+    private var supplementalCard: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("Supplemental Compensation")
+                .font(TypeStyle.title3)
+                .foregroundStyle(.white)
+                .padding(.bottom, 12)
+
+            if summary.supplementAllocations.isEmpty {
+                PayPeriodDetailRow(label: "Supplements in this period", value: summary.supplementalTotal.asCurrency)
+            } else {
+                ForEach(Array(summary.supplementAllocations.enumerated()), id: \.offset) { index, allocation in
+                    PayPeriodSupplementRow(
+                        allocation: allocation,
+                        showsJobName: summary.isCombined
+                    )
+                    if index < summary.supplementAllocations.count - 1 {
+                        PayPeriodDivider()
+                    }
+                }
+            }
+
+            PayPeriodDivider()
+            PayPeriodDetailRow(label: "Taxable Portion", value: summary.supplementalTaxableTotal.asCurrency)
+            PayPeriodDivider()
+            PayPeriodDetailRow(label: "Non-Taxable Portion", value: summary.supplementalNonTaxableTotal.asCurrency)
+            PayPeriodDivider()
+            PayPeriodDetailRow(label: "Supplement Total", value: summary.supplementalTotal.asCurrency)
+        }
+        .padding(Spacing.lg)
+        .glassCard(cornerRadius: CornerRadius.cardLarge, accent: theme.takeHomeAccent)
+    }
+
+    private var effectiveEarningsCard: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("Effective Earnings")
+                .font(TypeStyle.title3)
+                .foregroundStyle(.white)
+                .padding(.bottom, 12)
+
+            PayPeriodDetailRow(label: "Effective Gross", value: summary.effectiveGross.asCurrency)
+            PayPeriodDivider()
+            PayPeriodDetailRow(label: "Effective Take-Home", value: summary.effectiveTakeHome.asCurrency)
+            PayPeriodDivider()
+            PayPeriodDetailRow(
+                label: "Effective Hourly Rate",
+                value: summary.effectiveSupplementalHourlyRate.map { $0.asHourlyRate } ?? "Unavailable"
+            )
+        }
+        .padding(Spacing.lg)
+        .glassCard(cornerRadius: CornerRadius.cardLarge, accent: accent)
     }
 
     private var breakdownCard: some View {
@@ -530,6 +628,43 @@ private struct PayPeriodDetailRow: View {
     }
 }
 
+private struct PayPeriodSupplementRow: View {
+    @Environment(AppTheme.self) private var theme
+
+    let allocation: JobSupplementAllocation
+    let showsJobName: Bool
+
+    var body: some View {
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(primaryLabel)
+                    .font(TypeStyle.callout)
+                    .foregroundStyle(.white)
+
+                Text(secondaryLabel)
+                    .font(TypeStyle.caption)
+                    .foregroundStyle(theme.secondaryText)
+            }
+
+            Spacer()
+
+            Text(allocation.amount.asCurrency)
+                .font(.system(size: 15, weight: .bold, design: .rounded))
+                .foregroundStyle(.white)
+        }
+        .padding(.vertical, 9)
+    }
+
+    private var primaryLabel: String {
+        showsJobName ? "\(allocation.jobName) • \(allocation.label)" : allocation.label
+    }
+
+    private var secondaryLabel: String {
+        let taxLabel = allocation.taxableAmount > 0 ? "Taxable" : "Non-taxable"
+        return "\(allocation.kind.title) • \(allocation.frequency.title) • \(taxLabel)"
+    }
+}
+
 private struct PayPeriodShiftRow: View {
     @Environment(AppTheme.self) private var theme
 
@@ -639,9 +774,101 @@ private struct PayPeriodActivityView: UIViewControllerRepresentable {
     func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
 
-private extension PayPeriodSummary {
+extension PayPeriodSummary {
+    private static let presentationEpsilon = 0.000_001
+
+    var hasSupplementalCompensation: Bool {
+        supplementalTotal > Self.presentationEpsilon || !supplementAllocations.isEmpty
+    }
+
+    var isSupplementOnly: Bool {
+        hasSupplementalCompensation
+            && shiftCount == 0
+            && grossEarnings <= Self.presentationEpsilon
+            && totalHours <= Self.presentationEpsilon
+    }
+
+    var displayGrossAmount: Double {
+        isSupplementOnly ? effectiveGross : grossEarnings
+    }
+
+    var displayTakeHomeAmount: Double {
+        isSupplementOnly ? effectiveTakeHome : estimatedTakeHome
+    }
+
+    var displayHourlyRate: Double? {
+        if hasSupplementalCompensation {
+            return effectiveSupplementalHourlyRate
+        }
+        guard totalHours > Self.presentationEpsilon else {
+            return nil
+        }
+        return effectiveHourlyRate
+    }
+
     func displayAmount(for mode: EarningsDisplayMode) -> Double {
-        mode == .gross ? grossEarnings : estimatedTakeHome
+        mode == .gross ? displayGrossAmount : displayTakeHomeAmount
+    }
+
+    func displayMetricTitle(for mode: EarningsDisplayMode, condensed: Bool = false) -> String {
+        switch mode {
+        case .gross:
+            isSupplementOnly ? "Effective Gross" : "Gross"
+        case .takeHome:
+            if isSupplementOnly {
+                "Effective Take-Home"
+            } else {
+                condensed ? "Est. Take-Home" : "Estimated Take-Home"
+            }
+        }
+    }
+
+    func displayModeCaption(for mode: EarningsDisplayMode) -> String {
+        switch mode {
+        case .gross:
+            isSupplementOnly ? "Effective gross" : "Gross earnings"
+        case .takeHome:
+            isSupplementOnly ? "Effective take-home" : "Estimated take-home"
+        }
+    }
+
+    var supplementDisplayCount: Int {
+        if !supplementAllocations.isEmpty {
+            return supplementAllocations.count
+        }
+        return hasSupplementalCompensation ? 1 : 0
+    }
+
+    var supplementContextLabel: String {
+        switch supplementDisplayCount {
+        case 0:
+            "Supplemental pay"
+        case 1:
+            "1 supplement"
+        default:
+            "\(supplementDisplayCount) supplements"
+        }
+    }
+
+    var supplementMetricLabel: String {
+        switch supplementDisplayCount {
+        case 0:
+            "Recurring"
+        case 1:
+            "1 item"
+        default:
+            "\(supplementDisplayCount) items"
+        }
+    }
+
+    var displaySummaryContext: String {
+        if isSupplementOnly {
+            return "\(supplementContextLabel) • no shifts"
+        }
+
+        let shiftLabel = shiftCount == 1 ? "shift" : "shifts"
+        let hours = totalHours.formatted(.number.precision(.fractionLength(1)))
+        return "\(hours) hrs • \(shiftCount) \(shiftLabel)"
     }
 }
 

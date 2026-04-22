@@ -14,6 +14,7 @@ struct SummaryView: View {
     @Query(sort: \PayRateSchedule.effectiveDate, order: .reverse) private var payRates: [PayRateSchedule]
     @Query private var nightRules: [NightDifferentialRule]
     @Query private var overtimeRules: [OvertimeRuleSet]
+    @Query private var supplements: [JobSupplement]
     @Query private var templates: [ScheduleTemplate]
     @Query(sort: \ShiftRecord.startDate, order: .reverse) private var shifts: [ShiftRecord]
 
@@ -39,6 +40,7 @@ struct SummaryView: View {
             payRates: payRates,
             nightRules: nightRules,
             overtimeRules: overtimeRules,
+            supplements: supplements,
             templates: templates,
             taxProfile: taxProfiles.first ?? TaxProfile()
         )
@@ -279,6 +281,14 @@ private struct SummaryJobCard: View {
                     rows: projectedRows
                 )
 
+                if rollup.hasSupplementConfiguration {
+                    collapsibleSection(
+                        title: "Supplements & Effective",
+                        icon: "plus.rectangle.on.folder.fill",
+                        rows: supplementalRows
+                    )
+                }
+
                 // All Time
                 collapsibleSection(
                     title: "All Time",
@@ -391,6 +401,31 @@ private struct SummaryJobCard: View {
         ]
     }
 
+    private var supplementalRows: [(String, String)] {
+        var rows: [(String, String)] = []
+
+        if isCombined && rollup.payPeriodAggregation == .variesByJob {
+            rows.append(("Pay Period Supplement", "Varies by job"))
+            rows.append(("Projected Supplement", "Varies by job"))
+            rows.append(("Pay Period Effective Gross", "Varies by job"))
+            rows.append(("Pay Period Effective Take-Home", "Varies by job"))
+            rows.append(("Pay Period Effective Rate", "Varies by job"))
+        } else {
+            rows.append(("Pay Period Supplement", rollup.payPeriodEffective.supplementalTotal.asCurrency))
+            rows.append(("Projected Supplement", rollup.projectedEffective.supplementalTotal.asCurrency))
+            rows.append(("Pay Period Effective Gross", rollup.payPeriodEffective.effectiveGross.asCurrency))
+            rows.append(("Pay Period Effective Take-Home", rollup.payPeriodEffective.effectiveTakeHome.asCurrency))
+            rows.append(("Pay Period Effective Rate", effectiveRateLabel(rollup.payPeriodEffective.effectiveHourlyRate)))
+        }
+
+        rows.append(("All-Time Supplement", rollup.allTimeEffective.supplementalTotal.asCurrency))
+        rows.append(("All-Time Effective Gross", rollup.allTimeEffective.effectiveGross.asCurrency))
+        rows.append(("All-Time Effective Take-Home", rollup.allTimeEffective.effectiveTakeHome.asCurrency))
+        rows.append(("All-Time Effective Rate", effectiveRateLabel(rollup.allTimeEffective.effectiveHourlyRate)))
+
+        return rows
+    }
+
     private var heroAmount: Double {
         guard !(isCombined && rollup.payPeriodAggregation == .variesByJob) else {
             if rollup.activeShiftCount > 0 {
@@ -401,6 +436,14 @@ private struct SummaryJobCard: View {
         }
 
         return mode == .gross ? rollup.payPeriodGross : rollup.payPeriodTakeHome
+    }
+
+    private func effectiveRateLabel(_ value: Double?) -> String {
+        guard let value else {
+            return "Unavailable"
+        }
+
+        return value.asCurrency + "/hr"
     }
 
     // MARK: Collapsible Section
@@ -538,7 +581,11 @@ private extension SummarySnapshot {
             averageShiftGross: 0,
             averageShiftHours: 0,
             highestShiftGross: 0,
-            currentBlendedRate: 0
+            currentBlendedRate: 0,
+            hasSupplementConfiguration: false,
+            payPeriodEffective: .zero,
+            projectedEffective: .zero,
+            allTimeEffective: .zero
         ),
         projectedConfidenceLabel: "Earned so far",
         jobs: []

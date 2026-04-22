@@ -51,6 +51,7 @@ struct PayPeriodSummary: Identifiable, Equatable {
     var status: PayPeriodStatus
     var isCombined: Bool
     var shifts: [PayPeriodShiftSummary]
+    var supplementAllocations: [JobSupplementAllocation]
     var shiftCount: Int
     var grossEarnings: Double
     var estimatedTakeHome: Double
@@ -65,7 +66,34 @@ struct PayPeriodSummary: Identifiable, Equatable {
     var averageShiftGross: Double
     var bestShiftGross: Double
     var annualizedGrossIncome: Double
+    var annualizedTaxableSupplementIncome: Double
     var yearToDateGrossBeforePeriod: Double
+
+    var effectiveCompensation: EffectiveCompensationSnapshot
+
+    var supplementalTotal: Double {
+        effectiveCompensation.supplementalTotal
+    }
+
+    var supplementalTaxableTotal: Double {
+        effectiveCompensation.supplementalTaxableTotal
+    }
+
+    var supplementalNonTaxableTotal: Double {
+        effectiveCompensation.supplementalNonTaxableTotal
+    }
+
+    var effectiveGross: Double {
+        effectiveCompensation.effectiveGross
+    }
+
+    var effectiveTakeHome: Double {
+        effectiveCompensation.effectiveTakeHome
+    }
+
+    var effectiveSupplementalHourlyRate: Double? {
+        effectiveCompensation.effectiveHourlyRate
+    }
 }
 
 struct PayPeriodArchiveSection: Identifiable, Equatable {
@@ -113,6 +141,7 @@ enum PayPeriodService {
         payRates: [PayRateSchedule],
         nightRules: [NightDifferentialRule],
         overtimeRules: [OvertimeRuleSet],
+        supplements: [JobSupplement] = [],
         templates: [ScheduleTemplate],
         taxProfile: TaxProfile,
         calendar: Calendar = .current,
@@ -135,6 +164,7 @@ enum PayPeriodService {
                 nightRules: nightRules,
                 overtimeRules: overtimeRules,
                 paySchedules: paySchedules,
+                supplements: supplements,
                 templates: templates
             )
             let jobCompletedShifts = completedShifts.filter { $0.job?.id == job.id }
@@ -233,6 +263,13 @@ enum PayPeriodService {
         let status: PayPeriodStatus = isCurrent ? .current : .closed
         let periodEndForEstimate = min(interval.end, date)
         let currentRate = EarningsEngine.payRate(at: periodEndForEstimate, payRates: configuration.payRates)
+        let supplementWindow = DateInterval(start: interval.start, end: periodEndForEstimate)
+        let supplementAllocations = SupplementAllocationService.allocations(
+            for: configuration.supplements,
+            within: supplementWindow,
+            calendar: calendar
+        )
+        let supplementTotals = SupplementAllocationService.totals(for: supplementAllocations)
 
         let allocatedCompletedShifts = completedShifts.compactMap { shift in
             allocatedCompletedShift(
@@ -261,7 +298,7 @@ enum PayPeriodService {
 
         let preTaxShifts = allocatedCompletedShifts + allocatedOpenShifts
         let totals = totals(for: preTaxShifts)
-        let shouldInclude = !preTaxShifts.isEmpty || (forceIncludeCurrent && isCurrent)
+        let shouldInclude = !preTaxShifts.isEmpty || !supplementAllocations.isEmpty || (forceIncludeCurrent && isCurrent)
         guard shouldInclude else {
             return nil
         }
@@ -281,9 +318,24 @@ enum PayPeriodService {
             calendar: calendar,
             fallbackExpectedWeeklyHours: taxProfile.expectedWeeklyHours
         )
+        let annualizedTaxableSupplementIncome = SupplementAllocationService.annualizedTaxableIncome(
+            asOf: periodEndForEstimate,
+            supplements: configuration.supplements,
+            calendar: calendar
+        )
         let taxEstimate = TaxEstimator.estimate(
             currentGross: totals.gross,
             annualizedGrossIncome: annualizedGrossIncome,
+            annualExtraWithholding: TaxEstimator.annualExtraWithholding(
+                payFrequency: configuration.paySchedule.frequency,
+                taxProfile: taxProfile
+            ),
+            taxProfile: taxProfile
+        )
+        let effectiveEstimate = TaxEstimator.estimate(
+            currentGross: 0,
+            annualizedGrossIncome: annualizedGrossIncome,
+            annualizedTaxableSupplementalIncome: annualizedTaxableSupplementIncome,
             annualExtraWithholding: TaxEstimator.annualExtraWithholding(
                 payFrequency: configuration.paySchedule.frequency,
                 taxProfile: taxProfile
@@ -307,6 +359,7 @@ enum PayPeriodService {
             status: status,
             isCombined: false,
             shifts: shifts,
+            supplementAllocations: supplementAllocations,
             shiftCount: shifts.count,
             grossEarnings: totals.gross,
             estimatedTakeHome: takeHome,
@@ -321,7 +374,14 @@ enum PayPeriodService {
             averageShiftGross: shifts.isEmpty ? 0 : totals.gross / Double(shifts.count),
             bestShiftGross: shifts.map(\.grossEarnings).max() ?? 0,
             annualizedGrossIncome: annualizedGrossIncome,
-            yearToDateGrossBeforePeriod: yearToDateGrossBeforePeriod
+            annualizedTaxableSupplementIncome: annualizedTaxableSupplementIncome,
+            yearToDateGrossBeforePeriod: yearToDateGrossBeforePeriod,
+            effectiveCompensation: SupplementAllocationService.effectiveSnapshot(
+                regularGross: totals.gross,
+                supplementTotals: supplementTotals,
+                estimate: effectiveEstimate,
+                hours: totals.hours
+            )
         )
     }
 
@@ -478,9 +538,20 @@ enum PayPeriodService {
             }
         let totals = totals(for: shifts)
         let annualizedGrossIncome = summaries.reduce(0) { $0 + $1.annualizedGrossIncome }
+        let annualizedTaxableSupplementIncome = summaries.reduce(0) { $0 + $1.annualizedTaxableSupplementIncome }
         let taxEstimate = TaxEstimator.estimate(
             currentGross: totals.gross,
             annualizedGrossIncome: annualizedGrossIncome,
+            annualExtraWithholding: TaxEstimator.annualExtraWithholding(
+                payFrequency: reference.frequency,
+                taxProfile: taxProfile
+            ),
+            taxProfile: taxProfile
+        )
+        let effectiveEstimate = TaxEstimator.estimate(
+            currentGross: 0,
+            annualizedGrossIncome: annualizedGrossIncome,
+            annualizedTaxableSupplementalIncome: annualizedTaxableSupplementIncome,
             annualExtraWithholding: TaxEstimator.annualExtraWithholding(
                 payFrequency: reference.frequency,
                 taxProfile: taxProfile
@@ -492,6 +563,15 @@ enum PayPeriodService {
             resolved.estimatedTakeHome = TaxEstimator.estimatedTakeHome(for: shift.grossEarnings, estimate: taxEstimate)
             return resolved
         }
+        let supplementAllocations = summaries
+            .flatMap(\.supplementAllocations)
+            .sorted {
+                if $0.jobName == $1.jobName {
+                    return $0.label < $1.label
+                }
+                return $0.jobName < $1.jobName
+            }
+        let supplementTotals = SupplementAllocationService.totals(for: supplementAllocations)
 
         return PayPeriodSummary(
             id: summaryID(prefix: "combined", interval: reference.interval),
@@ -503,6 +583,7 @@ enum PayPeriodService {
             status: reference.status,
             isCombined: true,
             shifts: resolvedShifts,
+            supplementAllocations: supplementAllocations,
             shiftCount: resolvedShifts.count,
             grossEarnings: totals.gross,
             estimatedTakeHome: TaxEstimator.estimatedTakeHome(for: totals.gross, estimate: taxEstimate),
@@ -517,7 +598,14 @@ enum PayPeriodService {
             averageShiftGross: resolvedShifts.isEmpty ? 0 : totals.gross / Double(resolvedShifts.count),
             bestShiftGross: resolvedShifts.map(\.grossEarnings).max() ?? 0,
             annualizedGrossIncome: annualizedGrossIncome,
-            yearToDateGrossBeforePeriod: summaries.reduce(0) { $0 + $1.yearToDateGrossBeforePeriod }
+            annualizedTaxableSupplementIncome: annualizedTaxableSupplementIncome,
+            yearToDateGrossBeforePeriod: summaries.reduce(0) { $0 + $1.yearToDateGrossBeforePeriod },
+            effectiveCompensation: SupplementAllocationService.effectiveSnapshot(
+                regularGross: totals.gross,
+                supplementTotals: supplementTotals,
+                estimate: effectiveEstimate,
+                hours: totals.hours
+            )
         )
     }
 

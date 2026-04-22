@@ -24,6 +24,7 @@ struct JobConfiguration {
     let nightRule: NightDifferentialRule
     let overtimeRule: OvertimeRuleSet?
     let paySchedule: PaySchedule
+    let supplements: [JobSupplement]
     let templates: [ScheduleTemplate]
 }
 
@@ -155,6 +156,7 @@ enum JobService {
         nightRules: [NightDifferentialRule],
         overtimeRules: [OvertimeRuleSet],
         paySchedules: [PaySchedule],
+        supplements: [JobSupplement] = [],
         templates: [ScheduleTemplate]
     ) -> JobConfiguration {
         let jobPayRates = payRates
@@ -163,6 +165,14 @@ enum JobService {
         let nightRule = nightRules.first(where: { $0.job?.id == job.id }) ?? NightDifferentialRule(job: job)
         let overtimeRule = overtimeRules.first(where: { $0.job?.id == job.id })
         let paySchedule = paySchedules.first(where: { $0.job?.id == job.id }) ?? PaySchedule(job: job)
+        let jobSupplements = supplements
+            .filter { $0.job?.id == job.id }
+            .sorted {
+                if $0.startDate == $1.startDate {
+                    return $0.createdAt < $1.createdAt
+                }
+                return $0.startDate < $1.startDate
+            }
         let jobTemplates = templates
             .filter { $0.job?.id == job.id }
             .sorted {
@@ -178,6 +188,7 @@ enum JobService {
             nightRule: nightRule,
             overtimeRule: overtimeRule,
             paySchedule: paySchedule,
+            supplements: jobSupplements,
             templates: jobTemplates
         )
     }
@@ -234,6 +245,11 @@ enum JobService {
 
         for schedule in try context.fetch(FetchDescriptor<PaySchedule>()) where schedule.job == nil {
             schedule.job = fallbackJob
+        }
+
+        for supplement in try context.fetch(FetchDescriptor<JobSupplement>()) where supplement.job == nil {
+            supplement.job = fallbackJob
+            supplement.updatedAt = .now
         }
 
         for template in try context.fetch(FetchDescriptor<ScheduleTemplate>()) where template.job == nil {

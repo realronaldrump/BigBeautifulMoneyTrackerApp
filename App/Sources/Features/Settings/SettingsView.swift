@@ -277,12 +277,26 @@ private struct JobSettingsView: View {
     @Query private var nightRules: [NightDifferentialRule]
     @Query private var overtimeRules: [OvertimeRuleSet]
     @Query private var paySchedules: [PaySchedule]
+    @Query private var supplements: [JobSupplement]
 
     @State private var editingRate: PayRateSchedule?
     @State private var creatingRate = false
+    @State private var editingSupplement: JobSupplement?
+    @State private var creatingSupplement = false
 
     private var jobPayRates: [PayRateSchedule] {
         payRates.filter { $0.job?.id == job.id }
+    }
+
+    private var jobSupplements: [JobSupplement] {
+        supplements
+            .filter { $0.job?.id == job.id }
+            .sorted {
+                if $0.startDate == $1.startDate {
+                    return $0.createdAt > $1.createdAt
+                }
+                return $0.startDate > $1.startDate
+            }
     }
 
     private var nightRule: NightDifferentialRule? {
@@ -305,11 +319,14 @@ private struct JobSettingsView: View {
                 JobSettingsForm(
                     job: job,
                     payRates: jobPayRates,
+                    supplements: jobSupplements,
                     paySchedule: paySchedule,
                     nightRule: nightRule,
                     overtimeRule: overtimeRule,
                     editingRate: $editingRate,
-                    creatingRate: $creatingRate
+                    creatingRate: $creatingRate,
+                    editingSupplement: $editingSupplement,
+                    creatingSupplement: $creatingSupplement
                 )
                 .scrollContentBackground(.hidden)
                 .background(MoneyBackground(mode: .gross))
@@ -323,6 +340,16 @@ private struct JobSettingsView: View {
                 .sheet(isPresented: $creatingRate) {
                     NavigationStack {
                         RateEditorView(job: job, editingRate: nil)
+                    }
+                }
+                .sheet(item: $editingSupplement) { supplement in
+                    NavigationStack {
+                        SupplementEditorView(job: job, editingSupplement: supplement)
+                    }
+                }
+                .sheet(isPresented: $creatingSupplement) {
+                    NavigationStack {
+                        SupplementEditorView(job: job, editingSupplement: nil)
                     }
                 }
                 .onDisappear {
@@ -349,6 +376,7 @@ private struct JobSettingsForm: View {
 
     @Bindable var job: JobProfile
     let payRates: [PayRateSchedule]
+    let supplements: [JobSupplement]
     @Bindable var paySchedule: PaySchedule
     @Bindable var nightRule: NightDifferentialRule
     @Bindable var overtimeRule: OvertimeRuleSet
@@ -359,6 +387,8 @@ private struct JobSettingsForm: View {
 
     @Binding var editingRate: PayRateSchedule?
     @Binding var creatingRate: Bool
+    @Binding var editingSupplement: JobSupplement?
+    @Binding var creatingSupplement: Bool
 
     @State private var confirmingDeletion = false
     @State private var deleteErrorText: String?
@@ -416,6 +446,52 @@ private struct JobSettingsForm: View {
                 DatePicker("This pay period started on", selection: $paySchedule.anchorDate, displayedComponents: .date)
             } header: {
                 settingsLabel("Pay Schedule", icon: "calendar.badge.clock", color: Color(red: 0.36, green: 0.53, blue: 0.96))
+            }
+
+            Section {
+                if supplements.isEmpty {
+                    Text("No recurring stipends or reimbursements yet.")
+                        .font(.footnote)
+                        .foregroundStyle(theme.secondaryText)
+                } else {
+                    ForEach(supplements) { supplement in
+                        Button {
+                            editingSupplement = supplement
+                        } label: {
+                            HStack(alignment: .center, spacing: 12) {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(supplement.displayLabel)
+                                        .foregroundStyle(.primary)
+
+                                    Text(supplementSummary(supplement))
+                                        .font(.footnote)
+                                        .foregroundStyle(theme.secondaryText)
+                                        .multilineTextAlignment(.leading)
+                                }
+
+                                Spacer()
+
+                                VStack(alignment: .trailing, spacing: 4) {
+                                    Text(supplement.amountPerInterval, format: .currency(code: "USD"))
+                                        .foregroundStyle(.primary)
+                                    if !supplement.isEnabled {
+                                        Text("Disabled")
+                                            .font(.footnote)
+                                            .foregroundStyle(theme.secondaryText)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Button("Add supplemental compensation") {
+                    creatingSupplement = true
+                }
+            } header: {
+                settingsLabel("Supplemental Compensation", icon: "plus.rectangle.on.folder.fill", color: theme.takeHomeAccent)
+            } footer: {
+                Text("Add housing stipends, reimbursements, or other recurring amounts here. To reflect changes over time, add a new dated item instead of rewriting an old one.")
             }
 
             Section {
@@ -640,6 +716,13 @@ private struct JobSettingsForm: View {
         String(format: "%.2f", value)
     }
 
+    private func supplementSummary(_ supplement: JobSupplement) -> String {
+        let startText = supplement.startDate.formatted(date: .abbreviated, time: .omitted)
+        let endText = supplement.endDate.map { " • Ends \($0.formatted(date: .abbreviated, time: .omitted))" } ?? ""
+        let statusText = supplement.taxTreatment == .taxable ? "Taxable" : "Non-taxable"
+        return "\(supplement.kind.title) • \(supplement.frequency.title) • Starts \(startText)\(endText) • \(statusText)"
+    }
+
     private var precedenceExplanation: String {
         switch overtimeRule.precedence {
         case .highestRateWins:
@@ -718,6 +801,222 @@ private struct JobEditorView: View {
                 name: name.trimmingCharacters(in: .whitespacesAndNewlines),
                 accent: accent
             )
+            dismiss()
+        } catch {
+            errorText = error.localizedDescription
+        }
+    }
+}
+
+private struct SupplementEditorView: View {
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.dismiss) private var dismiss
+    @Environment(AppTheme.self) private var theme
+
+    let job: JobProfile
+    let editingSupplement: JobSupplement?
+
+    @State private var label: String
+    @State private var kind: JobSupplementKind
+    @State private var amountText: String
+    @State private var frequency: PayFrequency
+    @State private var anchorDate: Date
+    @State private var startDate: Date
+    @State private var hasEndDate: Bool
+    @State private var endDate: Date
+    @State private var taxTreatment: SupplementTaxTreatment
+    @State private var isEnabled: Bool
+    @State private var errorText: String?
+
+    init(job: JobProfile, editingSupplement: JobSupplement?) {
+        self.job = job
+        self.editingSupplement = editingSupplement
+
+        let resolvedKind = editingSupplement?.kind ?? .housingStipend
+        let resolvedAnchorDate = editingSupplement?.anchorDate ?? Calendar.current.startOfDay(for: .now)
+        let resolvedStartDate = editingSupplement?.startDate ?? resolvedAnchorDate
+        let resolvedEndDate = editingSupplement?.endDate ?? resolvedStartDate
+
+        _label = State(initialValue: editingSupplement?.displayLabel ?? resolvedKind.suggestedLabel)
+        _kind = State(initialValue: resolvedKind)
+        _amountText = State(initialValue: editingSupplement.map {
+            LocalizedNumericInput.decimalText(for: $0.amountPerInterval)
+        } ?? "")
+        _frequency = State(initialValue: editingSupplement?.frequency ?? .monthly)
+        _anchorDate = State(initialValue: resolvedAnchorDate)
+        _startDate = State(initialValue: resolvedStartDate)
+        _hasEndDate = State(initialValue: editingSupplement?.endDate != nil)
+        _endDate = State(initialValue: resolvedEndDate)
+        _taxTreatment = State(initialValue: editingSupplement?.taxTreatment ?? resolvedKind.defaultTaxTreatment)
+        _isEnabled = State(initialValue: editingSupplement?.isEnabled ?? true)
+    }
+
+    var body: some View {
+        Form {
+            Section {
+                BrandHeader(
+                    eyebrow: editingSupplement == nil ? "Add Supplemental Pay" : "Edit Supplemental Pay",
+                    subtitle: "Keep stipends and reimbursements separate from hourly shift earnings for \(job.displayName).",
+                    mode: .takeHome,
+                    compact: true
+                )
+                .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 0))
+                .listRowBackground(Color.clear)
+            }
+
+            Section {
+                TextField("Label", text: $label)
+                Picker("Type", selection: $kind) {
+                    ForEach(JobSupplementKind.allCases) { kind in
+                        Text(kind.title).tag(kind)
+                    }
+                }
+                TextField("Amount per interval", text: $amountText)
+                    .keyboardType(.decimalPad)
+                Picker("Frequency", selection: $frequency) {
+                    ForEach(PayFrequency.allCases) { frequency in
+                        Text(frequency.title).tag(frequency)
+                    }
+                }
+            } header: {
+                settingsLabel("Compensation", icon: "banknote.fill", color: job.accent.color)
+            }
+
+            Section {
+                DatePicker("Interval anchor date", selection: $anchorDate, displayedComponents: .date)
+                DatePicker("Start date", selection: $startDate, displayedComponents: .date)
+                Toggle("End on a specific date", isOn: $hasEndDate.animation(.easeInOut(duration: 0.2)))
+                if hasEndDate {
+                    DatePicker("End date", selection: $endDate, displayedComponents: .date)
+                }
+            } header: {
+                settingsLabel("Schedule", icon: "calendar.badge.clock", color: theme.takeHomeAccent)
+            }
+
+            Section {
+                Toggle(
+                    "Taxable compensation",
+                    isOn: Binding(
+                        get: { taxTreatment == .taxable },
+                        set: { taxTreatment = $0 ? .taxable : .nonTaxable }
+                    )
+                )
+                Toggle("Enabled", isOn: $isEnabled)
+            } header: {
+                settingsLabel("Treatment", icon: "slider.horizontal.3", color: theme.grossAccent)
+            } footer: {
+                Text("When the setup changes over time, create a new dated item instead of overwriting the old one.")
+            }
+
+            if let editingSupplement {
+                Section {
+                    Button(role: .destructive) {
+                        modelContext.delete(editingSupplement)
+                        try? modelContext.save()
+                        dismiss()
+                    } label: {
+                        Text("Delete this supplemental item")
+                    }
+                } header: {
+                    settingsLabel("Remove", icon: "trash.fill", color: theme.roseAccent)
+                }
+            }
+
+            if let errorText {
+                Section {
+                    Text(errorText)
+                        .font(.footnote)
+                        .foregroundStyle(.red)
+                } header: {
+                    settingsLabel("Issue", icon: "exclamationmark.triangle.fill", color: theme.roseAccent)
+                }
+            }
+        }
+        .navigationTitle(editingSupplement == nil ? "Add Supplement" : "Edit Supplement")
+        .navigationBarTitleDisplayMode(.inline)
+        .scrollContentBackground(.hidden)
+        .background(MoneyBackground(mode: .takeHome))
+        .onChange(of: kind) { _, newKind in
+            if label.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                label = newKind.suggestedLabel
+            }
+            if editingSupplement == nil {
+                taxTreatment = newKind.defaultTaxTreatment
+            }
+        }
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Cancel") { dismiss() }
+            }
+            ToolbarItem(placement: .confirmationAction) {
+                Button("Save") {
+                    save()
+                }
+                .disabled(!canSave)
+            }
+        }
+    }
+
+    private var parsedAmount: Double? {
+        LocalizedNumericInput.decimalValue(from: amountText)
+    }
+
+    private var canSave: Bool {
+        guard let parsedAmount else {
+            return false
+        }
+
+        return parsedAmount > 0
+    }
+
+    private func save() {
+        let trimmedLabel = label.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedLabel = trimmedLabel.isEmpty ? kind.suggestedLabel : trimmedLabel
+
+        guard let parsedAmount, parsedAmount > 0 else {
+            errorText = "Enter an amount greater than zero."
+            return
+        }
+
+        let normalizedAnchorDate = Calendar.current.startOfDay(for: anchorDate)
+        let normalizedStartDate = Calendar.current.startOfDay(for: startDate)
+        let resolvedEndDate = hasEndDate ? Calendar.current.startOfDay(for: endDate) : nil
+
+        if let resolvedEndDate, resolvedEndDate < normalizedStartDate {
+            errorText = "The end date needs to be on or after the start date."
+            return
+        }
+
+        if let editingSupplement {
+            editingSupplement.label = resolvedLabel
+            editingSupplement.kind = kind
+            editingSupplement.amountPerInterval = parsedAmount
+            editingSupplement.frequency = frequency
+            editingSupplement.anchorDate = normalizedAnchorDate
+            editingSupplement.startDate = normalizedStartDate
+            editingSupplement.endDate = resolvedEndDate
+            editingSupplement.taxTreatment = taxTreatment
+            editingSupplement.isEnabled = isEnabled
+            editingSupplement.updatedAt = .now
+        } else {
+            modelContext.insert(
+                JobSupplement(
+                    job: job,
+                    label: resolvedLabel,
+                    kind: kind,
+                    amountPerInterval: parsedAmount,
+                    frequency: frequency,
+                    anchorDate: normalizedAnchorDate,
+                    startDate: normalizedStartDate,
+                    endDate: resolvedEndDate,
+                    taxTreatment: taxTreatment,
+                    isEnabled: isEnabled
+                )
+            )
+        }
+
+        do {
+            try modelContext.save()
             dismiss()
         } catch {
             errorText = error.localizedDescription

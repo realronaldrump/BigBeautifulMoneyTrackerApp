@@ -41,6 +41,7 @@ private struct SnapshotData {
     let nightRules: [NightDifferentialRule]
     let overtimeRules: [OvertimeRuleSet]
     let paySchedules: [PaySchedule]
+    let supplements: [JobSupplement]
     let templates: [ScheduleTemplate]
     let taxProfile: TaxProfile
     let preferences: AppPreferences?
@@ -508,6 +509,7 @@ enum ShiftController {
         let combinedBreakdown = combineBreakdowns(jobSummaries.compactMap(\.currentBreakdown))
         let combinedCurrentGross = combinedBreakdown?.grossEarnings ?? 0
         let combinedAnnualizedGrossIncome = jobSummaries.reduce(0) { $0 + $1.annualizedGrossIncome }
+        let combinedAnnualizedTaxableSupplementIncome = jobSummaries.reduce(0) { $0 + $1.annualizedTaxableSupplementIncome }
         let combinedPayFrequency = combinedPayFrequency(from: snapshotData, jobSummaries: jobSummaries)
         let combinedAnnualExtraWithholding = TaxEstimator.annualExtraWithholding(
             payFrequency: combinedPayFrequency,
@@ -516,6 +518,13 @@ enum ShiftController {
         let combinedTaxEstimate = TaxEstimator.estimate(
             currentGross: combinedCurrentGross,
             annualizedGrossIncome: combinedAnnualizedGrossIncome,
+            annualExtraWithholding: combinedAnnualExtraWithholding,
+            taxProfile: snapshotData.taxProfile
+        )
+        let combinedEffectiveEstimate = TaxEstimator.estimate(
+            currentGross: 0,
+            annualizedGrossIncome: combinedAnnualizedGrossIncome,
+            annualizedTaxableSupplementalIncome: combinedAnnualizedTaxableSupplementIncome,
             annualExtraWithholding: combinedAnnualExtraWithholding,
             taxProfile: snapshotData.taxProfile
         )
@@ -533,6 +542,14 @@ enum ShiftController {
             ? jobSummaries.reduce(0) { $0 + $1.rollup.projectedGross }
             : 0
         let combinedAllTimeGross = AggregationService.totalGross(for: snapshotData.completedShifts) + combinedCurrentGross
+        let payPeriodSupplementTotals = payPeriodAggregation == .unified
+            ? combinedSupplementTotals(jobSummaries.map(\.rollup.payPeriodEffective))
+            : .zero
+        let projectedSupplementTotals = payPeriodAggregation == .unified
+            ? combinedSupplementTotals(jobSummaries.map(\.rollup.projectedEffective))
+            : .zero
+        let allTimeSupplementTotals = combinedSupplementTotals(jobSummaries.map(\.rollup.allTimeEffective))
+        let combinedAllTimeHours = AggregationService.totalHours(for: snapshotData.completedShifts) + (combinedBreakdown?.totalHours ?? 0)
         let combinedRollup = SummaryRollup(
             activeShiftCount: snapshotData.openShifts.count,
             scheduledShiftCount: snapshotData.scheduledShifts.count,
@@ -552,7 +569,7 @@ enum ShiftController {
                 : 0,
             allTimeGross: combinedAllTimeGross,
             allTimeTakeHome: TaxEstimator.estimatedTakeHome(for: combinedAllTimeGross, estimate: combinedTaxEstimate),
-            allTimeHours: AggregationService.totalHours(for: snapshotData.completedShifts) + (combinedBreakdown?.totalHours ?? 0),
+            allTimeHours: combinedAllTimeHours,
             weeklyGross: jobSummaries.reduce(0) { $0 + $1.rollup.weeklyGross },
             totalNightPremium: jobSummaries.reduce(0) { $0 + $1.rollup.totalNightPremium },
             totalOvertimePremium: jobSummaries.reduce(0) { $0 + $1.rollup.totalOvertimePremium },
@@ -560,7 +577,30 @@ enum ShiftController {
             averageShiftGross: AggregationService.averageShiftGross(for: snapshotData.completedShifts),
             averageShiftHours: AggregationService.averageShiftHours(for: snapshotData.completedShifts),
             highestShiftGross: AggregationService.highestShift(in: snapshotData.completedShifts)?.grossEarnings ?? 0,
-            currentBlendedRate: combinedBreakdown?.effectiveRate ?? 0
+            currentBlendedRate: combinedBreakdown?.effectiveRate ?? 0,
+            hasSupplementConfiguration: jobSummaries.contains(where: { $0.rollup.hasSupplementConfiguration }),
+            payPeriodEffective: payPeriodAggregation == .unified
+                ? SupplementAllocationService.effectiveSnapshot(
+                    regularGross: payPeriodGross,
+                    supplementTotals: payPeriodSupplementTotals,
+                    estimate: combinedEffectiveEstimate,
+                    hours: payPeriodHours
+                )
+                : .zero,
+            projectedEffective: payPeriodAggregation == .unified
+                ? SupplementAllocationService.effectiveSnapshot(
+                    regularGross: projectedGross,
+                    supplementTotals: projectedSupplementTotals,
+                    estimate: combinedEffectiveEstimate,
+                    hours: 0
+                )
+                : .zero,
+            allTimeEffective: SupplementAllocationService.effectiveSnapshot(
+                regularGross: combinedAllTimeGross,
+                supplementTotals: allTimeSupplementTotals,
+                estimate: combinedEffectiveEstimate,
+                hours: combinedAllTimeHours
+            )
         )
 
         let projectedConfidenceLabel: String
@@ -637,6 +677,7 @@ enum ShiftController {
             nightRules: try context.fetch(FetchDescriptor<NightDifferentialRule>()),
             overtimeRules: try context.fetch(FetchDescriptor<OvertimeRuleSet>()),
             paySchedules: try context.fetch(FetchDescriptor<PaySchedule>()),
+            supplements: try context.fetch(FetchDescriptor<JobSupplement>()),
             templates: try context.fetch(FetchDescriptor<ScheduleTemplate>()).filter { $0.job?.isArchived != true },
             taxProfile: try DataBootstrapper.first(TaxProfile.self, in: context) ?? TaxProfile(),
             preferences: try DataBootstrapper.first(AppPreferences.self, in: context)
@@ -654,6 +695,7 @@ enum ShiftController {
             nightRules: snapshotData.nightRules,
             overtimeRules: snapshotData.overtimeRules,
             paySchedules: snapshotData.paySchedules,
+            supplements: snapshotData.supplements,
             templates: snapshotData.templates
         )
 
@@ -678,6 +720,37 @@ enum ShiftController {
             }
         )
 
+        let payPeriodInterval = ProjectionEngine.payPeriodInterval(for: date, schedule: configuration.paySchedule)
+        let payPeriodWindow = DateInterval(start: payPeriodInterval.start, end: min(payPeriodInterval.end, date))
+        let payPeriodSupplementTotals = SupplementAllocationService.totals(
+            for: SupplementAllocationService.allocations(
+                for: configuration.supplements,
+                within: payPeriodWindow,
+                calendar: Calendar.current
+            )
+        )
+        let projectedSupplementTotals = SupplementAllocationService.totals(
+            for: SupplementAllocationService.allocations(
+                for: configuration.supplements,
+                within: payPeriodInterval,
+                calendar: Calendar.current
+            )
+        )
+        let allTimeSupplementTotals = SupplementAllocationService.lifetimeWindow(
+            through: date,
+            supplements: configuration.supplements,
+            calendar: Calendar.current
+        )
+        .map {
+            SupplementAllocationService.totals(
+                for: SupplementAllocationService.allocations(
+                    for: configuration.supplements,
+                    within: $0,
+                    calendar: Calendar.current
+                )
+            )
+        } ?? .zero
+
         let yearInterval = Calendar.current.dateInterval(of: .year, for: date)
         let ytdGrossCompleted = AggregationService.totalGross(for: completedShifts, in: yearInterval)
         let currentRate = currentBreakdown?.effectiveRate ?? EarningsEngine.payRate(at: date, payRates: configuration.payRates)
@@ -690,9 +763,24 @@ enum ShiftController {
             calendar: Calendar.current,
             fallbackExpectedWeeklyHours: snapshotData.taxProfile.expectedWeeklyHours
         )
+        let annualizedTaxableSupplementIncome = SupplementAllocationService.annualizedTaxableIncome(
+            asOf: date,
+            supplements: configuration.supplements,
+            calendar: Calendar.current
+        )
         let taxEstimate = TaxEstimator.estimate(
             currentGross: currentBreakdown?.grossEarnings ?? 0,
             annualizedGrossIncome: annualizedGrossIncome,
+            annualExtraWithholding: TaxEstimator.annualExtraWithholding(
+                payFrequency: configuration.paySchedule.frequency,
+                taxProfile: snapshotData.taxProfile
+            ),
+            taxProfile: snapshotData.taxProfile
+        )
+        let effectiveTaxEstimate = TaxEstimator.estimate(
+            currentGross: 0,
+            annualizedGrossIncome: annualizedGrossIncome,
+            annualizedTaxableSupplementalIncome: annualizedTaxableSupplementIncome,
             annualExtraWithholding: TaxEstimator.annualExtraWithholding(
                 payFrequency: configuration.paySchedule.frequency,
                 taxProfile: snapshotData.taxProfile
@@ -714,7 +802,6 @@ enum ShiftController {
         let weeklyInterval = Calendar.current.dateInterval(of: .weekOfYear, for: date)
         let allTimeGross = AggregationService.totalGross(for: completedShifts) + (currentBreakdown?.grossEarnings ?? 0)
         let allTimeHours = AggregationService.totalHours(for: completedShifts) + (currentBreakdown?.totalHours ?? 0)
-        let payPeriodInterval = ProjectionEngine.payPeriodInterval(for: date, schedule: configuration.paySchedule)
 
         let rollup = SummaryRollup(
             activeShiftCount: openShifts.count,
@@ -739,7 +826,26 @@ enum ShiftController {
             averageShiftGross: AggregationService.averageShiftGross(for: completedShifts),
             averageShiftHours: AggregationService.averageShiftHours(for: completedShifts),
             highestShiftGross: AggregationService.highestShift(in: completedShifts)?.grossEarnings ?? 0,
-            currentBlendedRate: currentBreakdown?.effectiveRate ?? currentRate
+            currentBlendedRate: currentBreakdown?.effectiveRate ?? currentRate,
+            hasSupplementConfiguration: !configuration.supplements.isEmpty,
+            payPeriodEffective: SupplementAllocationService.effectiveSnapshot(
+                regularGross: projection.payPeriodGross,
+                supplementTotals: payPeriodSupplementTotals,
+                estimate: effectiveTaxEstimate,
+                hours: projection.payPeriodHours
+            ),
+            projectedEffective: SupplementAllocationService.effectiveSnapshot(
+                regularGross: projection.projectedGross,
+                supplementTotals: projectedSupplementTotals,
+                estimate: effectiveTaxEstimate,
+                hours: 0
+            ),
+            allTimeEffective: SupplementAllocationService.effectiveSnapshot(
+                regularGross: allTimeGross,
+                supplementTotals: allTimeSupplementTotals,
+                estimate: effectiveTaxEstimate,
+                hours: allTimeHours
+            )
         )
 
         return JobSummarySnapshot(
@@ -748,6 +854,7 @@ enum ShiftController {
             accent: job.accent,
             currentBreakdown: currentBreakdown,
             annualizedGrossIncome: annualizedGrossIncome,
+            annualizedTaxableSupplementIncome: annualizedTaxableSupplementIncome,
             payPeriodInterval: payPeriodInterval,
             payScheduleFrequency: configuration.paySchedule.frequency,
             projectedConfidenceLabel: projection.confidenceLabel,
@@ -809,6 +916,16 @@ enum ShiftController {
         summary.rollup.payPeriodGross > 0.001
             || summary.rollup.payPeriodHours > 0.001
             || summary.rollup.projectedGross > summary.rollup.payPeriodGross + 0.001
+            || summary.rollup.payPeriodEffective.supplementalTotal > 0.001
+            || summary.rollup.projectedEffective.supplementalTotal > 0.001
+    }
+
+    private static func combinedSupplementTotals(_ snapshots: [EffectiveCompensationSnapshot]) -> SupplementTotals {
+        snapshots.reduce(into: .zero) { partial, snapshot in
+            partial.total += snapshot.supplementalTotal
+            partial.taxableTotal += snapshot.supplementalTaxableTotal
+            partial.nonTaxableTotal += snapshot.supplementalNonTaxableTotal
+        }
     }
 
     private static func combineBreakdowns(_ breakdowns: [EarningsBreakdown]) -> EarningsBreakdown? {

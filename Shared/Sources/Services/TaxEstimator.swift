@@ -41,29 +41,41 @@ enum TaxEstimator {
 
     static func estimate(
         currentGross: Double,
+        currentTaxableSupplemental: Double = 0,
         annualizedGrossIncome: Double,
+        annualizedTaxableSupplementalIncome: Double = 0,
         annualExtraWithholding: Double,
         taxProfile: TaxProfile
     ) -> TaxEstimate {
+        let resolvedAnnualizedGrossIncome = annualizedGrossIncome + annualizedTaxableSupplementalIncome
         let pretaxDeductions = taxProfile.annualPretaxInsurance + taxProfile.annualRetirementContribution
         let standardDeduction = taxProfile.usesStandardDeduction ? standardDeduction(for: taxProfile.filingStatus) : 0
-        let taxableIncome = max(0, annualizedGrossIncome - pretaxDeductions - standardDeduction)
+        let taxableIncome = max(0, resolvedAnnualizedGrossIncome - pretaxDeductions - standardDeduction)
         let federalTax = federalIncomeTax(for: taxableIncome, status: taxProfile.filingStatus)
         let coloradoTax = taxableIncome * SharedConstants.coloradoFlatTaxRate
-        let socialSecurityTax = min(annualizedGrossIncome, 184_500) * 0.062
-        let medicareTax = annualizedGrossIncome * 0.0145 + additionalMedicareTax(for: annualizedGrossIncome, status: taxProfile.filingStatus)
+        let socialSecurityTax = min(resolvedAnnualizedGrossIncome, 184_500) * 0.062
+        let medicareTax = resolvedAnnualizedGrossIncome * 0.0145 + additionalMedicareTax(for: resolvedAnnualizedGrossIncome, status: taxProfile.filingStatus)
         let annualizedTaxes = federalTax + coloradoTax + socialSecurityTax + medicareTax + annualExtraWithholding
-        let withholdingRate = annualizedGrossIncome > 0 ? annualizedTaxes / annualizedGrossIncome : 0
+        let withholdingRate = resolvedAnnualizedGrossIncome > 0 ? annualizedTaxes / resolvedAnnualizedGrossIncome : 0
 
         return TaxEstimate(
-            annualizedGrossIncome: annualizedGrossIncome,
+            annualizedGrossIncome: resolvedAnnualizedGrossIncome,
             estimatedWithholdingRate: withholdingRate,
-            currentShiftNetEstimate: max(0, currentGross * (1 - withholdingRate))
+            currentShiftNetEstimate: max(0, (currentGross + currentTaxableSupplemental) * (1 - withholdingRate))
         )
     }
 
     static func estimatedTakeHome(for gross: Double, estimate: TaxEstimate) -> Double {
         max(0, gross * (1 - estimate.estimatedWithholdingRate))
+    }
+
+    static func effectiveTakeHome(
+        for gross: Double,
+        taxableSupplemental: Double,
+        nonTaxableSupplemental: Double,
+        estimate: TaxEstimate
+    ) -> Double {
+        estimatedTakeHome(for: gross + taxableSupplemental, estimate: estimate) + nonTaxableSupplemental
     }
 
     static func estimatedTakeHome(

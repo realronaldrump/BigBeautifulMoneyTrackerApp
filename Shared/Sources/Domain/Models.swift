@@ -266,6 +266,73 @@ final class PaySchedule {
 }
 
 @Model
+final class JobSupplement {
+    @Attribute(.unique) var id: UUID
+    var job: JobProfile?
+    var label: String
+    var kindRawValue: String
+    var amountPerInterval: Double
+    var frequencyRawValue: String
+    var anchorDate: Date
+    var startDate: Date
+    var endDate: Date?
+    var taxTreatmentRawValue: String
+    var isEnabled: Bool
+    var createdAt: Date
+    var updatedAt: Date
+
+    init(
+        id: UUID = UUID(),
+        job: JobProfile? = nil,
+        label: String = "",
+        kind: JobSupplementKind = .other,
+        amountPerInterval: Double = 0,
+        frequency: PayFrequency = .monthly,
+        anchorDate: Date = .now,
+        startDate: Date = .now,
+        endDate: Date? = nil,
+        taxTreatment: SupplementTaxTreatment? = nil,
+        isEnabled: Bool = true
+    ) {
+        let resolvedTaxTreatment = taxTreatment ?? kind.defaultTaxTreatment
+
+        self.id = id
+        self.job = job
+        self.label = label
+        self.kindRawValue = kind.rawValue
+        self.amountPerInterval = amountPerInterval
+        self.frequencyRawValue = frequency.rawValue
+        self.anchorDate = anchorDate
+        self.startDate = startDate
+        self.endDate = endDate
+        self.taxTreatmentRawValue = resolvedTaxTreatment.rawValue
+        self.isEnabled = isEnabled
+        self.createdAt = .now
+        self.updatedAt = .now
+    }
+
+    var kind: JobSupplementKind {
+        get { JobSupplementKind(rawValue: kindRawValue) ?? .other }
+        set { kindRawValue = newValue.rawValue }
+    }
+
+    var frequency: PayFrequency {
+        get { PayFrequency(rawValue: frequencyRawValue) ?? .monthly }
+        set { frequencyRawValue = newValue.rawValue }
+    }
+
+    var taxTreatment: SupplementTaxTreatment {
+        get { SupplementTaxTreatment(rawValue: taxTreatmentRawValue) ?? kind.defaultTaxTreatment }
+        set { taxTreatmentRawValue = newValue.rawValue }
+    }
+
+    var displayLabel: String {
+        let trimmed = label.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? kind.suggestedLabel : trimmed
+    }
+}
+
+@Model
 final class ScheduleTemplate {
     @Attribute(.unique) var id: UUID
     var job: JobProfile?

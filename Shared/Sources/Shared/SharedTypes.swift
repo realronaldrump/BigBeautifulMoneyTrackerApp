@@ -73,6 +73,61 @@ enum PayFrequency: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+enum JobSupplementKind: String, Codable, CaseIterable, Identifiable {
+    case housingStipend
+    case reimbursement
+    case other
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .housingStipend:
+            "Housing Stipend"
+        case .reimbursement:
+            "Reimbursement"
+        case .other:
+            "Other"
+        }
+    }
+
+    var suggestedLabel: String {
+        switch self {
+        case .housingStipend:
+            "Housing stipend"
+        case .reimbursement:
+            "Reimbursed expense"
+        case .other:
+            "Supplemental pay"
+        }
+    }
+
+    var defaultTaxTreatment: SupplementTaxTreatment {
+        switch self {
+        case .housingStipend, .other:
+            .taxable
+        case .reimbursement:
+            .nonTaxable
+        }
+    }
+}
+
+enum SupplementTaxTreatment: String, Codable, CaseIterable, Identifiable {
+    case taxable
+    case nonTaxable
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .taxable:
+            "Taxable"
+        case .nonTaxable:
+            "Non-Taxable"
+        }
+    }
+}
+
 enum OvertimePrecedence: String, Codable, CaseIterable, Identifiable {
     case highestRateWins
     case dailyFirst
@@ -226,6 +281,45 @@ struct ActiveJobSnapshot: Identifiable, Equatable {
     var currentTakeHome: Double
 }
 
+struct JobSupplementAllocation: Identifiable, Equatable {
+    var id: String
+    var supplementIdentifier: UUID
+    var jobIdentifier: UUID?
+    var jobName: String
+    var label: String
+    var kind: JobSupplementKind
+    var frequency: PayFrequency
+    var amount: Double
+    var taxableAmount: Double
+    var nonTaxableAmount: Double
+}
+
+struct SupplementTotals: Equatable {
+    var total: Double
+    var taxableTotal: Double
+    var nonTaxableTotal: Double
+
+    static let zero = SupplementTotals(total: 0, taxableTotal: 0, nonTaxableTotal: 0)
+}
+
+struct EffectiveCompensationSnapshot: Equatable {
+    var supplementalTotal: Double
+    var supplementalTaxableTotal: Double
+    var supplementalNonTaxableTotal: Double
+    var effectiveGross: Double
+    var effectiveTakeHome: Double
+    var effectiveHourlyRate: Double?
+
+    static let zero = EffectiveCompensationSnapshot(
+        supplementalTotal: 0,
+        supplementalTaxableTotal: 0,
+        supplementalNonTaxableTotal: 0,
+        effectiveGross: 0,
+        effectiveTakeHome: 0,
+        effectiveHourlyRate: nil
+    )
+}
+
 struct SummaryRollup: Equatable {
     var activeShiftCount: Int
     var scheduledShiftCount: Int
@@ -250,6 +344,10 @@ struct SummaryRollup: Equatable {
     var averageShiftHours: Double
     var highestShiftGross: Double
     var currentBlendedRate: Double
+    var hasSupplementConfiguration: Bool
+    var payPeriodEffective: EffectiveCompensationSnapshot
+    var projectedEffective: EffectiveCompensationSnapshot
+    var allTimeEffective: EffectiveCompensationSnapshot
 }
 
 struct JobSummarySnapshot: Identifiable, Equatable {
@@ -258,6 +356,7 @@ struct JobSummarySnapshot: Identifiable, Equatable {
     var accent: JobAccentStyle
     var currentBreakdown: EarningsBreakdown?
     var annualizedGrossIncome: Double
+    var annualizedTaxableSupplementIncome: Double
     var payPeriodInterval: DateInterval
     var payScheduleFrequency: PayFrequency
     var projectedConfidenceLabel: String

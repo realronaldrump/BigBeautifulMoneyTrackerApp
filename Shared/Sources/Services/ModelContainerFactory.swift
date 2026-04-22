@@ -11,6 +11,7 @@ enum AppModelContainerFactory {
         OvertimeRuleSet.self,
         TaxProfile.self,
         PaySchedule.self,
+        JobSupplement.self,
         ScheduleTemplate.self,
         ScheduledShift.self,
         AppPreferences.self,

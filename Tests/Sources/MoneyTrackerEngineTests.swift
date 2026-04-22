@@ -1,5 +1,8 @@
 import XCTest
 import SwiftData
+import CoreGraphics
+import UIKit
+import PDFKit
 @testable import BigBeautifulMoneyTracker
 
 final class MoneyTrackerEngineTests: XCTestCase {
@@ -933,7 +936,11 @@ final class MoneyTrackerEngineTests: XCTestCase {
             calendar: calendar
         )
 
-        let summary = try XCTUnwrap(snapshot.sections.first?.summaries.first)
+        let summary = try XCTUnwrap(
+            snapshot.sections.first?.summaries.first {
+                $0.interval.start == makeDate(year: 2026, month: 4, day: 6, hour: 0)
+            }
+        )
         XCTAssertEqual(summary.shiftCount, 1)
         XCTAssertEqual(summary.grossEarnings, 500, accuracy: 0.001)
         XCTAssertEqual(summary.totalHours, 8, accuracy: 0.001)
@@ -942,6 +949,303 @@ final class MoneyTrackerEngineTests: XCTestCase {
         XCTAssertEqual(summary.overtimePremiumEarnings, 70, accuracy: 0.001)
         XCTAssertEqual(summary.effectiveHourlyRate, 62.5, accuracy: 0.001)
         XCTAssertLessThan(summary.estimatedTakeHome, summary.grossEarnings)
+    }
+
+    func testSupplementAllocationSupportsAllFrequencies() {
+        let job = JobProfile(name: "Main Job")
+
+        let weekly = JobSupplement(
+            job: job,
+            label: "Weekly stipend",
+            kind: .housingStipend,
+            amountPerInterval: 100,
+            frequency: .weekly,
+            anchorDate: makeDate(year: 2026, month: 4, day: 6, hour: 0),
+            startDate: makeDate(year: 2026, month: 4, day: 6, hour: 0)
+        )
+        let biweekly = JobSupplement(
+            job: job,
+            label: "Biweekly stipend",
+            kind: .housingStipend,
+            amountPerInterval: 200,
+            frequency: .biweekly,
+            anchorDate: makeDate(year: 2026, month: 4, day: 6, hour: 0),
+            startDate: makeDate(year: 2026, month: 4, day: 6, hour: 0)
+        )
+        let semiMonthly = JobSupplement(
+            job: job,
+            label: "Semi-monthly reimbursement",
+            kind: .reimbursement,
+            amountPerInterval: 300,
+            frequency: .semiMonthly,
+            anchorDate: makeDate(year: 2026, month: 4, day: 1, hour: 0),
+            startDate: makeDate(year: 2026, month: 4, day: 1, hour: 0),
+            taxTreatment: .nonTaxable
+        )
+        let monthly = JobSupplement(
+            job: job,
+            label: "Monthly stipend",
+            kind: .housingStipend,
+            amountPerInterval: 400,
+            frequency: .monthly,
+            anchorDate: makeDate(year: 2026, month: 4, day: 5, hour: 0),
+            startDate: makeDate(year: 2026, month: 4, day: 5, hour: 0)
+        )
+
+        let weeklyAmount = SupplementAllocationService.allocations(
+            for: [weekly],
+            within: DateInterval(start: makeDate(year: 2026, month: 4, day: 6, hour: 0), end: makeDate(year: 2026, month: 4, day: 13, hour: 0)),
+            calendar: calendar
+        ).first?.amount
+        let biweeklyAmount = SupplementAllocationService.allocations(
+            for: [biweekly],
+            within: DateInterval(start: makeDate(year: 2026, month: 4, day: 6, hour: 0), end: makeDate(year: 2026, month: 4, day: 20, hour: 0)),
+            calendar: calendar
+        ).first?.amount
+        let semiMonthlyAmount = SupplementAllocationService.allocations(
+            for: [semiMonthly],
+            within: DateInterval(start: makeDate(year: 2026, month: 4, day: 1, hour: 0), end: makeDate(year: 2026, month: 4, day: 16, hour: 0)),
+            calendar: calendar
+        ).first?.amount
+        let monthlyAmount = SupplementAllocationService.allocations(
+            for: [monthly],
+            within: DateInterval(start: makeDate(year: 2026, month: 4, day: 5, hour: 0), end: makeDate(year: 2026, month: 5, day: 5, hour: 0)),
+            calendar: calendar
+        ).first?.amount
+
+        XCTAssertEqual(weeklyAmount ?? 0, 100, accuracy: 0.001)
+        XCTAssertEqual(biweeklyAmount ?? 0, 200, accuracy: 0.001)
+        XCTAssertEqual(semiMonthlyAmount ?? 0, 300, accuracy: 0.001)
+        XCTAssertEqual(monthlyAmount ?? 0, 400, accuracy: 0.001)
+    }
+
+    func testSupplementAllocationProratesCurrentWindowAgainstClosedWindow() {
+        let job = JobProfile(name: "Main Job")
+        let supplement = JobSupplement(
+            job: job,
+            label: "Monthly stipend",
+            kind: .housingStipend,
+            amountPerInterval: 300,
+            frequency: .monthly,
+            anchorDate: makeDate(year: 2026, month: 4, day: 1, hour: 0),
+            startDate: makeDate(year: 2026, month: 4, day: 1, hour: 0)
+        )
+
+        let partialAmount = SupplementAllocationService.allocations(
+            for: [supplement],
+            within: DateInterval(start: makeDate(year: 2026, month: 4, day: 1, hour: 0), end: makeDate(year: 2026, month: 4, day: 11, hour: 0)),
+            calendar: calendar
+        ).first?.amount ?? 0
+        let closedAmount = SupplementAllocationService.allocations(
+            for: [supplement],
+            within: DateInterval(start: makeDate(year: 2026, month: 4, day: 1, hour: 0), end: makeDate(year: 2026, month: 5, day: 1, hour: 0)),
+            calendar: calendar
+        ).first?.amount ?? 0
+
+        XCTAssertEqual(partialAmount, 100, accuracy: 0.001)
+        XCTAssertEqual(closedAmount, 300, accuracy: 0.001)
+        XCTAssertLessThan(partialAmount, closedAmount)
+    }
+
+    func testPayPeriodSummaryIncludesTaxableAndNonTaxableSupplementsInEffectiveTakeHome() throws {
+        let job = JobProfile(name: "Main Job")
+        let schedule = PaySchedule(job: job, frequency: .weekly, anchorDate: makeDate(year: 2026, month: 4, day: 6, hour: 0))
+        let payRate = PayRateSchedule(job: job, effectiveDate: makeDate(year: 2026, month: 1, day: 1, hour: 0), hourlyRate: 50)
+        let shift = ShiftRecord(
+            job: job,
+            startDate: makeDate(year: 2026, month: 4, day: 7, hour: 8),
+            endDate: makeDate(year: 2026, month: 4, day: 7, hour: 16),
+            breakdown: makeBreakdown(hours: 8, gross: 400)
+        )
+        let taxableSupplement = JobSupplement(
+            job: job,
+            label: "Housing stipend",
+            kind: .housingStipend,
+            amountPerInterval: 100,
+            frequency: .weekly,
+            anchorDate: makeDate(year: 2026, month: 4, day: 6, hour: 0),
+            startDate: makeDate(year: 2026, month: 4, day: 6, hour: 0),
+            taxTreatment: .taxable
+        )
+        let reimbursement = JobSupplement(
+            job: job,
+            label: "Mileage reimbursement",
+            kind: .reimbursement,
+            amountPerInterval: 50,
+            frequency: .weekly,
+            anchorDate: makeDate(year: 2026, month: 4, day: 6, hour: 0),
+            startDate: makeDate(year: 2026, month: 4, day: 6, hour: 0),
+            taxTreatment: .nonTaxable
+        )
+        let extraTaxable = JobSupplement(
+            job: job,
+            label: "Other stipend",
+            kind: .other,
+            amountPerInterval: 25,
+            frequency: .weekly,
+            anchorDate: makeDate(year: 2026, month: 4, day: 6, hour: 0),
+            startDate: makeDate(year: 2026, month: 4, day: 6, hour: 0),
+            taxTreatment: .taxable
+        )
+
+        let snapshot = PayPeriodService.archiveSnapshot(
+            asOf: makeDate(year: 2026, month: 4, day: 14, hour: 12),
+            jobs: [job],
+            completedShifts: [shift],
+            paySchedules: [schedule],
+            payRates: [payRate],
+            nightRules: [],
+            overtimeRules: [],
+            supplements: [taxableSupplement, reimbursement, extraTaxable],
+            templates: [],
+            taxProfile: TaxProfile(),
+            calendar: calendar
+        )
+
+        let summary = try XCTUnwrap(
+            snapshot.sections.first?.summaries.first {
+                $0.interval.start == makeDate(year: 2026, month: 4, day: 6, hour: 0)
+            }
+        )
+        let effectiveEstimate = TaxEstimator.estimate(
+            currentGross: 0,
+            annualizedGrossIncome: summary.annualizedGrossIncome,
+            annualizedTaxableSupplementalIncome: summary.annualizedTaxableSupplementIncome,
+            annualExtraWithholding: TaxEstimator.annualExtraWithholding(
+                payFrequency: .weekly,
+                taxProfile: TaxProfile()
+            ),
+            taxProfile: TaxProfile()
+        )
+
+        XCTAssertEqual(summary.supplementAllocations.count, 3)
+        XCTAssertEqual(summary.supplementalTaxableTotal, 125, accuracy: 0.001)
+        XCTAssertEqual(summary.supplementalNonTaxableTotal, 50, accuracy: 0.001)
+        XCTAssertEqual(summary.supplementalTotal, 175, accuracy: 0.001)
+        XCTAssertEqual(summary.effectiveGross, 575, accuracy: 0.001)
+        XCTAssertEqual(
+            summary.effectiveTakeHome,
+            TaxEstimator.effectiveTakeHome(
+                for: 400,
+                taxableSupplemental: 125,
+                nonTaxableSupplemental: 50,
+                estimate: effectiveEstimate
+            ),
+            accuracy: 0.01
+        )
+    }
+
+    func testSupplementOnlySummaryPromotesEffectiveHeadlinePresentation() throws {
+        let job = JobProfile(name: "Main Job")
+        let schedule = PaySchedule(job: job, frequency: .weekly, anchorDate: makeDate(year: 2026, month: 4, day: 6, hour: 0))
+        let payRate = PayRateSchedule(job: job, effectiveDate: makeDate(year: 2026, month: 1, day: 1, hour: 0), hourlyRate: 50)
+        let supplement = JobSupplement(
+            job: job,
+            label: "Housing stipend",
+            kind: .housingStipend,
+            amountPerInterval: 120,
+            frequency: .weekly,
+            anchorDate: makeDate(year: 2026, month: 4, day: 6, hour: 0),
+            startDate: makeDate(year: 2026, month: 4, day: 6, hour: 0),
+            taxTreatment: .taxable
+        )
+
+        let snapshot = PayPeriodService.archiveSnapshot(
+            asOf: makeDate(year: 2026, month: 4, day: 14, hour: 12),
+            jobs: [job],
+            completedShifts: [],
+            paySchedules: [schedule],
+            payRates: [payRate],
+            nightRules: [],
+            overtimeRules: [],
+            supplements: [supplement],
+            templates: [],
+            taxProfile: TaxProfile(),
+            calendar: calendar
+        )
+
+        let summary = try XCTUnwrap(
+            snapshot.sections.first?.summaries.first {
+                $0.interval.start == makeDate(year: 2026, month: 4, day: 6, hour: 0)
+            }
+        )
+
+        XCTAssertTrue(summary.isSupplementOnly)
+        XCTAssertEqual(summary.displayAmount(for: .gross), summary.effectiveGross, accuracy: 0.001)
+        XCTAssertEqual(summary.displayAmount(for: .takeHome), summary.effectiveTakeHome, accuracy: 0.001)
+        XCTAssertNil(summary.displayHourlyRate)
+        XCTAssertEqual(summary.displaySummaryContext, "1 supplement • no shifts")
+        XCTAssertEqual(summary.displayMetricTitle(for: .gross), "Effective Gross")
+        XCTAssertEqual(summary.displayMetricTitle(for: .takeHome), "Effective Take-Home")
+    }
+
+    @MainActor
+    func testCombinedSummarySuppressesPayPeriodEffectiveWhenSchedulesDifferButKeepsAllTimeEffective() throws {
+        let container = AppModelContainerFactory.makeInMemoryContainer()
+        let context = container.mainContext
+        try DataBootstrapper.seedIfNeeded(in: context)
+
+        let primaryJob = try XCTUnwrap(try JobService.jobs(in: context).first)
+        let secondaryJob = try JobService.createJob(in: context, name: "Side Gig", accent: .sky, anchorDate: makeDate(year: 2026, month: 4, day: 1, hour: 0))
+
+        let paySchedules = try context.fetch(FetchDescriptor<PaySchedule>())
+        let primarySchedule = try XCTUnwrap(paySchedules.first(where: { $0.job?.id == primaryJob.id }))
+        let secondarySchedule = try XCTUnwrap(paySchedules.first(where: { $0.job?.id == secondaryJob.id }))
+        primarySchedule.frequency = .weekly
+        primarySchedule.anchorDate = makeDate(year: 2026, month: 4, day: 6, hour: 0)
+        secondarySchedule.frequency = .biweekly
+        secondarySchedule.anchorDate = makeDate(year: 2026, month: 4, day: 1, hour: 0)
+
+        context.insert(PayRateSchedule(job: primaryJob, effectiveDate: makeDate(year: 2026, month: 1, day: 1, hour: 0), hourlyRate: 50))
+        context.insert(PayRateSchedule(job: secondaryJob, effectiveDate: makeDate(year: 2026, month: 1, day: 1, hour: 0), hourlyRate: 30))
+        context.insert(
+            ShiftRecord(
+                job: primaryJob,
+                startDate: makeDate(year: 2026, month: 4, day: 7, hour: 7),
+                endDate: makeDate(year: 2026, month: 4, day: 7, hour: 15),
+                breakdown: makeBreakdown(hours: 8, gross: 400)
+            )
+        )
+        context.insert(
+            ShiftRecord(
+                job: secondaryJob,
+                startDate: makeDate(year: 2026, month: 4, day: 7, hour: 16),
+                endDate: makeDate(year: 2026, month: 4, day: 7, hour: 22),
+                breakdown: makeBreakdown(hours: 6, gross: 240)
+            )
+        )
+        context.insert(
+            JobSupplement(
+                job: primaryJob,
+                label: "Housing stipend",
+                kind: .housingStipend,
+                amountPerInterval: 100,
+                frequency: .weekly,
+                anchorDate: makeDate(year: 2026, month: 4, day: 6, hour: 0),
+                startDate: makeDate(year: 2026, month: 4, day: 6, hour: 0)
+            )
+        )
+        context.insert(
+            JobSupplement(
+                job: secondaryJob,
+                label: "Phone reimbursement",
+                kind: .reimbursement,
+                amountPerInterval: 60,
+                frequency: .biweekly,
+                anchorDate: makeDate(year: 2026, month: 4, day: 1, hour: 0),
+                startDate: makeDate(year: 2026, month: 4, day: 1, hour: 0),
+                taxTreatment: .nonTaxable
+            )
+        )
+        try context.save()
+
+        let summary = try ShiftController.summarySnapshot(in: context, at: makeDate(year: 2026, month: 4, day: 9, hour: 11))
+
+        XCTAssertEqual(summary.combined.payPeriodAggregation, .variesByJob)
+        XCTAssertEqual(summary.combined.payPeriodEffective.supplementalTotal, 0, accuracy: 0.001)
+        XCTAssertEqual(summary.combined.payPeriodEffective.effectiveGross, 0, accuracy: 0.001)
+        XCTAssertGreaterThan(summary.combined.allTimeEffective.supplementalTotal, 0)
+        XCTAssertGreaterThan(summary.combined.allTimeEffective.effectiveGross, summary.combined.allTimeGross)
     }
 
     func testArchivedJobWithHistoryAppearsInPayPeriodArchive() throws {
@@ -1055,6 +1359,203 @@ final class MoneyTrackerEngineTests: XCTestCase {
         XCTAssertGreaterThan(fileSize.intValue, 0)
     }
 
+    func testPayPeriodPDFExporterRendersReadableContrast() throws {
+        let job = JobProfile(name: "Main Job", accent: .emerald)
+        let schedule = PaySchedule(job: job, frequency: .weekly, anchorDate: makeDate(year: 2026, month: 4, day: 6, hour: 0))
+        let payRate = PayRateSchedule(job: job, effectiveDate: makeDate(year: 2026, month: 1, day: 1, hour: 0), hourlyRate: 50)
+        let shifts = [
+            ShiftRecord(
+                job: job,
+                startDate: makeDate(year: 2026, month: 4, day: 7, hour: 8),
+                endDate: makeDate(year: 2026, month: 4, day: 7, hour: 16),
+                note: "Day shift",
+                breakdown: makeBreakdown(hours: 8, gross: 400)
+            ),
+            ShiftRecord(
+                job: job,
+                startDate: makeDate(year: 2026, month: 4, day: 8, hour: 19),
+                endDate: makeDate(year: 2026, month: 4, day: 9, hour: 7),
+                note: "Night shift",
+                breakdown: makeBreakdown(hours: 12, gross: 675)
+            )
+        ]
+        let snapshot = PayPeriodService.archiveSnapshot(
+            asOf: makeDate(year: 2026, month: 4, day: 9, hour: 12),
+            jobs: [job],
+            completedShifts: shifts,
+            paySchedules: [schedule],
+            payRates: [payRate],
+            nightRules: [],
+            overtimeRules: [],
+            templates: [],
+            taxProfile: TaxProfile(),
+            calendar: calendar
+        )
+        let summary = try XCTUnwrap(snapshot.sections.first?.summaries.first)
+
+        let url = try PayPeriodPDFExporter.export(summary: summary, generatedAt: makeDate(year: 2026, month: 4, day: 9, hour: 13))
+        let renderedPage = try renderFirstPage(of: url)
+        let metrics = try imageLuminanceMetrics(renderedPage)
+
+        XCTAssertLessThan(metrics.averageLuminance, 0.97)
+        XCTAssertGreaterThan(metrics.darkPixelFraction, 0.03)
+    }
+
+    func testPayPeriodPDFExporterMovesBreakdownHeadingToNextPage() throws {
+        let job = JobProfile(name: "Main Job", accent: .emerald)
+        let schedule = PaySchedule(job: job, frequency: .weekly, anchorDate: makeDate(year: 2026, month: 4, day: 6, hour: 0))
+        let payRate = PayRateSchedule(job: job, effectiveDate: makeDate(year: 2026, month: 1, day: 1, hour: 0), hourlyRate: 50)
+        let shifts = [
+            ShiftRecord(
+                job: job,
+                startDate: makeDate(year: 2026, month: 4, day: 7, hour: 8),
+                endDate: makeDate(year: 2026, month: 4, day: 7, hour: 16),
+                note: "Day shift",
+                breakdown: makeBreakdown(hours: 8, gross: 400)
+            ),
+            ShiftRecord(
+                job: job,
+                startDate: makeDate(year: 2026, month: 4, day: 8, hour: 19),
+                endDate: makeDate(year: 2026, month: 4, day: 9, hour: 7),
+                note: "Night shift",
+                breakdown: makeBreakdown(hours: 12, gross: 675)
+            )
+        ]
+        let snapshot = PayPeriodService.archiveSnapshot(
+            asOf: makeDate(year: 2026, month: 4, day: 9, hour: 12),
+            jobs: [job],
+            completedShifts: shifts,
+            paySchedules: [schedule],
+            payRates: [payRate],
+            nightRules: [],
+            overtimeRules: [],
+            templates: [],
+            taxProfile: TaxProfile(),
+            calendar: calendar
+        )
+        let summary = try XCTUnwrap(snapshot.sections.first?.summaries.first)
+
+        let url = try PayPeriodPDFExporter.export(summary: summary, generatedAt: makeDate(year: 2026, month: 4, day: 9, hour: 13))
+        let document = try XCTUnwrap(PDFDocument(url: url))
+        let firstPageText = try XCTUnwrap(document.page(at: 0)?.string)
+        let secondPageText = try XCTUnwrap(document.page(at: 1)?.string)
+
+        XCTAssertGreaterThanOrEqual(document.pageCount, 2)
+        XCTAssertFalse(firstPageText.contains("Breakdown"))
+        XCTAssertTrue(secondPageText.contains("Breakdown"))
+    }
+
+    func testPayPeriodPDFExporterUsesEffectiveHeadlineForSupplementOnlySummary() throws {
+        let job = JobProfile(name: "Main Job", accent: .emerald)
+        let schedule = PaySchedule(job: job, frequency: .weekly, anchorDate: makeDate(year: 2026, month: 4, day: 6, hour: 0))
+        let payRate = PayRateSchedule(job: job, effectiveDate: makeDate(year: 2026, month: 1, day: 1, hour: 0), hourlyRate: 50)
+        let supplement = JobSupplement(
+            job: job,
+            label: "Housing stipend",
+            kind: .housingStipend,
+            amountPerInterval: 120,
+            frequency: .weekly,
+            anchorDate: makeDate(year: 2026, month: 4, day: 6, hour: 0),
+            startDate: makeDate(year: 2026, month: 4, day: 6, hour: 0),
+            taxTreatment: .taxable
+        )
+
+        let snapshot = PayPeriodService.archiveSnapshot(
+            asOf: makeDate(year: 2026, month: 4, day: 14, hour: 12),
+            jobs: [job],
+            completedShifts: [],
+            paySchedules: [schedule],
+            payRates: [payRate],
+            nightRules: [],
+            overtimeRules: [],
+            supplements: [supplement],
+            templates: [],
+            taxProfile: TaxProfile(),
+            calendar: calendar
+        )
+        let summary = try XCTUnwrap(
+            snapshot.sections.first?.summaries.first {
+                $0.interval.start == makeDate(year: 2026, month: 4, day: 6, hour: 0)
+            }
+        )
+
+        let url = try PayPeriodPDFExporter.export(summary: summary, generatedAt: makeDate(year: 2026, month: 4, day: 14, hour: 13))
+        let document = try XCTUnwrap(PDFDocument(url: url))
+        let firstPageText = try XCTUnwrap(document.page(at: 0)?.string)
+        let normalizedFirstPageText = firstPageText.replacingOccurrences(of: "\n", with: " ")
+
+        XCTAssertTrue(firstPageText.contains(summary.displayMetricTitle(for: .gross)))
+        XCTAssertTrue(firstPageText.contains(summary.displayMetricTitle(for: .takeHome)))
+        XCTAssertTrue(normalizedFirstPageText.contains(summary.supplementContextLabel))
+        XCTAssertTrue(normalizedFirstPageText.localizedCaseInsensitiveContains("no shifts"))
+    }
+
+    func testPayPeriodPDFExporterUsesSupplementInclusiveRateInSnapshot() throws {
+        let job = JobProfile(name: "Main Job", accent: .emerald)
+        let schedule = PaySchedule(job: job, frequency: .weekly, anchorDate: makeDate(year: 2026, month: 4, day: 6, hour: 0))
+        let payRate = PayRateSchedule(job: job, effectiveDate: makeDate(year: 2026, month: 1, day: 1, hour: 0), hourlyRate: 50)
+        let shift = ShiftRecord(
+            job: job,
+            startDate: makeDate(year: 2026, month: 4, day: 7, hour: 8),
+            endDate: makeDate(year: 2026, month: 4, day: 7, hour: 16),
+            breakdown: makeBreakdown(hours: 8, gross: 400)
+        )
+        let supplement = JobSupplement(
+            job: job,
+            label: "Housing stipend",
+            kind: .housingStipend,
+            amountPerInterval: 175,
+            frequency: .weekly,
+            anchorDate: makeDate(year: 2026, month: 4, day: 6, hour: 0),
+            startDate: makeDate(year: 2026, month: 4, day: 6, hour: 0),
+            taxTreatment: .taxable
+        )
+
+        let snapshot = PayPeriodService.archiveSnapshot(
+            asOf: makeDate(year: 2026, month: 4, day: 14, hour: 12),
+            jobs: [job],
+            completedShifts: [shift],
+            paySchedules: [schedule],
+            payRates: [payRate],
+            nightRules: [],
+            overtimeRules: [],
+            supplements: [supplement],
+            templates: [],
+            taxProfile: TaxProfile(),
+            calendar: calendar
+        )
+        let summary = try XCTUnwrap(
+            snapshot.sections.first?.summaries.first {
+                $0.interval.start == makeDate(year: 2026, month: 4, day: 6, hour: 0)
+            }
+        )
+        let displayRate = try XCTUnwrap(summary.displayHourlyRate)
+        XCTAssertNotEqual(displayRate, summary.effectiveHourlyRate, accuracy: 0.001)
+
+        let url = try PayPeriodPDFExporter.export(summary: summary, generatedAt: makeDate(year: 2026, month: 4, day: 14, hour: 13))
+        let document = try XCTUnwrap(PDFDocument(url: url))
+        let firstPageText = try XCTUnwrap(document.page(at: 0)?.string)
+
+        XCTAssertTrue(firstPageText.contains(displayRate.formatted(.currency(code: "USD"))))
+        XCTAssertFalse(firstPageText.contains(summary.effectiveHourlyRate.formatted(.currency(code: "USD")) + "/hr"))
+    }
+
+    func testPayPeriodPDFTextLayoutFitsLongHeaderNames() {
+        let font = UIFont.systemFont(ofSize: 28, weight: .heavy)
+        let fitted = PayPeriodPDFTextLayout.fittedSingleLine(
+            "This is a very long job name that should be reduced and truncated before it reaches the rest of the header",
+            font: font,
+            maxWidth: 180,
+            minimumPointSize: 22
+        )
+
+        XCTAssertLessThanOrEqual(
+            PayPeriodPDFTextLayout.measuredWidth(for: fitted.text, font: fitted.font),
+            180
+        )
+        XCTAssertLessThanOrEqual(fitted.font.pointSize, font.pointSize)
+    }
+
     private func makeDate(year: Int, month: Int, day: Int, hour: Int, minute: Int = 0) -> Date {
         calendar.date(from: DateComponents(year: year, month: month, day: day, hour: hour, minute: minute))!
     }
@@ -1136,6 +1637,76 @@ final class MoneyTrackerEngineTests: XCTestCase {
             nightHours: 0,
             overtimeHours: 0,
             effectiveRate: gross / max(hours, 0.000_001)
+        )
+    }
+
+    private func renderFirstPage(of url: URL) throws -> UIImage {
+        guard let provider = CGDataProvider(url: url as CFURL) else {
+            XCTFail("Unable to create data provider for PDF")
+            throw NSError(domain: "MoneyTrackerEngineTests", code: 1)
+        }
+        guard let document = CGPDFDocument(provider), let page = document.page(at: 1) else {
+            XCTFail("Unable to load first PDF page")
+            throw NSError(domain: "MoneyTrackerEngineTests", code: 2)
+        }
+
+        let pageRect = page.getBoxRect(.mediaBox)
+        let size = CGSize(width: pageRect.width, height: pageRect.height)
+
+        return UIGraphicsImageRenderer(size: size).image { rendererContext in
+            UIColor.white.setFill()
+            rendererContext.fill(CGRect(origin: .zero, size: size))
+
+            let cgContext = rendererContext.cgContext
+            cgContext.translateBy(x: 0, y: size.height)
+            cgContext.scaleBy(x: 1, y: -1)
+            cgContext.drawPDFPage(page)
+        }
+    }
+
+    private func imageLuminanceMetrics(_ image: UIImage) throws -> (averageLuminance: Double, darkPixelFraction: Double) {
+        guard let cgImage = image.cgImage else {
+            XCTFail("Unable to access rendered PDF image")
+            throw NSError(domain: "MoneyTrackerEngineTests", code: 3)
+        }
+
+        let width = cgImage.width
+        let height = cgImage.height
+        let bytesPerRow = width * 4
+        var buffer = [UInt8](repeating: 0, count: height * bytesPerRow)
+        guard let bitmapContext = CGContext(
+            data: &buffer,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: bytesPerRow,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else {
+            XCTFail("Unable to create bitmap context")
+            throw NSError(domain: "MoneyTrackerEngineTests", code: 4)
+        }
+
+        bitmapContext.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+
+        var luminanceTotal = 0.0
+        var darkPixelCount = 0
+        let pixelCount = width * height
+
+        for offset in stride(from: 0, to: buffer.count, by: 4) {
+            let red = Double(buffer[offset]) / 255.0
+            let green = Double(buffer[offset + 1]) / 255.0
+            let blue = Double(buffer[offset + 2]) / 255.0
+            let luminance = (0.2126 * red) + (0.7152 * green) + (0.0722 * blue)
+            luminanceTotal += luminance
+            if luminance < 0.45 {
+                darkPixelCount += 1
+            }
+        }
+
+        return (
+            averageLuminance: luminanceTotal / Double(pixelCount),
+            darkPixelFraction: Double(darkPixelCount) / Double(pixelCount)
         )
     }
 }
