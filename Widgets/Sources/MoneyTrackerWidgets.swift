@@ -7,13 +7,21 @@ struct MoneyTrackerWidgetEntry: TimelineEntry {
     let date: Date
     let snapshot: DashboardSnapshot
     let mode: EarningsDisplayMode
+    let compensationMode: CompensationDisplayMode
     let isShiftActive: Bool
     let activeJobCount: Int
 }
 
 struct MoneyTrackerWidgetProvider: TimelineProvider {
     func placeholder(in context: Context) -> MoneyTrackerWidgetEntry {
-        MoneyTrackerWidgetEntry(date: .now, snapshot: .preview, mode: .gross, isShiftActive: false, activeJobCount: 0)
+        MoneyTrackerWidgetEntry(
+            date: .now,
+            snapshot: .preview,
+            mode: .gross,
+            compensationMode: .actual,
+            isShiftActive: false,
+            activeJobCount: 0
+        )
     }
 
     func getSnapshot(in context: Context, completion: @escaping (MoneyTrackerWidgetEntry) -> Void) {
@@ -43,11 +51,15 @@ struct MoneyTrackerWidgetProvider: TimelineProvider {
         let preferences = (try? context.fetch(FetchDescriptor<AppPreferences>()))?.first
         let openShifts = (try? context.fetch(FetchDescriptor<OpenShiftState>())) ?? []
         let snapshot = (try? ShiftController.dashboardSnapshot(in: context, at: date)) ?? .preview
+        let compensationMode = snapshot.hasSelectableEffectiveCompensation
+            ? (preferences?.selectedCompensationDisplayMode ?? .actual)
+            : .actual
 
         return MoneyTrackerWidgetEntry(
             date: date,
             snapshot: snapshot,
             mode: preferences?.selectedDisplayMode ?? .gross,
+            compensationMode: compensationMode,
             isShiftActive: !openShifts.isEmpty,
             activeJobCount: openShifts.count
         )
@@ -58,6 +70,10 @@ struct MoneyTrackerWidgetView: View {
     @Environment(\.widgetFamily) private var family
 
     let entry: MoneyTrackerWidgetEntry
+
+    private var compensationMode: CompensationDisplayMode {
+        entry.snapshot.hasSelectableEffectiveCompensation ? entry.compensationMode : .actual
+    }
 
     var body: some View {
         switch family {
@@ -71,7 +87,11 @@ struct MoneyTrackerWidgetView: View {
     }
 
     private var amount: Double {
-        entry.mode == .gross ? entry.snapshot.currentGross : entry.snapshot.currentTakeHome
+        entry.snapshot.displayAmount(for: entry.mode, compensationMode: compensationMode)
+    }
+
+    private var amountLabel: String {
+        "\(compensationMode.title) \(entry.mode.compactTitle)"
     }
 
     private var widgetBackground: LinearGradient {
@@ -93,7 +113,7 @@ struct MoneyTrackerWidgetView: View {
                 .foregroundStyle(.tertiary)
                 .lineLimit(2)
 
-            Text(entry.mode == .gross ? "Gross" : "Take Home")
+            Text(amountLabel)
                 .font(.system(size: 12, weight: .semibold, design: .rounded))
                 .foregroundStyle(.secondary)
             Text(amount, format: .currency(code: "USD"))
@@ -117,7 +137,7 @@ struct MoneyTrackerWidgetView: View {
                     .foregroundStyle(.tertiary)
                     .lineLimit(2)
 
-                Text(entry.mode == .gross ? "Current Shift" : "Estimated Net")
+                Text(amountLabel)
                     .font(.system(size: 12, weight: .semibold, design: .rounded))
                     .foregroundStyle(.secondary)
                 Text(amount, format: .currency(code: "USD"))
@@ -134,7 +154,7 @@ struct MoneyTrackerWidgetView: View {
             VStack(alignment: .trailing, spacing: 12) {
                 stat("Pay Period", payPeriodText)
                 stat("Projected", projectedText)
-                stat("All Time", formattedAmount(entry.mode == .gross ? entry.snapshot.allTimeGross : entry.snapshot.allTimeTakeHome))
+                stat("All Time", formattedAmount(entry.snapshot.allTimeAmount(for: entry.mode, compensationMode: compensationMode)))
             }
         }
         .containerBackground(widgetBackground, for: .widget)
@@ -173,7 +193,7 @@ struct MoneyTrackerWidgetView: View {
             return "Varies"
         }
 
-        return formattedAmount(entry.mode == .gross ? entry.snapshot.payPeriodGross : entry.snapshot.payPeriodTakeHome)
+        return formattedAmount(entry.snapshot.payPeriodAmount(for: entry.mode, compensationMode: compensationMode))
     }
 
     private var projectedText: String {
@@ -181,7 +201,7 @@ struct MoneyTrackerWidgetView: View {
             return "Varies"
         }
 
-        return formattedAmount(entry.mode == .gross ? entry.snapshot.projectedPaycheckGross : entry.snapshot.projectedPaycheckTakeHome)
+        return formattedAmount(entry.snapshot.projectedPaycheckAmount(for: entry.mode, compensationMode: compensationMode))
     }
 
     private func formattedAmount(_ value: Double) -> String {
@@ -267,7 +287,7 @@ private struct LiveActivitySyncStatus: View {
 
 private extension ShiftActivityAttributes.ContentState {
     var amountLabel: String {
-        mode == .gross ? "Synced Gross" : "Synced Net"
+        "\(compensationMode.title) \(mode == .gross ? "Gross" : "Take Home")"
     }
 }
 
@@ -339,17 +359,26 @@ private extension DashboardSnapshot {
     static let preview = DashboardSnapshot(
         currentBreakdown: nil,
         activeJobs: [],
+        hasSupplementConfiguration: true,
         currentGross: 138.24,
         currentTakeHome: 104.63,
+        currentEffectiveGross: 154.24,
+        currentEffectiveTakeHome: 118.63,
         payPeriodAggregation: .unified,
         payPeriodGross: 1_482.40,
         payPeriodTakeHome: 1_119.12,
+        payPeriodEffectiveGross: 1_732.40,
+        payPeriodEffectiveTakeHome: 1_296.12,
         payPeriodHours: 36,
         payPeriodNightPremium: 64.80,
         allTimeGross: 42_820.34,
         allTimeTakeHome: 31_870.92,
+        allTimeEffectiveGross: 46_220.34,
+        allTimeEffectiveTakeHome: 34_520.92,
         projectedPaycheckGross: 2_964.80,
         projectedPaycheckTakeHome: 2_238.24,
+        projectedPaycheckEffectiveGross: 3_214.80,
+        projectedPaycheckEffectiveTakeHome: 2_415.24,
         projectedConfidenceLabel: "Template projected",
         allTimeHours: 1_061.5
     )

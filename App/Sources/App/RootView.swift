@@ -79,15 +79,27 @@ struct RootView: View {
         guard let preferences = preferences.first, preferences.onboardingCompleted else { return }
 
         guard let snapshot = try? ShiftController.dashboardSnapshot(in: modelContext, at: .now) else { return }
+        let compensationMode = snapshot.hasSelectableEffectiveCompensation
+            ? preferences.selectedCompensationDisplayMode
+            : .actual
         guard preferences.liveActivitiesEnabled else {
-            let finalAmount = preferences.selectedDisplayMode == .gross
-                ? snapshot.currentGross
-                : snapshot.currentTakeHome
-            LiveActivityManager.end(finalAmount: finalAmount, mode: preferences.selectedDisplayMode)
+            let finalAmount = snapshot.displayAmount(
+                for: preferences.selectedDisplayMode,
+                compensationMode: compensationMode
+            )
+            LiveActivityManager.end(
+                finalAmount: finalAmount,
+                mode: preferences.selectedDisplayMode,
+                compensationMode: compensationMode
+            )
             return
         }
 
-        LiveActivityManager.sync(for: snapshot, mode: preferences.selectedDisplayMode)
+        LiveActivityManager.sync(
+            for: snapshot,
+            mode: preferences.selectedDisplayMode,
+            compensationMode: compensationMode
+        )
     }
 }
 

@@ -564,6 +564,7 @@ private extension SummarySnapshot {
             completedShiftCount: 0,
             activeGross: 0,
             activeTakeHome: 0,
+            activeEffective: .zero,
             payPeriodAggregation: .unified,
             payPeriodGross: 0,
             payPeriodTakeHome: 0,

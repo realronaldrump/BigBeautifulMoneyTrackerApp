@@ -332,7 +332,12 @@ final class MoneyTrackerEngineTests: XCTestCase {
             effectiveRate: 50
         )
 
-        let action = LiveActivityManager.makeSyncAction(for: snapshot, mode: .gross, now: syncDate)
+        let action = LiveActivityManager.makeSyncAction(
+            for: snapshot,
+            mode: .gross,
+            compensationMode: .actual,
+            now: syncDate
+        )
         guard case .update(let payload) = action else {
             XCTFail("Expected an update payload for an active shift.")
             return
@@ -340,6 +345,7 @@ final class MoneyTrackerEngineTests: XCTestCase {
 
         XCTAssertEqual(payload.title, "Hospital")
         XCTAssertEqual(payload.contentState.mode, .gross)
+        XCTAssertEqual(payload.contentState.compensationMode, .actual)
         XCTAssertEqual(payload.contentState.syncedAmount, 50, accuracy: 0.001)
         XCTAssertEqual(payload.contentState.currentRate, 50, accuracy: 0.001)
         XCTAssertEqual(payload.contentState.startDate, startDate)
@@ -362,7 +368,12 @@ final class MoneyTrackerEngineTests: XCTestCase {
             effectiveRate: 40
         )
 
-        let action = LiveActivityManager.makeSyncAction(for: snapshot, mode: .gross, now: syncDate)
+        let action = LiveActivityManager.makeSyncAction(
+            for: snapshot,
+            mode: .gross,
+            compensationMode: .actual,
+            now: syncDate
+        )
         guard case .update(let payload) = action else {
             XCTFail("Expected an update payload for active shifts.")
             return
@@ -387,15 +398,61 @@ final class MoneyTrackerEngineTests: XCTestCase {
             effectiveRate: 50
         )
 
-        let action = LiveActivityManager.makeSyncAction(for: snapshot, mode: .takeHome, now: syncDate)
+        let action = LiveActivityManager.makeSyncAction(
+            for: snapshot,
+            mode: .takeHome,
+            compensationMode: .actual,
+            now: syncDate
+        )
         guard case .update(let payload) = action else {
             XCTFail("Expected an update payload for an active shift.")
             return
         }
 
         XCTAssertEqual(payload.contentState.mode, .takeHome)
+        XCTAssertEqual(payload.contentState.compensationMode, .actual)
         XCTAssertEqual(payload.contentState.syncedAmount, 150, accuracy: 0.001)
         XCTAssertEqual(payload.contentState.currentRate, 37.50, accuracy: 0.001)
+    }
+
+    @MainActor
+    func testLiveActivityPayloadUsesEffectiveAmountAndRateWhenSelected() throws {
+        let startDate = makeDate(year: 2026, month: 4, day: 8, hour: 9)
+        let syncDate = makeDate(year: 2026, month: 4, day: 8, hour: 10)
+        let snapshot = makeDashboardSnapshot(
+            activeJobs: [
+                makeActiveJob(
+                    name: "Hospital",
+                    startDate: startDate,
+                    gross: 200,
+                    takeHome: 150,
+                    effectiveGross: 240,
+                    effectiveTakeHome: 176,
+                    rate: 50
+                )
+            ],
+            currentGross: 200,
+            currentTakeHome: 150,
+            currentEffectiveGross: 240,
+            currentEffectiveTakeHome: 176,
+            effectiveRate: 50
+        )
+
+        let action = LiveActivityManager.makeSyncAction(
+            for: snapshot,
+            mode: .takeHome,
+            compensationMode: .effective,
+            now: syncDate
+        )
+        guard case .update(let payload) = action else {
+            XCTFail("Expected an update payload for an active shift.")
+            return
+        }
+
+        XCTAssertEqual(payload.contentState.mode, .takeHome)
+        XCTAssertEqual(payload.contentState.compensationMode, .effective)
+        XCTAssertEqual(payload.contentState.syncedAmount, 176, accuracy: 0.001)
+        XCTAssertEqual(payload.contentState.currentRate, 44, accuracy: 0.001)
     }
 
     @MainActor
@@ -411,7 +468,12 @@ final class MoneyTrackerEngineTests: XCTestCase {
             effectiveRate: 50
         )
 
-        let action = LiveActivityManager.makeSyncAction(for: snapshot, mode: .takeHome, now: syncDate)
+        let action = LiveActivityManager.makeSyncAction(
+            for: snapshot,
+            mode: .takeHome,
+            compensationMode: .actual,
+            now: syncDate
+        )
         guard case .update(let payload) = action else {
             XCTFail("Expected an update payload for an active shift.")
             return
@@ -431,7 +493,12 @@ final class MoneyTrackerEngineTests: XCTestCase {
             effectiveRate: 0
         )
 
-        let action = LiveActivityManager.makeSyncAction(for: snapshot, mode: .takeHome, now: syncDate)
+        let action = LiveActivityManager.makeSyncAction(
+            for: snapshot,
+            mode: .takeHome,
+            compensationMode: .actual,
+            now: syncDate
+        )
         guard case .end(let contentState) = action else {
             XCTFail("Expected an end payload when no jobs are active.")
             return
@@ -1565,6 +1632,8 @@ final class MoneyTrackerEngineTests: XCTestCase {
         startDate: Date,
         gross: Double,
         takeHome: Double,
+        effectiveGross: Double? = nil,
+        effectiveTakeHome: Double? = nil,
         rate: Double
     ) -> ActiveJobSnapshot {
         ActiveJobSnapshot(
@@ -1585,7 +1654,9 @@ final class MoneyTrackerEngineTests: XCTestCase {
                 effectiveRate: rate
             ),
             currentGross: gross,
-            currentTakeHome: takeHome
+            currentTakeHome: takeHome,
+            currentEffectiveGross: effectiveGross ?? gross,
+            currentEffectiveTakeHome: effectiveTakeHome ?? takeHome
         )
     }
 
@@ -1593,34 +1664,49 @@ final class MoneyTrackerEngineTests: XCTestCase {
         activeJobs: [ActiveJobSnapshot],
         currentGross: Double,
         currentTakeHome: Double,
+        currentEffectiveGross: Double? = nil,
+        currentEffectiveTakeHome: Double? = nil,
         effectiveRate: Double
     ) -> DashboardSnapshot {
-        DashboardSnapshot(
+        let resolvedEffectiveGross = currentEffectiveGross ?? currentGross
+        let resolvedEffectiveTakeHome = currentEffectiveTakeHome ?? currentTakeHome
+        let totalHours = effectiveRate > 0 ? currentGross / effectiveRate : 0
+        return DashboardSnapshot(
             currentBreakdown: activeJobs.isEmpty
                 ? nil
                 : EarningsBreakdown(
-                    totalHours: 0,
+                    totalHours: totalHours,
                     grossEarnings: currentGross,
                     baseEarnings: currentGross,
                     nightPremiumEarnings: 0,
                     overtimePremiumEarnings: 0,
-                    regularHours: 0,
+                    regularHours: totalHours,
                     nightHours: 0,
                     overtimeHours: 0,
                     effectiveRate: effectiveRate
                 ),
             activeJobs: activeJobs,
+            hasSupplementConfiguration: abs(resolvedEffectiveGross - currentGross) > 0.000_001
+                || abs(resolvedEffectiveTakeHome - currentTakeHome) > 0.000_001,
             currentGross: currentGross,
             currentTakeHome: currentTakeHome,
+            currentEffectiveGross: resolvedEffectiveGross,
+            currentEffectiveTakeHome: resolvedEffectiveTakeHome,
             payPeriodAggregation: .unified,
             payPeriodGross: currentGross,
             payPeriodTakeHome: currentTakeHome,
+            payPeriodEffectiveGross: resolvedEffectiveGross,
+            payPeriodEffectiveTakeHome: resolvedEffectiveTakeHome,
             payPeriodHours: 0,
             payPeriodNightPremium: 0,
             allTimeGross: currentGross,
             allTimeTakeHome: currentTakeHome,
+            allTimeEffectiveGross: resolvedEffectiveGross,
+            allTimeEffectiveTakeHome: resolvedEffectiveTakeHome,
             projectedPaycheckGross: currentGross,
             projectedPaycheckTakeHome: currentTakeHome,
+            projectedPaycheckEffectiveGross: resolvedEffectiveGross,
+            projectedPaycheckEffectiveTakeHome: resolvedEffectiveTakeHome,
             projectedConfidenceLabel: "Earned so far",
             allTimeHours: 0
         )

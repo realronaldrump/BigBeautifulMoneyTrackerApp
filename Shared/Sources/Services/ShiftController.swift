@@ -545,6 +545,7 @@ enum ShiftController {
         let payPeriodSupplementTotals = payPeriodAggregation == .unified
             ? combinedSupplementTotals(jobSummaries.map(\.rollup.payPeriodEffective))
             : .zero
+        let activeSupplementTotals = combinedSupplementTotals(jobSummaries.map(\.rollup.activeEffective))
         let projectedSupplementTotals = payPeriodAggregation == .unified
             ? combinedSupplementTotals(jobSummaries.map(\.rollup.projectedEffective))
             : .zero
@@ -556,6 +557,12 @@ enum ShiftController {
             completedShiftCount: snapshotData.completedShifts.count,
             activeGross: combinedCurrentGross,
             activeTakeHome: combinedTaxEstimate.currentShiftNetEstimate,
+            activeEffective: SupplementAllocationService.effectiveSnapshot(
+                regularGross: combinedCurrentGross,
+                supplementTotals: activeSupplementTotals,
+                estimate: combinedEffectiveEstimate,
+                hours: combinedBreakdown?.totalHours ?? 0
+            ),
             payPeriodAggregation: payPeriodAggregation,
             payPeriodGross: payPeriodGross,
             payPeriodTakeHome: payPeriodAggregation == .unified
@@ -644,24 +651,35 @@ enum ShiftController {
                 scheduledEndDate: openShift.scheduledEndDate,
                 currentBreakdown: currentBreakdown,
                 currentGross: summaryJob.rollup.activeGross,
-                currentTakeHome: summaryJob.rollup.activeTakeHome
+                currentTakeHome: summaryJob.rollup.activeTakeHome,
+                currentEffectiveGross: summaryJob.rollup.activeEffective.effectiveGross,
+                currentEffectiveTakeHome: summaryJob.rollup.activeEffective.effectiveTakeHome
             )
         }
 
         return DashboardSnapshot(
             currentBreakdown: combineBreakdowns(activeJobs.map(\.currentBreakdown)),
             activeJobs: activeJobs,
+            hasSupplementConfiguration: summary.combined.hasSupplementConfiguration,
             currentGross: summary.combined.activeGross,
             currentTakeHome: summary.combined.activeTakeHome,
+            currentEffectiveGross: summary.combined.activeEffective.effectiveGross,
+            currentEffectiveTakeHome: summary.combined.activeEffective.effectiveTakeHome,
             payPeriodAggregation: summary.combined.payPeriodAggregation,
             payPeriodGross: summary.combined.payPeriodGross,
             payPeriodTakeHome: summary.combined.payPeriodTakeHome,
+            payPeriodEffectiveGross: summary.combined.payPeriodEffective.effectiveGross,
+            payPeriodEffectiveTakeHome: summary.combined.payPeriodEffective.effectiveTakeHome,
             payPeriodHours: summary.combined.payPeriodHours,
             payPeriodNightPremium: summary.combined.payPeriodNightPremium,
             allTimeGross: summary.combined.allTimeGross,
             allTimeTakeHome: summary.combined.allTimeTakeHome,
+            allTimeEffectiveGross: summary.combined.allTimeEffective.effectiveGross,
+            allTimeEffectiveTakeHome: summary.combined.allTimeEffective.effectiveTakeHome,
             projectedPaycheckGross: summary.combined.projectedGross,
             projectedPaycheckTakeHome: summary.combined.projectedTakeHome,
+            projectedPaycheckEffectiveGross: summary.combined.projectedEffective.effectiveGross,
+            projectedPaycheckEffectiveTakeHome: summary.combined.projectedEffective.effectiveTakeHome,
             projectedConfidenceLabel: summary.projectedConfidenceLabel,
             allTimeHours: summary.combined.allTimeHours
         )
@@ -802,6 +820,11 @@ enum ShiftController {
         let weeklyInterval = Calendar.current.dateInterval(of: .weekOfYear, for: date)
         let allTimeGross = AggregationService.totalGross(for: completedShifts) + (currentBreakdown?.grossEarnings ?? 0)
         let allTimeHours = AggregationService.totalHours(for: completedShifts) + (currentBreakdown?.totalHours ?? 0)
+        let activeSupplementTotals = proratedSupplementTotals(
+            currentHours: currentBreakdown?.totalHours ?? 0,
+            payPeriodHours: projection.payPeriodHours,
+            supplementTotals: payPeriodSupplementTotals
+        )
 
         let rollup = SummaryRollup(
             activeShiftCount: openShifts.count,
@@ -809,6 +832,12 @@ enum ShiftController {
             completedShiftCount: completedShifts.count,
             activeGross: currentBreakdown?.grossEarnings ?? 0,
             activeTakeHome: taxEstimate.currentShiftNetEstimate,
+            activeEffective: SupplementAllocationService.effectiveSnapshot(
+                regularGross: currentBreakdown?.grossEarnings ?? 0,
+                supplementTotals: activeSupplementTotals,
+                estimate: effectiveTaxEstimate,
+                hours: currentBreakdown?.totalHours ?? 0
+            ),
             payPeriodAggregation: .unified,
             payPeriodGross: projection.payPeriodGross,
             payPeriodTakeHome: TaxEstimator.estimatedTakeHome(for: projection.payPeriodGross, estimate: taxEstimate),
@@ -926,6 +955,23 @@ enum ShiftController {
             partial.taxableTotal += snapshot.supplementalTaxableTotal
             partial.nonTaxableTotal += snapshot.supplementalNonTaxableTotal
         }
+    }
+
+    private static func proratedSupplementTotals(
+        currentHours: Double,
+        payPeriodHours: Double,
+        supplementTotals: SupplementTotals
+    ) -> SupplementTotals {
+        guard currentHours > 0.000_001, payPeriodHours > 0.000_001 else {
+            return .zero
+        }
+
+        let fraction = min(max(currentHours / payPeriodHours, 0), 1)
+        return SupplementTotals(
+            total: supplementTotals.total * fraction,
+            taxableTotal: supplementTotals.taxableTotal * fraction,
+            nonTaxableTotal: supplementTotals.nonTaxableTotal * fraction
+        )
     }
 
     private static func combineBreakdowns(_ breakdowns: [EarningsBreakdown]) -> EarningsBreakdown? {

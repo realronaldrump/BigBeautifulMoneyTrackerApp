@@ -416,6 +416,7 @@ final class ScheduledShift {
 final class AppPreferences {
     @Attribute(.unique) var id: UUID
     var selectedDisplayModeRawValue: String
+    var selectedCompensationDisplayModeRawValue: String?
     var selectedHomeJobIdentifierRawValue: String?
     var hapticsEnabled: Bool
     var remindersEnabled: Bool
@@ -427,6 +428,7 @@ final class AppPreferences {
     init(
         id: UUID = UUID(),
         selectedDisplayMode: EarningsDisplayMode = .gross,
+        selectedCompensationDisplayMode: CompensationDisplayMode = .actual,
         hapticsEnabled: Bool = true,
         remindersEnabled: Bool = false,
         liveActivitiesEnabled: Bool = true,
@@ -436,6 +438,7 @@ final class AppPreferences {
     ) {
         self.id = id
         self.selectedDisplayModeRawValue = selectedDisplayMode.rawValue
+        self.selectedCompensationDisplayModeRawValue = selectedCompensationDisplayMode.rawValue
         self.selectedHomeJobIdentifierRawValue = nil
         self.hapticsEnabled = hapticsEnabled
         self.remindersEnabled = remindersEnabled
@@ -448,6 +451,11 @@ final class AppPreferences {
     var selectedDisplayMode: EarningsDisplayMode {
         get { EarningsDisplayMode(rawValue: selectedDisplayModeRawValue) ?? .gross }
         set { selectedDisplayModeRawValue = newValue.rawValue }
+    }
+
+    var selectedCompensationDisplayMode: CompensationDisplayMode {
+        get { CompensationDisplayMode(rawValue: selectedCompensationDisplayModeRawValue ?? "") ?? .actual }
+        set { selectedCompensationDisplayModeRawValue = newValue.rawValue }
     }
 
     var selectedHomeJobIdentifier: UUID? {

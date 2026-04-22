@@ -720,7 +720,7 @@ private struct JobSettingsForm: View {
         let startText = supplement.startDate.formatted(date: .abbreviated, time: .omitted)
         let endText = supplement.endDate.map { " • Ends \($0.formatted(date: .abbreviated, time: .omitted))" } ?? ""
         let statusText = supplement.taxTreatment == .taxable ? "Taxable" : "Non-taxable"
-        return "\(supplement.kind.title) • \(supplement.frequency.title) • Starts \(startText)\(endText) • \(statusText)"
+        return "\(supplement.kind.title) • \(supplement.frequency.title) • Active from \(startText)\(endText) • \(statusText)"
     }
 
     private var precedenceExplanation: String {
@@ -826,6 +826,7 @@ private struct SupplementEditorView: View {
     @State private var endDate: Date
     @State private var taxTreatment: SupplementTaxTreatment
     @State private var isEnabled: Bool
+    @State private var showingScheduleHelp = false
     @State private var errorText: String?
 
     init(job: JobProfile, editingSupplement: JobSupplement?) {
@@ -883,14 +884,26 @@ private struct SupplementEditorView: View {
             }
 
             Section {
-                DatePicker("Interval anchor date", selection: $anchorDate, displayedComponents: .date)
-                DatePicker("Start date", selection: $startDate, displayedComponents: .date)
+                DatePicker("Repeat cycle starts", selection: $anchorDate, displayedComponents: .date)
+                DatePicker("First active day", selection: $startDate, displayedComponents: .date)
+                SupplementSchedulePreviewCard(
+                    frequency: frequency,
+                    anchorDate: anchorDate,
+                    startDate: startDate,
+                    accent: theme.takeHomeAccent
+                ) {
+                    showingScheduleHelp = true
+                }
+                .listRowInsets(EdgeInsets(top: 10, leading: 0, bottom: 2, trailing: 0))
+                .listRowBackground(Color.clear)
                 Toggle("End on a specific date", isOn: $hasEndDate.animation(.easeInOut(duration: 0.2)))
                 if hasEndDate {
                     DatePicker("End date", selection: $endDate, displayedComponents: .date)
                 }
             } header: {
                 settingsLabel("Schedule", icon: "calendar.badge.clock", color: theme.takeHomeAccent)
+            } footer: {
+                Text("Repeat cycle starts sets the repeating cadence. First active day is when this item actually starts counting.")
             }
 
             Section {
@@ -936,6 +949,15 @@ private struct SupplementEditorView: View {
         .navigationBarTitleDisplayMode(.inline)
         .scrollContentBackground(.hidden)
         .background(MoneyBackground(mode: .takeHome))
+        .sheet(isPresented: $showingScheduleHelp) {
+            SupplementScheduleHelpSheet(
+                frequency: frequency,
+                anchorDate: anchorDate,
+                startDate: startDate
+            )
+            .presentationDetents([.height(500), .medium])
+            .presentationDragIndicator(.visible)
+        }
         .onChange(of: kind) { _, newKind in
             if label.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 label = newKind.suggestedLabel
@@ -1115,6 +1137,356 @@ private struct RateEditorView: View {
         }
 
         return parsedHourlyRate > 0
+    }
+}
+
+private struct SupplementSchedulePreviewCard: View {
+    @Environment(AppTheme.self) private var theme
+
+    let frequency: PayFrequency
+    let anchorDate: Date
+    let startDate: Date
+    let accent: Color
+    let onHelpTapped: () -> Void
+
+    private var calendar: Calendar { .current }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Spacing.md) {
+            HStack(alignment: .top, spacing: Spacing.md) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("How this timing works")
+                        .font(.system(size: 13, weight: .bold, design: .rounded))
+                        .foregroundStyle(.white)
+
+                    Text("The two dates do different jobs: one lines up the repeating cycle and the other turns the supplement on.")
+                        .font(TypeStyle.caption)
+                        .foregroundStyle(theme.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 12)
+
+                Button(action: onHelpTapped) {
+                    Image(systemName: "questionmark.circle.fill")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(accent)
+                        .padding(8)
+                        .background(
+                            Circle()
+                                .fill(Color.white.opacity(0.08))
+                        )
+                        .overlay {
+                            Circle()
+                                .strokeBorder(accent.opacity(0.35), lineWidth: 1)
+                        }
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Explain supplement schedule dates")
+            }
+
+            VStack(alignment: .leading, spacing: 10) {
+                SupplementScheduleInsightRow(
+                    icon: "repeat",
+                    tint: accent,
+                    title: "Repeat cycle starts",
+                    text: "Sets the repeating \(frequency.title.lowercased()) schedule. Right now it is anchored to \(formatted(anchorDate))."
+                )
+
+                SupplementScheduleInsightRow(
+                    icon: "play.fill",
+                    tint: theme.grossAccent,
+                    title: "First active day",
+                    text: "The supplement is ignored before \(formatted(startDate)). This is the first day it counts."
+                )
+            }
+
+            Text(firstIntervalSummary)
+                .font(TypeStyle.caption)
+                .foregroundStyle(.white.opacity(0.92))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(accent.opacity(0.14))
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .strokeBorder(accent.opacity(0.22), lineWidth: 1)
+                }
+        }
+        .padding(16)
+        .glassCard(cornerRadius: CornerRadius.cardSmall, accent: accent, hasShadow: false)
+    }
+
+    private var firstIntervalSummary: String {
+        if startsOnCycleBoundary {
+            return "Because the first active day lands exactly on a cycle boundary, the first \(frequency.title.lowercased()) amount will count in full."
+        }
+
+        return "Because the first active day lands partway through the current cycle, the first \(frequency.title.lowercased()) amount will be prorated."
+    }
+
+    private var startsOnCycleBoundary: Bool {
+        let schedule = PaySchedule(
+            frequency: frequency,
+            anchorDate: calendar.startOfDay(for: anchorDate)
+        )
+        let interval = ProjectionEngine.payPeriodInterval(
+            for: calendar.startOfDay(for: startDate),
+            schedule: schedule,
+            calendar: calendar
+        )
+
+        return calendar.isDate(interval.start, inSameDayAs: startDate)
+    }
+
+    private func formatted(_ date: Date) -> String {
+        calendar.startOfDay(for: date).formatted(date: .abbreviated, time: .omitted)
+    }
+}
+
+private struct SupplementScheduleInsightRow: View {
+    @Environment(AppTheme.self) private var theme
+
+    let icon: String
+    let tint: Color
+    let title: String
+    let text: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(.white)
+                .frame(width: 26, height: 26)
+                .background(
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [tint.opacity(0.95), tint.opacity(0.65)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.16), lineWidth: 0.8)
+                }
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white)
+
+                Text(text)
+                    .font(TypeStyle.caption)
+                    .foregroundStyle(theme.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+}
+
+private struct SupplementScheduleHelpSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(AppTheme.self) private var theme
+
+    let frequency: PayFrequency
+    let anchorDate: Date
+    let startDate: Date
+
+    private var calendar: Calendar { .current }
+
+    var body: some View {
+        ZStack {
+            MoneyBackground(mode: .takeHome)
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: Spacing.lg) {
+                    HStack(alignment: .top, spacing: Spacing.md) {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("How These Dates Work")
+                                .font(TypeStyle.title2)
+                                .foregroundStyle(.white)
+
+                            Text("One date defines the repeating schedule. The other date decides when this supplement actually starts counting.")
+                                .font(TypeStyle.callout)
+                                .foregroundStyle(theme.secondaryText)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+
+                        Spacer(minLength: 12)
+
+                        Button("Done") {
+                            dismiss()
+                        }
+                        .font(.system(size: 14, weight: .bold, design: .rounded))
+                        .foregroundStyle(theme.takeHomeAccent)
+                    }
+
+                    SupplementScheduleDefinitionCard(
+                        accent: theme.takeHomeAccent,
+                        icon: "repeat",
+                        title: "Repeat cycle starts",
+                        description: cycleDescription,
+                        detail: "Current setting: \(formatted(anchorDate))"
+                    )
+
+                    SupplementScheduleDefinitionCard(
+                        accent: theme.grossAccent,
+                        icon: "play.fill",
+                        title: "First active day",
+                        description: startDescription,
+                        detail: "Current setting: \(formatted(startDate))"
+                    )
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("In plain English")
+                            .font(.system(size: 13, weight: .bold, design: .rounded))
+                            .foregroundStyle(theme.takeHomeAccent)
+
+                        Text(plainEnglishSummary)
+                            .font(TypeStyle.callout)
+                            .foregroundStyle(.white.opacity(0.94))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(16)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(
+                        RoundedRectangle(cornerRadius: CornerRadius.cardSmall, style: .continuous)
+                            .fill(theme.takeHomeAccent.opacity(0.12))
+                    )
+                    .overlay {
+                        RoundedRectangle(cornerRadius: CornerRadius.cardSmall, style: .continuous)
+                            .strokeBorder(theme.takeHomeAccent.opacity(0.24), lineWidth: 1)
+                    }
+                }
+                .padding(20)
+                .glassCard(cornerRadius: CornerRadius.cardLarge, accent: theme.takeHomeAccent)
+                .padding(.horizontal, 20)
+                .padding(.vertical, 18)
+            }
+            .scrollIndicators(.hidden)
+        }
+    }
+
+    private var cycleDescription: String {
+        switch frequency {
+        case .weekly:
+            return "This sets where each weekly supplement interval begins. With \(formatted(anchorDate)), a new interval starts every 7 days from that date."
+        case .biweekly:
+            return "This sets where each biweekly supplement interval begins. With \(formatted(anchorDate)), a new interval starts every 14 days from that date."
+        case .monthly:
+            return "This sets the day-of-month that begins each supplement interval. With \(formatted(anchorDate)), each interval runs from day \(anchorDay) to the same day next month."
+        case .semiMonthly:
+            return "This sets how the month is split into two supplement intervals. With \(formatted(anchorDate)), the app uses day \(semiMonthlyBoundaryDay) and day 16 as the two boundaries."
+        }
+    }
+
+    private var startDescription: String {
+        if startsOnCycleBoundary {
+            return "This is the first day the supplement is active. The app ignores the supplement before \(formatted(startDate)), and because this date lands on a cycle boundary, the first interval counts the full amount."
+        }
+
+        return "This is the first day the supplement is active. The app ignores the supplement before \(formatted(startDate)), and because this date lands inside an existing cycle, the first interval is prorated."
+    }
+
+    private var plainEnglishSummary: String {
+        let cadence = frequency.title.lowercased()
+        if startsOnCycleBoundary {
+            return "This supplement repeats on a \(cadence) cycle anchored to \(formatted(anchorDate)). It starts counting on \(formatted(startDate)), which matches the start of a cycle, so the first amount will count in full."
+        }
+
+        return "This supplement repeats on a \(cadence) cycle anchored to \(formatted(anchorDate)). It only starts counting on \(formatted(startDate)), so anything before that date is ignored and the first amount will be prorated."
+    }
+
+    private var startsOnCycleBoundary: Bool {
+        let schedule = PaySchedule(
+            frequency: frequency,
+            anchorDate: calendar.startOfDay(for: anchorDate)
+        )
+        let interval = ProjectionEngine.payPeriodInterval(
+            for: calendar.startOfDay(for: startDate),
+            schedule: schedule,
+            calendar: calendar
+        )
+
+        return calendar.isDate(interval.start, inSameDayAs: startDate)
+    }
+
+    private var anchorDay: Int {
+        calendar.component(.day, from: anchorDate)
+    }
+
+    private var semiMonthlyBoundaryDay: Int {
+        min(anchorDay, 15)
+    }
+
+    private func formatted(_ date: Date) -> String {
+        calendar.startOfDay(for: date).formatted(date: .abbreviated, time: .omitted)
+    }
+}
+
+private struct SupplementScheduleDefinitionCard: View {
+    @Environment(AppTheme.self) private var theme
+
+    let accent: Color
+    let icon: String
+    let title: String
+    let description: String
+    let detail: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 12) {
+                Image(systemName: icon)
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 32, height: 32)
+                    .background(
+                        RoundedRectangle(cornerRadius: 11, style: .continuous)
+                            .fill(
+                                LinearGradient(
+                                    colors: [accent.opacity(0.98), accent.opacity(0.68)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                    )
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 11, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.16), lineWidth: 0.8)
+                    }
+
+                Text(title)
+                    .font(.system(size: 15, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white)
+            }
+
+            Text(description)
+                .font(TypeStyle.callout)
+                .foregroundStyle(theme.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Text(detail)
+                .font(TypeStyle.caption)
+                .foregroundStyle(.white.opacity(0.92))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(accent.opacity(0.14))
+                )
+                .overlay {
+                    Capsule(style: .continuous)
+                        .strokeBorder(accent.opacity(0.24), lineWidth: 1)
+                }
+        }
+        .padding(16)
+        .glassCard(cornerRadius: CornerRadius.cardSmall, accent: accent, hasShadow: false)
     }
 }
 

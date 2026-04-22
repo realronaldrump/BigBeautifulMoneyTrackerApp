@@ -14,6 +14,31 @@ enum EarningsDisplayMode: String, Codable, CaseIterable, Identifiable {
             "Estimated Take Home"
         }
     }
+
+    var compactTitle: String {
+        switch self {
+        case .gross:
+            "Gross"
+        case .takeHome:
+            "Take Home"
+        }
+    }
+}
+
+enum CompensationDisplayMode: String, Codable, CaseIterable, Identifiable {
+    case actual
+    case effective
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .actual:
+            "True"
+        case .effective:
+            "Effective"
+        }
+    }
 }
 
 enum FilingStatus: String, Codable, CaseIterable, Identifiable {
@@ -279,6 +304,8 @@ struct ActiveJobSnapshot: Identifiable, Equatable {
     var currentBreakdown: EarningsBreakdown
     var currentGross: Double
     var currentTakeHome: Double
+    var currentEffectiveGross: Double
+    var currentEffectiveTakeHome: Double
 }
 
 struct JobSupplementAllocation: Identifiable, Equatable {
@@ -326,6 +353,7 @@ struct SummaryRollup: Equatable {
     var completedShiftCount: Int
     var activeGross: Double
     var activeTakeHome: Double
+    var activeEffective: EffectiveCompensationSnapshot
     var payPeriodAggregation: PayPeriodAggregationState
     var payPeriodGross: Double
     var payPeriodTakeHome: Double
@@ -372,17 +400,141 @@ struct SummarySnapshot: Equatable {
 struct DashboardSnapshot: Equatable {
     var currentBreakdown: EarningsBreakdown?
     var activeJobs: [ActiveJobSnapshot]
+    var hasSupplementConfiguration: Bool
     var currentGross: Double
     var currentTakeHome: Double
+    var currentEffectiveGross: Double
+    var currentEffectiveTakeHome: Double
     var payPeriodAggregation: PayPeriodAggregationState
     var payPeriodGross: Double
     var payPeriodTakeHome: Double
+    var payPeriodEffectiveGross: Double
+    var payPeriodEffectiveTakeHome: Double
     var payPeriodHours: Double
     var payPeriodNightPremium: Double
     var allTimeGross: Double
     var allTimeTakeHome: Double
+    var allTimeEffectiveGross: Double
+    var allTimeEffectiveTakeHome: Double
     var projectedPaycheckGross: Double
     var projectedPaycheckTakeHome: Double
+    var projectedPaycheckEffectiveGross: Double
+    var projectedPaycheckEffectiveTakeHome: Double
     var projectedConfidenceLabel: String
     var allTimeHours: Double
+}
+
+private let compensationRateEpsilon = 0.000_001
+
+extension ActiveJobSnapshot {
+    func displayAmount(
+        for mode: EarningsDisplayMode,
+        compensationMode: CompensationDisplayMode
+    ) -> Double {
+        switch (compensationMode, mode) {
+        case (.actual, .gross):
+            currentGross
+        case (.actual, .takeHome):
+            currentTakeHome
+        case (.effective, .gross):
+            currentEffectiveGross
+        case (.effective, .takeHome):
+            currentEffectiveTakeHome
+        }
+    }
+
+    func displayRate(
+        for mode: EarningsDisplayMode,
+        compensationMode: CompensationDisplayMode
+    ) -> Double {
+        guard currentBreakdown.totalHours > compensationRateEpsilon else {
+            return currentBreakdown.effectiveRate
+        }
+
+        return displayAmount(for: mode, compensationMode: compensationMode) / currentBreakdown.totalHours
+    }
+}
+
+extension DashboardSnapshot {
+    var hasSelectableEffectiveCompensation: Bool {
+        hasSupplementConfiguration
+    }
+
+    func displayAmount(
+        for mode: EarningsDisplayMode,
+        compensationMode: CompensationDisplayMode
+    ) -> Double {
+        switch (compensationMode, mode) {
+        case (.actual, .gross):
+            currentGross
+        case (.actual, .takeHome):
+            currentTakeHome
+        case (.effective, .gross):
+            currentEffectiveGross
+        case (.effective, .takeHome):
+            currentEffectiveTakeHome
+        }
+    }
+
+    func currentDisplayRate(
+        for mode: EarningsDisplayMode,
+        compensationMode: CompensationDisplayMode
+    ) -> Double? {
+        guard let currentBreakdown else {
+            return nil
+        }
+        guard currentBreakdown.totalHours > compensationRateEpsilon else {
+            return currentBreakdown.effectiveRate
+        }
+
+        return displayAmount(for: mode, compensationMode: compensationMode) / currentBreakdown.totalHours
+    }
+
+    func payPeriodAmount(
+        for mode: EarningsDisplayMode,
+        compensationMode: CompensationDisplayMode
+    ) -> Double {
+        switch (compensationMode, mode) {
+        case (.actual, .gross):
+            payPeriodGross
+        case (.actual, .takeHome):
+            payPeriodTakeHome
+        case (.effective, .gross):
+            payPeriodEffectiveGross
+        case (.effective, .takeHome):
+            payPeriodEffectiveTakeHome
+        }
+    }
+
+    func projectedPaycheckAmount(
+        for mode: EarningsDisplayMode,
+        compensationMode: CompensationDisplayMode
+    ) -> Double {
+        switch (compensationMode, mode) {
+        case (.actual, .gross):
+            projectedPaycheckGross
+        case (.actual, .takeHome):
+            projectedPaycheckTakeHome
+        case (.effective, .gross):
+            projectedPaycheckEffectiveGross
+        case (.effective, .takeHome):
+            projectedPaycheckEffectiveTakeHome
+        }
+    }
+
+    func allTimeAmount(
+        for mode: EarningsDisplayMode,
+        compensationMode: CompensationDisplayMode
+    ) -> Double {
+        switch (compensationMode, mode) {
+        case (.actual, .gross):
+            allTimeGross
+        case (.actual, .takeHome):
+            allTimeTakeHome
+        case (.effective, .gross):
+            allTimeEffectiveGross
+        case (.effective, .takeHome):
+            allTimeEffectiveTakeHome
+        }
+    }
 }

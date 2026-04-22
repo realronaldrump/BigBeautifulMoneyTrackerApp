@@ -5,6 +5,7 @@ struct SummaryDrawer: View {
 
     let snapshot: DashboardSnapshot
     let mode: EarningsDisplayMode
+    let compensationMode: CompensationDisplayMode
 
     @State private var isExpanded = false
 
@@ -34,7 +35,7 @@ struct SummaryDrawer: View {
                     )
                     MetricTile(
                         title: "All Time",
-                        value: display(snapshot.allTimeGross, takeHome: snapshot.allTimeTakeHome),
+                        value: display(snapshot.allTimeAmount(for: mode, compensationMode: compensationMode)),
                         accent: theme.accent(for: mode)
                     )
 
@@ -75,13 +76,12 @@ struct SummaryDrawer: View {
         }
     }
 
-    private func display(_ gross: Double, takeHome: Double) -> String {
-        let amount = mode == .gross ? gross : takeHome
-        return amount.formatted(.currency(code: "USD"))
+    private func display(_ amount: Double) -> String {
+        amount.formatted(.currency(code: "USD"))
     }
 
     private var payPeriodValue: String {
-        payPeriodMetric(display(snapshot.payPeriodGross, takeHome: snapshot.payPeriodTakeHome))
+        payPeriodMetric(display(snapshot.payPeriodAmount(for: mode, compensationMode: compensationMode)))
     }
 
     private var projectedValue: String {
@@ -89,7 +89,7 @@ struct SummaryDrawer: View {
             return "Varies by job\nSee Summary"
         }
 
-        return display(snapshot.projectedPaycheckGross, takeHome: snapshot.projectedPaycheckTakeHome)
+        return display(snapshot.projectedPaycheckAmount(for: mode, compensationMode: compensationMode))
             + "\n"
             + snapshot.projectedConfidenceLabel
     }

@@ -16,20 +16,28 @@ enum ShiftLiveActivitySyncAction: Equatable {
 enum LiveActivityManager {
     static let staleInterval: TimeInterval = 2 * 60
 
-    static func sync(for snapshot: DashboardSnapshot, mode: EarningsDisplayMode) {
-        perform(makeSyncAction(for: snapshot, mode: mode))
+    static func sync(
+        for snapshot: DashboardSnapshot,
+        mode: EarningsDisplayMode,
+        compensationMode: CompensationDisplayMode
+    ) {
+        perform(makeSyncAction(for: snapshot, mode: mode, compensationMode: compensationMode))
     }
 
     static func makeSyncAction(
         for snapshot: DashboardSnapshot,
         mode: EarningsDisplayMode,
+        compensationMode: CompensationDisplayMode,
         now: Date = .now
     ) -> ShiftLiveActivitySyncAction {
+        let syncedAmount = snapshot.displayAmount(for: mode, compensationMode: compensationMode)
+
         guard !snapshot.activeJobs.isEmpty else {
             return .end(
                 makeContentState(
                     mode: mode,
-                    syncedAmount: syncedAmount(grossAmount: snapshot.currentGross, takeHomeAmount: snapshot.currentTakeHome, mode: mode),
+                    compensationMode: compensationMode,
+                    syncedAmount: syncedAmount,
                     currentRate: 0,
                     startDate: now,
                     lastSyncedDate: now
@@ -42,13 +50,9 @@ enum LiveActivityManager {
             : "\(snapshot.activeJobs.count) Jobs Active"
         let contentState = makeContentState(
             mode: mode,
-            syncedAmount: syncedAmount(grossAmount: snapshot.currentGross, takeHomeAmount: snapshot.currentTakeHome, mode: mode),
-            currentRate: displayRate(
-                grossAmount: snapshot.currentGross,
-                takeHomeAmount: snapshot.currentTakeHome,
-                grossRate: snapshot.currentBreakdown?.effectiveRate ?? 0,
-                mode: mode
-            ),
+            compensationMode: compensationMode,
+            syncedAmount: syncedAmount,
+            currentRate: snapshot.currentDisplayRate(for: mode, compensationMode: compensationMode) ?? 0,
             startDate: snapshot.activeJobs.map(\.startDate).min() ?? now,
             lastSyncedDate: now
         )
@@ -65,21 +69,17 @@ enum LiveActivityManager {
     static func startOrUpdate(
         title: String,
         startDate: Date,
-        grossAmount: Double,
-        takeHomeAmount: Double,
-        grossRate: Double,
+        syncedAmount: Double,
+        currentRate: Double,
         mode: EarningsDisplayMode,
+        compensationMode: CompensationDisplayMode,
         now: Date = .now
     ) {
         let contentState = makeContentState(
             mode: mode,
-            syncedAmount: syncedAmount(grossAmount: grossAmount, takeHomeAmount: takeHomeAmount, mode: mode),
-            currentRate: displayRate(
-                grossAmount: grossAmount,
-                takeHomeAmount: takeHomeAmount,
-                grossRate: grossRate,
-                mode: mode
-            ),
+            compensationMode: compensationMode,
+            syncedAmount: syncedAmount,
+            currentRate: currentRate,
             startDate: startDate,
             lastSyncedDate: now
         )
@@ -107,9 +107,15 @@ enum LiveActivityManager {
         }
     }
 
-    static func end(finalAmount: Double, mode: EarningsDisplayMode, now: Date = .now) {
+    static func end(
+        finalAmount: Double,
+        mode: EarningsDisplayMode,
+        compensationMode: CompensationDisplayMode,
+        now: Date = .now
+    ) {
         let contentState = makeContentState(
             mode: mode,
+            compensationMode: compensationMode,
             syncedAmount: finalAmount,
             currentRate: 0,
             startDate: now,
@@ -140,6 +146,7 @@ enum LiveActivityManager {
 
     private static func makeContentState(
         mode: EarningsDisplayMode,
+        compensationMode: CompensationDisplayMode,
         syncedAmount: Double,
         currentRate: Double,
         startDate: Date,
@@ -147,30 +154,11 @@ enum LiveActivityManager {
     ) -> ShiftActivityAttributes.ContentState {
         ShiftActivityAttributes.ContentState(
             mode: mode,
+            compensationMode: compensationMode,
             syncedAmount: syncedAmount,
             currentRate: currentRate,
             startDate: startDate,
             lastSyncedDate: lastSyncedDate
         )
-    }
-
-    private static func syncedAmount(
-        grossAmount: Double,
-        takeHomeAmount: Double,
-        mode: EarningsDisplayMode
-    ) -> Double {
-        mode == .gross ? grossAmount : takeHomeAmount
-    }
-
-    private static func displayRate(
-        grossAmount: Double,
-        takeHomeAmount: Double,
-        grossRate: Double,
-        mode: EarningsDisplayMode
-    ) -> Double {
-        guard mode == .takeHome else { return grossRate }
-        guard grossAmount > 0, takeHomeAmount >= 0 else { return grossRate }
-
-        return grossRate * (takeHomeAmount / grossAmount)
     }
 }

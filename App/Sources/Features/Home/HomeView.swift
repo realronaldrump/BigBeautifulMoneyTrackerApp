@@ -108,13 +108,39 @@ private struct HomeDashboardSceneView: View {
 
     @State private var selectedStartJobIdentifiers: Set<UUID> = []
     @Namespace private var modeToggleNamespace
+    @Namespace private var compensationModeToggleNamespace
 
     private var snapshot: DashboardSnapshot {
         (try? ShiftController.dashboardSnapshot(in: modelContext, at: contextDate)) ?? .empty
     }
 
+    private var selectedCompensationMode: CompensationDisplayMode {
+        snapshot.hasSelectableEffectiveCompensation
+            ? preferences.selectedCompensationDisplayMode
+            : .actual
+    }
+
     private var displayedAmount: Double {
-        preferences.selectedDisplayMode == .gross ? snapshot.currentGross : snapshot.currentTakeHome
+        snapshot.displayAmount(
+            for: preferences.selectedDisplayMode,
+            compensationMode: selectedCompensationMode
+        )
+    }
+
+    private var displayedRate: Double? {
+        snapshot.currentDisplayRate(
+            for: preferences.selectedDisplayMode,
+            compensationMode: selectedCompensationMode
+        )
+    }
+
+    private var activeTickerLabel: String {
+        "\(selectedCompensationMode.title) \(preferences.selectedDisplayMode.compactTitle)".uppercased()
+    }
+
+    private var activeRateLabel: String {
+        let basisLabel = selectedCompensationMode == .effective ? "effective" : "tracked"
+        return snapshot.activeJobs.count > 1 ? "\(basisLabel) blended" : basisLabel
     }
 
     private var inactiveJobs: [JobProfile] {
@@ -126,7 +152,7 @@ private struct HomeDashboardSceneView: View {
     private var activitySyncKey: String {
         let activeIdentifier = snapshot.activeJobs.map(\.id).map(\.uuidString).joined(separator: ",")
         let minute = Calendar.current.component(.minute, from: contextDate)
-        return "\(activeIdentifier)-\(minute)-\(preferences.selectedDisplayMode.rawValue)"
+        return "\(activeIdentifier)-\(minute)-\(preferences.selectedDisplayMode.rawValue)-\(selectedCompensationMode.rawValue)"
     }
 
     private var automationKey: String {
@@ -231,6 +257,38 @@ private struct HomeDashboardSceneView: View {
         .glassCard(cornerRadius: 100, accent: theme.accent(for: currentMode), hasShadow: false)
     }
 
+    private var compensationModeToggle: some View {
+        let currentMode = selectedCompensationMode
+        return HStack(spacing: 0) {
+            ForEach(CompensationDisplayMode.allCases) { mode in
+                Button {
+                    withAnimation(.spring(response: 0.38, dampingFraction: 0.78)) {
+                        preferences.selectedCompensationDisplayMode = mode
+                    }
+                    try? modelContext.save()
+                    HapticManager.shared.fire(.selection, enabled: preferences.hapticsEnabled)
+                } label: {
+                    Text(mode.title)
+                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                        .foregroundStyle(mode == currentMode ? Color.black : Color.white.opacity(0.7))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background {
+                            if mode == currentMode {
+                                Capsule()
+                                    .fill(theme.accent(for: preferences.selectedDisplayMode))
+                                    .shadow(color: theme.accent(for: preferences.selectedDisplayMode).opacity(0.28), radius: 10, y: 3)
+                                    .matchedGeometryEffect(id: "compensationModeTogglePill", in: compensationModeToggleNamespace)
+                            }
+                        }
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(4)
+        .glassCard(cornerRadius: 100, accent: theme.accent(for: preferences.selectedDisplayMode), hasShadow: false)
+    }
+
     private var restingContent: some View {
         VStack(spacing: 26) {
             Spacer(minLength: 12)
@@ -285,7 +343,7 @@ private struct HomeDashboardSceneView: View {
                 PulseAura(accent: theme.accent(for: preferences.selectedDisplayMode))
 
                 VStack(spacing: 18) {
-                    Text(preferences.selectedDisplayMode.title.uppercased())
+                    Text(activeTickerLabel)
                         .font(TypeStyle.caption)
                         .tracking(1.8)
                         .foregroundStyle(theme.secondaryText)
@@ -301,9 +359,8 @@ private struct HomeDashboardSceneView: View {
                     }
 
                     VStack(spacing: Spacing.sm) {
-                        if let breakdown = snapshot.currentBreakdown {
-                            let rateLabel = snapshot.activeJobs.count > 1 ? "blended" : "effective"
-                            Text("\(breakdown.effectiveRate.formatted(.currency(code: "USD")))/hr \(rateLabel)")
+                        if let displayedRate {
+                            Text("\(displayedRate.formatted(.currency(code: "USD")))/hr \(activeRateLabel)")
                                 .font(TypeStyle.title3)
                                 .foregroundStyle(Color.white)
                         }
@@ -317,7 +374,11 @@ private struct HomeDashboardSceneView: View {
             .padding(.top, Spacing.sm)
 
             activeJobsCard
-            SummaryDrawer(snapshot: snapshot, mode: preferences.selectedDisplayMode)
+            SummaryDrawer(
+                snapshot: snapshot,
+                mode: preferences.selectedDisplayMode,
+                compensationMode: selectedCompensationMode
+            )
 
             if !inactiveJobs.isEmpty {
                 addJobMenu
@@ -347,6 +408,19 @@ private struct HomeDashboardSceneView: View {
                 Text("Tap a job to adjust its timer")
                     .font(.system(size: 12, weight: .medium, design: .rounded))
                     .foregroundStyle(theme.secondaryText)
+            }
+
+            if snapshot.hasSelectableEffectiveCompensation {
+                VStack(alignment: .leading, spacing: 8) {
+                    compensationModeToggle
+                    Text(
+                        selectedCompensationMode == .effective
+                            ? "Effective mode adds prorated supplemental pay for the live ticker."
+                            : "True mode shows only tracked shift earnings."
+                    )
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .foregroundStyle(theme.secondaryText)
+                }
             }
 
             if snapshot.activeJobs.count == 1 {
@@ -384,9 +458,12 @@ private struct HomeDashboardSceneView: View {
                         Spacer(minLength: 12)
                         
                         Text(
-                            preferences.selectedDisplayMode == .gross
-                            ? activeJob.currentGross.formatted(.currency(code: "USD"))
-                            : activeJob.currentTakeHome.formatted(.currency(code: "USD"))
+                            activeJob
+                                .displayAmount(
+                                    for: preferences.selectedDisplayMode,
+                                    compensationMode: selectedCompensationMode
+                                )
+                                .formatted(.currency(code: "USD"))
                         )
                         .font(TypeStyle.title2)
                         .fontWeight(.bold)
@@ -417,9 +494,12 @@ private struct HomeDashboardSceneView: View {
                                 }
 
                                 Text(
-                                    preferences.selectedDisplayMode == .gross
-                                    ? activeJob.currentGross.formatted(.currency(code: "USD"))
-                                    : activeJob.currentTakeHome.formatted(.currency(code: "USD"))
+                                    activeJob
+                                        .displayAmount(
+                                            for: preferences.selectedDisplayMode,
+                                            compensationMode: selectedCompensationMode
+                                        )
+                                        .formatted(.currency(code: "USD"))
                                 )
                                 .font(TypeStyle.title2)
                                 .fontWeight(.bold)
@@ -635,13 +715,18 @@ private struct HomeDashboardSceneView: View {
 
     private func endActiveJobs() {
         do {
+            let finalAmount = snapshot.displayAmount(
+                for: preferences.selectedDisplayMode,
+                compensationMode: selectedCompensationMode
+            )
             let endedShifts = try ShiftController.endAllShifts(in: modelContext)
-            let finalAmount = preferences.selectedDisplayMode == .gross
-                ? endedShifts.reduce(0) { $0 + $1.grossEarnings }
-                : snapshot.currentTakeHome
 
             HapticManager.shared.fire(.success, enabled: preferences.hapticsEnabled)
-            LiveActivityManager.end(finalAmount: finalAmount, mode: preferences.selectedDisplayMode)
+            LiveActivityManager.end(
+                finalAmount: finalAmount,
+                mode: preferences.selectedDisplayMode,
+                compensationMode: selectedCompensationMode
+            )
             Task { await ReminderManager.shared.cancelActiveShiftNotifications() }
 
             if endedShifts.count == 1,
@@ -691,14 +776,23 @@ private struct HomeDashboardSceneView: View {
 
     private func syncLiveActivity(for dashboardSnapshot: DashboardSnapshot) {
         guard preferences.liveActivitiesEnabled else {
-            let finalAmount = preferences.selectedDisplayMode == .gross
-                ? dashboardSnapshot.currentGross
-                : dashboardSnapshot.currentTakeHome
-            LiveActivityManager.end(finalAmount: finalAmount, mode: preferences.selectedDisplayMode)
+            let finalAmount = dashboardSnapshot.displayAmount(
+                for: preferences.selectedDisplayMode,
+                compensationMode: selectedCompensationMode
+            )
+            LiveActivityManager.end(
+                finalAmount: finalAmount,
+                mode: preferences.selectedDisplayMode,
+                compensationMode: selectedCompensationMode
+            )
             return
         }
 
-        LiveActivityManager.sync(for: dashboardSnapshot, mode: preferences.selectedDisplayMode)
+        LiveActivityManager.sync(
+            for: dashboardSnapshot,
+            mode: preferences.selectedDisplayMode,
+            compensationMode: selectedCompensationMode
+        )
     }
 
     private func handleShiftAutomation() async {
@@ -904,17 +998,26 @@ private extension DashboardSnapshot {
     static let empty = DashboardSnapshot(
         currentBreakdown: nil,
         activeJobs: [],
+        hasSupplementConfiguration: false,
         currentGross: 0,
         currentTakeHome: 0,
+        currentEffectiveGross: 0,
+        currentEffectiveTakeHome: 0,
         payPeriodAggregation: .unified,
         payPeriodGross: 0,
         payPeriodTakeHome: 0,
+        payPeriodEffectiveGross: 0,
+        payPeriodEffectiveTakeHome: 0,
         payPeriodHours: 0,
         payPeriodNightPremium: 0,
         allTimeGross: 0,
         allTimeTakeHome: 0,
+        allTimeEffectiveGross: 0,
+        allTimeEffectiveTakeHome: 0,
         projectedPaycheckGross: 0,
         projectedPaycheckTakeHome: 0,
+        projectedPaycheckEffectiveGross: 0,
+        projectedPaycheckEffectiveTakeHome: 0,
         projectedConfidenceLabel: "Earned so far",
         allTimeHours: 0
     )
