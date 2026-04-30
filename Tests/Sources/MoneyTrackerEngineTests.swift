@@ -120,6 +120,64 @@ final class MoneyTrackerEngineTests: XCTestCase {
         XCTAssertLessThan(estimate.currentShiftNetEstimate, 200)
     }
 
+    func testTaxEstimatorMatchesActualPaystubWithPayrollRules() {
+        let taxProfile = TaxProfile(
+            filingStatus: .single,
+            usesStandardDeduction: true,
+            annualPretaxInsurance: 0,
+            annualRetirementContribution: 0,
+            includesSocialSecurityWithholding: false,
+            coloradoAnnualWithholdingAllowance: 0,
+            roundsColoradoWithholdingToWholeDollars: true,
+            extraFederalWithholdingPerPeriod: 0,
+            extraStateWithholdingPerPeriod: 0,
+            expectedWeeklyHours: 40
+        )
+        let grossPay = 2_688.83
+        let estimate = TaxEstimator.estimate(
+            currentGross: grossPay,
+            annualizedGrossIncome: TaxEstimator.paycheckAnnualizedGross(
+                periodGross: grossPay,
+                payFrequency: .biweekly
+            ),
+            annualExtraWithholding: 0,
+            taxProfile: taxProfile,
+            payFrequency: .biweekly
+        )
+
+        XCTAssertEqual(TaxEstimator.estimatedTakeHome(for: grossPay, estimate: estimate), 2_279.91, accuracy: 0.01)
+        XCTAssertEqual(estimate.annualizedGrossIncome, grossPay * 26, accuracy: 0.001)
+    }
+
+    func testSocialSecurityWithholdingCanBeDisabled() {
+        let grossPay = 2_688.83
+        let annualizedGross = TaxEstimator.paycheckAnnualizedGross(periodGross: grossPay, payFrequency: .biweekly)
+        let enabledProfile = TaxProfile(includesSocialSecurityWithholding: true)
+        let disabledProfile = TaxProfile(includesSocialSecurityWithholding: false)
+
+        let enabled = TaxEstimator.estimate(
+            currentGross: grossPay,
+            annualizedGrossIncome: annualizedGross,
+            annualExtraWithholding: 0,
+            taxProfile: enabledProfile,
+            payFrequency: .biweekly
+        )
+        let disabled = TaxEstimator.estimate(
+            currentGross: grossPay,
+            annualizedGrossIncome: annualizedGross,
+            annualExtraWithholding: 0,
+            taxProfile: disabledProfile,
+            payFrequency: .biweekly
+        )
+
+        XCTAssertEqual(
+            TaxEstimator.estimatedTakeHome(for: grossPay, estimate: disabled)
+                - TaxEstimator.estimatedTakeHome(for: grossPay, estimate: enabled),
+            grossPay * 0.062,
+            accuracy: 0.01
+        )
+    }
+
     func testLocalizedNumericInputAcceptsAlternateDecimalSeparators() throws {
         let frenchLocaleValue = try XCTUnwrap(
             LocalizedNumericInput.decimalValue(from: "33.29", locale: Locale(identifier: "fr_FR"))
@@ -698,7 +756,8 @@ final class MoneyTrackerEngineTests: XCTestCase {
             currentGross: 160,
             annualizedGrossIncome: combinedAnnualizedGrossIncome,
             annualExtraWithholding: TaxEstimator.annualExtraWithholding(payFrequency: .biweekly, taxProfile: taxProfile),
-            taxProfile: taxProfile
+            taxProfile: taxProfile,
+            payFrequency: .biweekly
         )
 
         XCTAssertEqual(summary.combined.activeTakeHome, combinedEstimate.currentShiftNetEstimate, accuracy: 0.01)
@@ -1018,6 +1077,61 @@ final class MoneyTrackerEngineTests: XCTestCase {
         XCTAssertLessThan(summary.estimatedTakeHome, summary.grossEarnings)
     }
 
+    func testClosedPayPeriodUsesActualPaycheckGrossForWithholding() throws {
+        let job = JobProfile(name: "Main Job")
+        let schedule = PaySchedule(
+            job: job,
+            frequency: .biweekly,
+            anchorDate: makeDate(year: 2026, month: 4, day: 5, hour: 0)
+        )
+        let payRate = PayRateSchedule(job: job, effectiveDate: makeDate(year: 2026, month: 1, day: 1, hour: 0), hourlyRate: 33.29)
+        let shift = ShiftRecord(
+            job: job,
+            startDate: makeDate(year: 2026, month: 4, day: 7, hour: 8),
+            endDate: makeDate(year: 2026, month: 4, day: 7, hour: 16),
+            breakdown: EarningsBreakdown(
+                totalHours: 80,
+                grossEarnings: 2_688.83,
+                baseEarnings: 2_663.20,
+                nightPremiumEarnings: 25.63,
+                overtimePremiumEarnings: 0,
+                regularHours: 69,
+                nightHours: 11,
+                overtimeHours: 0,
+                effectiveRate: 33.610375
+            )
+        )
+        let taxProfile = TaxProfile(
+            filingStatus: .single,
+            usesStandardDeduction: true,
+            includesSocialSecurityWithholding: false,
+            coloradoAnnualWithholdingAllowance: 0,
+            roundsColoradoWithholdingToWholeDollars: true,
+            expectedWeeklyHours: 40
+        )
+
+        let snapshot = PayPeriodService.archiveSnapshot(
+            asOf: makeDate(year: 2026, month: 4, day: 20, hour: 12),
+            jobs: [job],
+            completedShifts: [shift],
+            paySchedules: [schedule],
+            payRates: [payRate],
+            nightRules: [],
+            overtimeRules: [],
+            templates: [],
+            taxProfile: taxProfile,
+            calendar: calendar
+        )
+
+        let summary = try XCTUnwrap(
+            snapshot.sections.first?.summaries.first {
+                $0.interval.start == makeDate(year: 2026, month: 4, day: 5, hour: 0)
+            }
+        )
+        XCTAssertEqual(summary.annualizedGrossIncome, 2_688.83 * 26, accuracy: 0.001)
+        XCTAssertEqual(summary.estimatedTakeHome, 2_279.91, accuracy: 0.01)
+    }
+
     func testSupplementAllocationSupportsAllFrequencies() {
         let job = JobProfile(name: "Main Job")
 
@@ -1182,7 +1296,8 @@ final class MoneyTrackerEngineTests: XCTestCase {
                 payFrequency: .weekly,
                 taxProfile: TaxProfile()
             ),
-            taxProfile: TaxProfile()
+            taxProfile: TaxProfile(),
+            payFrequency: .weekly
         )
 
         XCTAssertEqual(summary.supplementAllocations.count, 3)

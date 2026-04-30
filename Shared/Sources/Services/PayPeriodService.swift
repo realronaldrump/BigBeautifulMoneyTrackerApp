@@ -309,14 +309,9 @@ enum PayPeriodService {
             interval: interval,
             calendar: calendar
         )
-        let annualizedGrossIncome = TaxEstimator.annualizedGrossIncome(
-            currentGross: totals.gross,
-            yearToDateGrossExcludingCurrentShift: yearToDateGrossBeforePeriod,
-            currentHourlyRate: currentRate,
-            templates: configuration.templates,
-            today: periodEndForEstimate,
-            calendar: calendar,
-            fallbackExpectedWeeklyHours: taxProfile.expectedWeeklyHours
+        let annualizedGrossIncome = TaxEstimator.paycheckAnnualizedGross(
+            periodGross: totals.gross,
+            payFrequency: configuration.paySchedule.frequency
         )
         let annualizedTaxableSupplementIncome = SupplementAllocationService.annualizedTaxableIncome(
             asOf: periodEndForEstimate,
@@ -330,7 +325,8 @@ enum PayPeriodService {
                 payFrequency: configuration.paySchedule.frequency,
                 taxProfile: taxProfile
             ),
-            taxProfile: taxProfile
+            taxProfile: taxProfile,
+            payFrequency: configuration.paySchedule.frequency
         )
         let effectiveEstimate = TaxEstimator.estimate(
             currentGross: 0,
@@ -340,7 +336,8 @@ enum PayPeriodService {
                 payFrequency: configuration.paySchedule.frequency,
                 taxProfile: taxProfile
             ),
-            taxProfile: taxProfile
+            taxProfile: taxProfile,
+            payFrequency: configuration.paySchedule.frequency
         )
         let shifts = preTaxShifts.map { shift in
             var resolved = shift
@@ -546,7 +543,8 @@ enum PayPeriodService {
                 payFrequency: reference.frequency,
                 taxProfile: taxProfile
             ),
-            taxProfile: taxProfile
+            taxProfile: taxProfile,
+            payFrequency: reference.frequency
         )
         let effectiveEstimate = TaxEstimator.estimate(
             currentGross: 0,
@@ -556,7 +554,8 @@ enum PayPeriodService {
                 payFrequency: reference.frequency,
                 taxProfile: taxProfile
             ),
-            taxProfile: taxProfile
+            taxProfile: taxProfile,
+            payFrequency: reference.frequency
         )
         let resolvedShifts = shifts.map { shift in
             var resolved = shift

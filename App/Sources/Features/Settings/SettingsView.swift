@@ -131,30 +131,7 @@ private struct SettingsContent: View {
                     Text("Each job keeps its own pay history, shift rules, and templates.")
                 }
 
-                Section {
-                    Text("This stays an estimate, not an exact paycheck deposit.")
-                        .font(.footnote)
-                        .foregroundStyle(theme.secondaryText)
-
-                    Picker("I file as", selection: $taxProfile.filingStatusRawValue) {
-                        ForEach(FilingStatus.allCases) { status in
-                            Text(status.title).tag(status.rawValue)
-                        }
-                    }
-                    Toggle("Use the regular deduction most people with one job use", isOn: $taxProfile.usesStandardDeduction)
-                    TextField("Insurance taken out over a year", value: $taxProfile.annualPretaxInsurance, format: .currency(code: "USD"))
-                        .keyboardType(.decimalPad)
-                    TextField("Retirement taken out over a year", value: $taxProfile.annualRetirementContribution, format: .currency(code: "USD"))
-                        .keyboardType(.decimalPad)
-
-                    DisclosureGroup("Advanced tax tweaks") {
-                        TextField("Extra federal withholding per paycheck", value: $taxProfile.extraFederalWithholdingPerPeriod, format: .currency(code: "USD"))
-                        TextField("Extra state withholding per paycheck", value: $taxProfile.extraStateWithholdingPerPeriod, format: .currency(code: "USD"))
-                        TextField("Typical hours in a week", value: $taxProfile.expectedWeeklyHours, format: .number.precision(.fractionLength(1)))
-                    }
-                } header: {
-                    settingsLabel("Take-Home Estimate", icon: "banknote.fill", color: theme.takeHomeAccent)
-                }
+                TakeHomeEstimateSettings(taxProfile: taxProfile)
 
                 Section {
                     Toggle("Schedule reminders", isOn: $preferences.remindersEnabled)
@@ -265,6 +242,360 @@ private struct SettingsContent: View {
         } catch {
             deleteErrorText = error.localizedDescription
         }
+    }
+}
+
+private struct TakeHomeEstimateSettings: View {
+    @Environment(AppTheme.self) private var theme
+
+    @Bindable var taxProfile: TaxProfile
+
+    private var annualDeductionTotal: Double {
+        taxProfile.annualPretaxInsurance + taxProfile.annualRetirementContribution
+    }
+
+    private var perCheckAdjustmentTotal: Double {
+        taxProfile.extraFederalWithholdingPerPeriod + taxProfile.extraStateWithholdingPerPeriod
+    }
+
+    var body: some View {
+        Section {
+            TakeHomeEstimateOverview(
+                annualDeductionTotal: annualDeductionTotal,
+                perCheckAdjustmentTotal: perCheckAdjustmentTotal,
+                expectedWeeklyHours: taxProfile.expectedWeeklyHours
+            )
+            .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
+            .listRowBackground(Color.clear)
+
+            Picker("Filing status", selection: $taxProfile.filingStatusRawValue) {
+                ForEach(FilingStatus.allCases) { status in
+                    Text(status.title).tag(status.rawValue)
+                }
+            }
+
+            Toggle(isOn: $taxProfile.usesStandardDeduction) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Apply standard deduction")
+                    Text("Usually on for one-job paycheck estimates.")
+                        .font(.footnote)
+                        .foregroundStyle(theme.secondaryText)
+                }
+            }
+        } header: {
+            settingsLabel("Take-Home Estimate", icon: "banknote.fill", color: theme.takeHomeAccent)
+        }
+
+        Section {
+            TaxSettingInputRow(
+                icon: "clock.fill",
+                tint: theme.grossAccent,
+                title: "Typical weekly hours",
+                detail: "Used for live projections before a paycheck has enough actual gross pay.",
+                value: $taxProfile.expectedWeeklyHours,
+                prefix: nil,
+                suffix: "hrs",
+                fractionDigits: 1,
+                allowsNegative: false
+            )
+        } header: {
+            settingsLabel("Income Projection", icon: "calendar.badge.clock", color: theme.grossAccent)
+        }
+
+        Section {
+            Toggle(isOn: $taxProfile.includesSocialSecurityWithholding) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Withhold Social Security / OASDI")
+                    Text("Turn this off if your paystub has Medicare but no Social Security deduction.")
+                        .font(.footnote)
+                        .foregroundStyle(theme.secondaryText)
+                }
+            }
+
+            TaxSettingInputRow(
+                icon: "map.fill",
+                tint: theme.roseAccent,
+                title: "Colorado annual allowance",
+                detail: "Matches DR 0004 line 2. Use 0 if payroll withholds Colorado from full taxable wages.",
+                value: $taxProfile.coloradoAnnualWithholdingAllowance,
+                prefix: "$",
+                suffix: "per yr",
+                fractionDigits: 2,
+                allowsNegative: false
+            )
+
+            Toggle(isOn: $taxProfile.roundsColoradoWithholdingToWholeDollars) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Round Colorado withholding")
+                    Text("Some payroll systems round state withholding to whole dollars on each paycheck.")
+                        .font(.footnote)
+                        .foregroundStyle(theme.secondaryText)
+                }
+            }
+        } header: {
+            settingsLabel("Payroll Rules", icon: "checklist", color: Color(red: 0.36, green: 0.53, blue: 0.96))
+        }
+
+        Section {
+            TaxSettingInputRow(
+                icon: "cross.case.fill",
+                tint: Color(red: 0.30, green: 0.72, blue: 0.68),
+                title: "Pre-tax insurance",
+                detail: "Annual amount taken out before income tax, like medical, dental, or vision premiums.",
+                value: $taxProfile.annualPretaxInsurance,
+                prefix: "$",
+                suffix: "per yr",
+                fractionDigits: 2,
+                allowsNegative: false
+            )
+
+            TaxSettingInputRow(
+                icon: "chart.line.uptrend.xyaxis",
+                tint: Color(red: 0.36, green: 0.53, blue: 0.96),
+                title: "Pre-tax retirement",
+                detail: "Annual 401(k), 403(b), or similar contributions that reduce taxable income.",
+                value: $taxProfile.annualRetirementContribution,
+                prefix: "$",
+                suffix: "per yr",
+                fractionDigits: 2,
+                allowsNegative: false
+            )
+        } header: {
+            settingsLabel("Annual Pre-Tax Deductions", icon: "minus.circle.fill", color: Color(red: 0.30, green: 0.72, blue: 0.68))
+        } footer: {
+            Text("These are yearly totals, not one-paycheck amounts.")
+        }
+
+        Section {
+            TaxAdjustmentHelpRow()
+
+            TaxSettingInputRow(
+                icon: "building.columns.fill",
+                tint: theme.takeHomeAccent,
+                title: "Federal paycheck adjustment",
+                detail: "Adds to or subtracts from the estimated federal withholding on each paycheck.",
+                value: $taxProfile.extraFederalWithholdingPerPeriod,
+                prefix: "$",
+                suffix: "per check",
+                fractionDigits: 2,
+                allowsNegative: true
+            )
+
+            TaxSettingInputRow(
+                icon: "map.fill",
+                tint: theme.roseAccent,
+                title: "State paycheck adjustment",
+                detail: "Adds to or subtracts from the estimated Colorado withholding on each paycheck.",
+                value: $taxProfile.extraStateWithholdingPerPeriod,
+                prefix: "$",
+                suffix: "per check",
+                fractionDigits: 2,
+                allowsNegative: true
+            )
+        } header: {
+            settingsLabel("Paystub Calibration", icon: "slider.horizontal.3", color: theme.takeHomeAccent)
+        } footer: {
+            Text("Use these after comparing the app to a real paycheck. Positive values lower estimated take-home; negative values raise it.")
+        }
+    }
+}
+
+private struct TakeHomeEstimateOverview: View {
+    @Environment(AppTheme.self) private var theme
+
+    let annualDeductionTotal: Double
+    let perCheckAdjustmentTotal: Double
+    let expectedWeeklyHours: Double
+
+    private let columns = [
+        GridItem(.adaptive(minimum: 135), spacing: 8)
+    ]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top, spacing: 12) {
+                SettingsSectionIcon(icon: "checklist.checked", color: theme.takeHomeAccent)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Tune this from a real paycheck")
+                        .font(.system(size: 16, weight: .bold, design: .rounded))
+                        .foregroundStyle(.white)
+
+                    Text("The app starts with tax assumptions, then these settings let your actual paystub pull the estimate closer.")
+                        .font(TypeStyle.caption)
+                        .foregroundStyle(theme.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            LazyVGrid(columns: columns, alignment: .leading, spacing: 8) {
+                TakeHomeEstimateChip(
+                    title: "Annual deductions",
+                    value: annualDeductionTotal.formatted(.currency(code: "USD"))
+                )
+                TakeHomeEstimateChip(
+                    title: "Per-check adjustment",
+                    value: perCheckAdjustmentTotal.settingsSignedCurrency
+                )
+                TakeHomeEstimateChip(
+                    title: "Projection",
+                    value: "\(expectedWeeklyHours.formatted(.number.precision(.fractionLength(1)))) hrs/wk"
+                )
+            }
+        }
+        .padding(16)
+        .glassCard(cornerRadius: CornerRadius.cardSmall, accent: theme.takeHomeAccent, hasShadow: false)
+    }
+}
+
+private struct TakeHomeEstimateChip: View {
+    @Environment(AppTheme.self) private var theme
+
+    let title: String
+    let value: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(title)
+                .font(TypeStyle.micro)
+                .foregroundStyle(theme.tertiaryText)
+                .textCase(.uppercase)
+
+            Text(value)
+                .font(.system(size: 14, weight: .bold, design: .rounded))
+                .foregroundStyle(.white)
+                .lineLimit(1)
+                .minimumScaleFactor(0.82)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 9)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color.white.opacity(0.07))
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
+        }
+    }
+}
+
+private struct TaxSettingInputRow: View {
+    @Environment(AppTheme.self) private var theme
+
+    let icon: String
+    let tint: Color
+    let title: String
+    let detail: String
+    @Binding var value: Double
+    let prefix: String?
+    let suffix: String
+    let fractionDigits: Int
+    let allowsNegative: Bool
+
+    private var numberFormat: FloatingPointFormatStyle<Double> {
+        .number.precision(.fractionLength(fractionDigits))
+    }
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            rowContent(axis: .horizontal)
+            rowContent(axis: .vertical)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    @ViewBuilder
+    private func rowContent(axis: Axis) -> some View {
+        let isVertical = axis == .vertical
+
+        Group {
+            if isVertical {
+                VStack(alignment: .leading, spacing: 12) {
+                    labelContent
+                    inputContent
+                }
+            } else {
+                HStack(alignment: .center, spacing: 12) {
+                    labelContent
+                    Spacer(minLength: 12)
+                    inputContent
+                }
+            }
+        }
+    }
+
+    private var labelContent: some View {
+        HStack(alignment: .top, spacing: 12) {
+            SettingsSectionIcon(icon: icon, color: tint)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.system(size: 16, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.primary)
+
+                Text(detail)
+                    .font(.footnote)
+                    .foregroundStyle(theme.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private var inputContent: some View {
+        HStack(spacing: 4) {
+            if let prefix {
+                Text(prefix)
+                    .foregroundStyle(theme.secondaryText)
+            }
+
+            TextField("0", value: $value, format: numberFormat)
+                .keyboardType(allowsNegative ? .numbersAndPunctuation : .decimalPad)
+                .multilineTextAlignment(.trailing)
+                .font(.system(size: 16, weight: .bold, design: .rounded))
+                .foregroundStyle(.primary)
+                .frame(minWidth: 72)
+                .accessibilityLabel(title)
+
+            Text(suffix)
+                .font(TypeStyle.micro)
+                .foregroundStyle(theme.tertiaryText)
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .frame(width: 156)
+        .background(
+            RoundedRectangle(cornerRadius: 11, style: .continuous)
+                .fill(tint.opacity(0.12))
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 11, style: .continuous)
+                .strokeBorder(tint.opacity(0.22), lineWidth: 1)
+        }
+    }
+}
+
+private struct TaxAdjustmentHelpRow: View {
+    @Environment(AppTheme.self) private var theme
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            SettingsSectionIcon(icon: "doc.text.magnifyingglass", color: theme.takeHomeAccent)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Match the paystub difference")
+                    .font(.system(size: 15, weight: .bold, design: .rounded))
+                    .foregroundStyle(.primary)
+
+                Text("If payroll withholds more than the app, enter a positive adjustment. If the app withholds too much, enter a negative adjustment.")
+                    .font(.footnote)
+                    .foregroundStyle(theme.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(.vertical, 4)
     }
 }
 
@@ -1492,6 +1823,20 @@ private struct SupplementScheduleDefinitionCard: View {
 
 private func settingsLabel(_ title: String, icon: String, color: Color) -> some View {
     SettingsSectionHeader(title: title, icon: icon, color: color)
+}
+
+private extension Double {
+    var settingsSignedCurrency: String {
+        let formattedValue = abs(self).formatted(.currency(code: "USD"))
+
+        if self > 0 {
+            return "+\(formattedValue)"
+        }
+        if self < 0 {
+            return "-\(formattedValue)"
+        }
+        return formattedValue
+    }
 }
 
 private struct SettingsSectionHeader: View {

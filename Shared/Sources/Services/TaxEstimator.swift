@@ -35,7 +35,8 @@ enum TaxEstimator {
             currentGross: currentGross,
             annualizedGrossIncome: annualizedGrossIncome,
             annualExtraWithholding: annualExtraWithholding,
-            taxProfile: taxProfile
+            taxProfile: taxProfile,
+            payFrequency: payFrequency
         )
     }
 
@@ -45,15 +46,28 @@ enum TaxEstimator {
         annualizedGrossIncome: Double,
         annualizedTaxableSupplementalIncome: Double = 0,
         annualExtraWithholding: Double,
-        taxProfile: TaxProfile
+        taxProfile: TaxProfile,
+        payFrequency: PayFrequency? = nil
     ) -> TaxEstimate {
         let resolvedAnnualizedGrossIncome = annualizedGrossIncome + annualizedTaxableSupplementalIncome
         let pretaxDeductions = taxProfile.annualPretaxInsurance + taxProfile.annualRetirementContribution
         let standardDeduction = taxProfile.usesStandardDeduction ? standardDeduction(for: taxProfile.filingStatus) : 0
-        let taxableIncome = max(0, resolvedAnnualizedGrossIncome - pretaxDeductions - standardDeduction)
-        let federalTax = federalIncomeTax(for: taxableIncome, status: taxProfile.filingStatus)
-        let coloradoTax = taxableIncome * SharedConstants.coloradoFlatTaxRate
-        let socialSecurityTax = min(resolvedAnnualizedGrossIncome, 184_500) * 0.062
+        let federalTaxableIncome = max(0, resolvedAnnualizedGrossIncome - pretaxDeductions - standardDeduction)
+        let coloradoTaxableIncome = max(
+            0,
+            resolvedAnnualizedGrossIncome
+                - pretaxDeductions
+                - taxProfile.coloradoAnnualWithholdingAllowance
+        )
+        let federalTax = federalIncomeTax(for: federalTaxableIncome, status: taxProfile.filingStatus)
+        let coloradoTax = coloradoIncomeTax(
+            for: coloradoTaxableIncome,
+            payFrequency: payFrequency,
+            roundsToWholeDollars: taxProfile.roundsColoradoWithholdingToWholeDollars
+        )
+        let socialSecurityTax = taxProfile.includesSocialSecurityWithholding
+            ? min(resolvedAnnualizedGrossIncome, 184_500) * 0.062
+            : 0
         let medicareTax = resolvedAnnualizedGrossIncome * 0.0145 + additionalMedicareTax(for: resolvedAnnualizedGrossIncome, status: taxProfile.filingStatus)
         let annualizedTaxes = federalTax + coloradoTax + socialSecurityTax + medicareTax + annualExtraWithholding
         let withholdingRate = resolvedAnnualizedGrossIncome > 0 ? annualizedTaxes / resolvedAnnualizedGrossIncome : 0
@@ -76,6 +90,10 @@ enum TaxEstimator {
         estimate: TaxEstimate
     ) -> Double {
         estimatedTakeHome(for: gross + taxableSupplemental, estimate: estimate) + nonTaxableSupplemental
+    }
+
+    static func paycheckAnnualizedGross(periodGross: Double, payFrequency: PayFrequency) -> Double {
+        max(0, periodGross) * payFrequency.periodsPerYear
     }
 
     static func estimatedTakeHome(
@@ -166,6 +184,23 @@ enum TaxEstimator {
         let brackets = federalBrackets(for: status)
         guard let bracket = brackets.last(where: { taxableIncome > $0.lowerBound }) else { return 0 }
         return bracket.baseTax + (taxableIncome - bracket.lowerBound) * bracket.rate
+    }
+
+    private static func coloradoIncomeTax(
+        for annualizedTaxableWages: Double,
+        payFrequency: PayFrequency?,
+        roundsToWholeDollars: Bool
+    ) -> Double {
+        let annualTax = annualizedTaxableWages * SharedConstants.coloradoFlatTaxRate
+
+        guard roundsToWholeDollars,
+              let periodsPerYear = payFrequency?.periodsPerYear,
+              periodsPerYear > 0
+        else {
+            return annualTax
+        }
+
+        return (annualTax / periodsPerYear).rounded() * periodsPerYear
     }
 
     private static func additionalMedicareTax(for income: Double, status: FilingStatus) -> Double {

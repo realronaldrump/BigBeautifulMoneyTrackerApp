@@ -519,14 +519,16 @@ enum ShiftController {
             currentGross: combinedCurrentGross,
             annualizedGrossIncome: combinedAnnualizedGrossIncome,
             annualExtraWithholding: combinedAnnualExtraWithholding,
-            taxProfile: snapshotData.taxProfile
+            taxProfile: snapshotData.taxProfile,
+            payFrequency: combinedPayFrequency
         )
         let combinedEffectiveEstimate = TaxEstimator.estimate(
             currentGross: 0,
             annualizedGrossIncome: combinedAnnualizedGrossIncome,
             annualizedTaxableSupplementalIncome: combinedAnnualizedTaxableSupplementIncome,
             annualExtraWithholding: combinedAnnualExtraWithholding,
-            taxProfile: snapshotData.taxProfile
+            taxProfile: snapshotData.taxProfile,
+            payFrequency: combinedPayFrequency
         )
         let payPeriodAggregation = combinedPayPeriodAggregation(for: jobSummaries)
         let payPeriodGross = payPeriodAggregation == .unified
@@ -793,7 +795,8 @@ enum ShiftController {
                 payFrequency: configuration.paySchedule.frequency,
                 taxProfile: snapshotData.taxProfile
             ),
-            taxProfile: snapshotData.taxProfile
+            taxProfile: snapshotData.taxProfile,
+            payFrequency: configuration.paySchedule.frequency
         )
         let effectiveTaxEstimate = TaxEstimator.estimate(
             currentGross: 0,
@@ -803,7 +806,8 @@ enum ShiftController {
                 payFrequency: configuration.paySchedule.frequency,
                 taxProfile: snapshotData.taxProfile
             ),
-            taxProfile: snapshotData.taxProfile
+            taxProfile: snapshotData.taxProfile,
+            payFrequency: configuration.paySchedule.frequency
         )
 
         let takeHomeRate = taxEstimate.estimatedWithholdingRate

@@ -215,6 +215,9 @@ final class TaxProfile {
     var usesStandardDeduction: Bool
     var annualPretaxInsurance: Double
     var annualRetirementContribution: Double
+    var includesSocialSecurityWithholdingRawValue: Bool?
+    var coloradoAnnualWithholdingAllowanceRawValue: Double?
+    var roundsColoradoWithholdingToWholeDollarsRawValue: Bool?
     var extraFederalWithholdingPerPeriod: Double
     var extraStateWithholdingPerPeriod: Double
     var expectedWeeklyHours: Double
@@ -225,6 +228,9 @@ final class TaxProfile {
         usesStandardDeduction: Bool = true,
         annualPretaxInsurance: Double = 0,
         annualRetirementContribution: Double = 0,
+        includesSocialSecurityWithholding: Bool = true,
+        coloradoAnnualWithholdingAllowance: Double = 0,
+        roundsColoradoWithholdingToWholeDollars: Bool = true,
         extraFederalWithholdingPerPeriod: Double = 0,
         extraStateWithholdingPerPeriod: Double = 0,
         expectedWeeklyHours: Double = SharedConstants.fallbackExpectedWeeklyHours
@@ -234,6 +240,9 @@ final class TaxProfile {
         self.usesStandardDeduction = usesStandardDeduction
         self.annualPretaxInsurance = annualPretaxInsurance
         self.annualRetirementContribution = annualRetirementContribution
+        self.includesSocialSecurityWithholdingRawValue = includesSocialSecurityWithholding
+        self.coloradoAnnualWithholdingAllowanceRawValue = coloradoAnnualWithholdingAllowance
+        self.roundsColoradoWithholdingToWholeDollarsRawValue = roundsColoradoWithholdingToWholeDollars
         self.extraFederalWithholdingPerPeriod = extraFederalWithholdingPerPeriod
         self.extraStateWithholdingPerPeriod = extraStateWithholdingPerPeriod
         self.expectedWeeklyHours = expectedWeeklyHours
@@ -242,6 +251,21 @@ final class TaxProfile {
     var filingStatus: FilingStatus {
         get { FilingStatus(rawValue: filingStatusRawValue) ?? .single }
         set { filingStatusRawValue = newValue.rawValue }
+    }
+
+    var includesSocialSecurityWithholding: Bool {
+        get { includesSocialSecurityWithholdingRawValue ?? true }
+        set { includesSocialSecurityWithholdingRawValue = newValue }
+    }
+
+    var coloradoAnnualWithholdingAllowance: Double {
+        get { coloradoAnnualWithholdingAllowanceRawValue ?? 0 }
+        set { coloradoAnnualWithholdingAllowanceRawValue = newValue }
+    }
+
+    var roundsColoradoWithholdingToWholeDollars: Bool {
+        get { roundsColoradoWithholdingToWholeDollarsRawValue ?? true }
+        set { roundsColoradoWithholdingToWholeDollarsRawValue = newValue }
     }
 }
 
