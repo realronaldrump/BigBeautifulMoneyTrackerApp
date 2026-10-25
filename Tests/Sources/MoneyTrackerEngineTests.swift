@@ -1,9 +1,15 @@
 import XCTest
 import SwiftData
 import CoreGraphics
+#if canImport(UIKit)
 import UIKit
 import PDFKit
+#endif
+#if SWIFT_PACKAGE
+@testable import MoneyTrackerCore
+#else
 @testable import BigBeautifulMoneyTracker
+#endif
 
 final class MoneyTrackerEngineTests: XCTestCase {
     private var calendar: Calendar!
@@ -372,6 +378,7 @@ final class MoneyTrackerEngineTests: XCTestCase {
         XCTAssertEqual(snapshot.payPeriodAggregation, .unified)
     }
 
+    #if !SWIFT_PACKAGE
     @MainActor
     func testLiveActivityPayloadUsesSingleJobTitleAndGrossValues() throws {
         let startDate = makeDate(year: 2026, month: 4, day: 8, hour: 9)
@@ -569,6 +576,8 @@ final class MoneyTrackerEngineTests: XCTestCase {
         XCTAssertEqual(contentState.lastSyncedDate, syncDate)
     }
 
+    #endif
+
     @MainActor
     func testLegacyConfigurationMigratesWithoutDuplicatingDefaults() throws {
         let container = AppModelContainerFactory.makeInMemoryContainer()
@@ -680,7 +689,7 @@ final class MoneyTrackerEngineTests: XCTestCase {
         let defaultJob = try XCTUnwrap(try JobService.jobs(in: context).first)
 
         XCTAssertThrowsError(try JobService.archiveJob(defaultJob, in: context)) { error in
-            XCTAssertEqual(error.localizedDescription, "Add another job before deleting this one.")
+            XCTAssertEqual(error.localizedDescription, "Add another job before archiving this one.")
         }
         XCTAssertFalse(defaultJob.isArchived)
     }
@@ -1511,6 +1520,7 @@ final class MoneyTrackerEngineTests: XCTestCase {
         XCTAssertFalse(currentCombined.shifts.contains { $0.shiftIdentifier == archivedShift.id })
     }
 
+    #if canImport(UIKit)
     func testPayPeriodPDFExporterCreatesNonEmptyPDF() throws {
         let job = JobProfile(name: "Main Job")
         let schedule = PaySchedule(job: job, frequency: .weekly, anchorDate: makeDate(year: 2026, month: 4, day: 6, hour: 0))
@@ -1738,6 +1748,8 @@ final class MoneyTrackerEngineTests: XCTestCase {
         XCTAssertLessThanOrEqual(fitted.font.pointSize, font.pointSize)
     }
 
+    #endif
+
     private func makeDate(year: Int, month: Int, day: Int, hour: Int, minute: Int = 0) -> Date {
         calendar.date(from: DateComponents(year: year, month: month, day: day, hour: hour, minute: minute))!
     }
@@ -1841,6 +1853,7 @@ final class MoneyTrackerEngineTests: XCTestCase {
         )
     }
 
+    #if canImport(UIKit)
     private func renderFirstPage(of url: URL) throws -> UIImage {
         guard let provider = CGDataProvider(url: url as CFURL) else {
             XCTFail("Unable to create data provider for PDF")
@@ -1910,4 +1923,5 @@ final class MoneyTrackerEngineTests: XCTestCase {
             darkPixelFraction: Double(darkPixelCount) / Double(pixelCount)
         )
     }
+    #endif
 }

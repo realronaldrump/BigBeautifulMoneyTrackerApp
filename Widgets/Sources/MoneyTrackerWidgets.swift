@@ -10,6 +10,8 @@ struct MoneyTrackerWidgetEntry: TimelineEntry {
     let compensationMode: CompensationDisplayMode
     let isShiftActive: Bool
     let activeJobCount: Int
+    var statusMessage: String? = nil
+    var hidesAmounts = false
 }
 
 struct MoneyTrackerWidgetProvider: TimelineProvider {
@@ -25,43 +27,52 @@ struct MoneyTrackerWidgetProvider: TimelineProvider {
     }
 
     func getSnapshot(in context: Context, completion: @escaping (MoneyTrackerWidgetEntry) -> Void) {
-        completion(loadEntry(for: .now))
+        completion(context.isPreview ? placeholder(in: context) : loadEntries(dates: [.now])[0])
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<MoneyTrackerWidgetEntry>) -> Void) {
-        let initialEntry = loadEntry(for: .now)
-        let entries: [MoneyTrackerWidgetEntry]
-
-        if initialEntry.isShiftActive {
-            entries = (0..<4).map { index in
-                let date = Calendar.current.date(byAdding: .minute, value: index * 15, to: .now) ?? .now
-                return loadEntry(for: date)
-            }
-        } else {
-            entries = [initialEntry]
-        }
-
-        completion(Timeline(entries: entries, policy: .after(Calendar.current.date(byAdding: .minute, value: 15, to: .now) ?? .now)))
+        let now = Date.now
+        // Read one shared container for the entire timeline. Snapshot dates never
+        // reconcile future schedules or write projected earnings to history.
+        let dates = (0..<4).map { now.addingTimeInterval(Double($0) * 15 * 60) }
+        let entries = loadEntries(dates: dates)
+        completion(Timeline(entries: entries, policy: .after(now.addingTimeInterval(15 * 60))))
     }
 
-    private func loadEntry(for date: Date) -> MoneyTrackerWidgetEntry {
-        let container = AppModelContainerFactory.makeSharedContainer()
-        let context = ModelContext(container)
-        try? DataBootstrapper.seedIfNeeded(in: context)
-        let preferences = (try? context.fetch(FetchDescriptor<AppPreferences>()))?.first
-        let openShifts = (try? context.fetch(FetchDescriptor<OpenShiftState>())) ?? []
-        let snapshot = (try? ShiftController.dashboardSnapshot(in: context, at: date)) ?? .preview
-        let compensationMode = snapshot.hasSelectableEffectiveCompensation
-            ? (preferences?.selectedCompensationDisplayMode ?? .actual)
-            : .actual
+    private func loadEntries(dates: [Date]) -> [MoneyTrackerWidgetEntry] {
+        do {
+            let container = try AppModelContainerFactory.makeSharedContainer(forWidget: true)
+            let context = ModelContext(container)
+            let preferences = try DataBootstrapper.first(AppPreferences.self, in: context)
+            guard preferences?.onboardingCompleted == true else {
+                return dates.map { unavailableEntry(at: $0, message: "Open app to finish setup") }
+            }
+            guard preferences?.lockScreenWidgetsEnabled != false else {
+                return dates.map { unavailableEntry(at: $0, message: "Widgets are paused") }
+            }
+            return try dates.map { date in
+                let snapshot = try ShiftController.dashboardSnapshot(in: context, at: date)
+                let activeJobs = snapshot.activeJobs.filter { ($0.scheduledEndDate ?? .distantFuture) > date }
+                let compensationMode = snapshot.hasSelectableEffectiveCompensation
+                    ? (preferences?.selectedCompensationDisplayMode ?? .actual) : .actual
+                return MoneyTrackerWidgetEntry(
+                    date: date, snapshot: snapshot,
+                    mode: preferences?.selectedDisplayMode ?? .gross,
+                    compensationMode: compensationMode,
+                    isShiftActive: !activeJobs.isEmpty,
+                    activeJobCount: activeJobs.count,
+                    statusMessage: activeJobs.isEmpty && !snapshot.activeJobs.isEmpty ? "Scheduled stop reached" : nil
+                )
+            }
+        } catch {
+            return dates.map { unavailableEntry(at: $0, message: "Open app to load saved data") }
+        }
+    }
 
-        return MoneyTrackerWidgetEntry(
-            date: date,
-            snapshot: snapshot,
-            mode: preferences?.selectedDisplayMode ?? .gross,
-            compensationMode: compensationMode,
-            isShiftActive: !openShifts.isEmpty,
-            activeJobCount: openShifts.count
+    private func unavailableEntry(at date: Date, message: String) -> MoneyTrackerWidgetEntry {
+        MoneyTrackerWidgetEntry(
+            date: date, snapshot: .empty, mode: .gross, compensationMode: .actual,
+            isShiftActive: false, activeJobCount: 0, statusMessage: message, hidesAmounts: true
         )
     }
 }
@@ -76,22 +87,35 @@ struct MoneyTrackerWidgetView: View {
     }
 
     var body: some View {
-        switch family {
+        if entry.hidesAmounts {
+            VStack(alignment: .leading, spacing: 8) {
+                Label("Money Tracker", systemImage: "dollarsign.circle")
+                    .font(.headline)
+                Text(entry.statusMessage ?? "Open Money Tracker")
+                    .font(.caption)
+            }
+            .containerBackground(widgetBackground, for: .widget)
+        } else {
+            switch family {
         case .systemSmall:
             smallView
         case .accessoryRectangular:
             accessoryView
         default:
             mediumView
+            }
         }
     }
 
     private var amount: Double {
-        entry.snapshot.displayAmount(for: entry.mode, compensationMode: compensationMode)
+        if entry.isShiftActive { return entry.snapshot.displayAmount(for: entry.mode, compensationMode: compensationMode) }
+        if entry.snapshot.payPeriodAggregation == .unified { return entry.snapshot.payPeriodAmount(for: entry.mode, compensationMode: compensationMode) }
+        return entry.snapshot.allTimeAmount(for: entry.mode, compensationMode: compensationMode)
     }
 
     private var amountLabel: String {
-        "\(compensationMode.title) \(entry.mode.compactTitle)"
+        let period = entry.isShiftActive ? "This shift" : (entry.snapshot.payPeriodAggregation == .unified ? "Pay period" : "All time")
+        return period + " · " + (entry.mode == .gross ? "gross" : "est. take-home")
     }
 
     private var widgetBackground: LinearGradient {
@@ -107,20 +131,25 @@ struct MoneyTrackerWidgetView: View {
     }
 
     private var smallView: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 6) {
             Text("Davis's Big Beautiful")
                 .font(.system(size: 10, weight: .semibold, design: .rounded))
                 .foregroundStyle(.tertiary)
-                .lineLimit(2)
+                .lineLimit(1).minimumScaleFactor(0.8)
 
             Text(amountLabel)
-                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .font(.system(size: 11, weight: .semibold, design: .rounded))
                 .foregroundStyle(.secondary)
+                .lineLimit(2)
             Text(amount, format: .currency(code: "USD"))
                 .font(.system(size: 22, weight: .heavy, design: .rounded))
                 .minimumScaleFactor(0.7)
-                .lineLimit(2)
-            Spacer()
+                .lineLimit(1)
+                .monospacedDigit()
+            if compensationMode == .effective {
+                Text("Includes supplements").font(.system(size: 10, weight: .medium, design: .rounded)).foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 0)
             Text(statusText)
                 .font(.system(size: 12, weight: .medium, design: .rounded))
                 .foregroundStyle(.secondary)
@@ -152,7 +181,11 @@ struct MoneyTrackerWidgetView: View {
             Spacer()
 
             VStack(alignment: .trailing, spacing: 12) {
-                stat("Pay Period", payPeriodText)
+                if entry.isShiftActive {
+                    stat("Pay period", payPeriodText)
+                } else {
+                    stat("Period hours", entry.snapshot.payPeriodAggregation == .unified ? entry.snapshot.payPeriodHours.formatted(.number.precision(.fractionLength(1))) + " hrs" : "Varies by job")
+                }
                 stat("Projected", projectedText)
                 stat("All Time", formattedAmount(entry.snapshot.allTimeAmount(for: entry.mode, compensationMode: compensationMode)))
             }
@@ -162,7 +195,7 @@ struct MoneyTrackerWidgetView: View {
 
     private var accessoryView: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("Davis's")
+            Text(amountLabel)
                 .font(.caption2)
                 .foregroundStyle(.secondary)
             Text(amount, format: .currency(code: "USD"))
@@ -177,8 +210,9 @@ struct MoneyTrackerWidgetView: View {
     }
 
     private var statusText: String {
+        if let statusMessage = entry.statusMessage { return statusMessage }
         guard entry.isShiftActive else {
-            return "Ready to start"
+            return "Off shift"
         }
 
         if entry.activeJobCount == 1 {
@@ -215,6 +249,7 @@ struct MoneyTrackerWidgetView: View {
                 .foregroundStyle(.secondary)
             Text(value)
                 .font(.system(size: 14, weight: .bold, design: .rounded))
+                .monospacedDigit().lineLimit(1).minimumScaleFactor(0.7)
         }
     }
 }
@@ -242,6 +277,7 @@ struct MoneyShiftActivityView: View {
 
             HStack {
                 Text(context.state.startDate, style: .timer)
+                    .accessibilityLabel("Elapsed shift time")
                 Spacer()
                 Text("\(context.state.currentRate, format: .currency(code: "USD"))/hr")
             }
@@ -287,7 +323,7 @@ private struct LiveActivitySyncStatus: View {
 
 private extension ShiftActivityAttributes.ContentState {
     var amountLabel: String {
-        "\(compensationMode.title) \(mode == .gross ? "Gross" : "Take Home")"
+        (mode == .gross ? "Gross earned" : "Estimated take-home") + (compensationMode == .effective ? " + supplements" : "")
     }
 }
 

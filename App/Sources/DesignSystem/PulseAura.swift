@@ -34,5 +34,6 @@ struct PulseAura: View {
         }
         .blur(radius: 8)
         .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 }

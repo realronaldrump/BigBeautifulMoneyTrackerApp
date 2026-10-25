@@ -26,52 +26,110 @@ enum ProjectionEngine {
         payRates: [PayRateSchedule],
         templates: [ScheduleTemplate],
         takeHomeRate: Double,
+        configuration: JobConfiguration? = nil,
+        openShifts: [OpenShiftState] = [],
+        scheduledShifts: [ScheduledShift] = [],
         calendar: Calendar = .current
     ) -> (payPeriodGross: Double, payPeriodHours: Double, projectedGross: Double, projectedTakeHome: Double, confidenceLabel: String) {
         let payPeriod = payPeriodInterval(for: date, schedule: paySchedule, calendar: calendar)
-        let completedInPayPeriod = AggregationService.filtered(shifts, in: payPeriod)
-        let completedGross = AggregationService.totalGross(for: completedInPayPeriod)
-        let completedHours = AggregationService.totalHours(for: completedInPayPeriod)
-        let openGross = openShiftBreakdown?.grossEarnings ?? 0
-        let openHours = openShiftBreakdown?.totalHours ?? 0
+        let earnedWindow = DateInterval(start: payPeriod.start, end: min(date, payPeriod.end))
+        let completedGross: Double
+        let completedHours: Double
+        if let configuration {
+            let allocated = shifts.map {
+                ShiftEarningsAllocation.completed($0, within: earnedWindow, configuration: configuration, historicalShifts: shifts, calendar: calendar)
+            }
+            completedGross = allocated.reduce(0) { $0 + $1.grossEarnings }
+            completedHours = allocated.reduce(0) { $0 + $1.totalHours }
+        } else {
+            completedGross = AggregationService.totalGross(for: shifts, in: earnedWindow)
+            completedHours = AggregationService.totalHours(for: shifts, in: earnedWindow)
+        }
+        var openGross = openShiftBreakdown?.grossEarnings ?? 0
+        var openHours = openShiftBreakdown?.totalHours ?? 0
+        if let configuration, !openShifts.isEmpty {
+            let allocated = openShifts.map {
+                ShiftEarningsAllocation.partial(
+                    start: $0.startDate, end: min(date, $0.scheduledEndDate ?? date), within: earnedWindow,
+                    configuration: configuration, historicalShifts: shifts, calendar: calendar
+                )
+            }
+            openGross = allocated.reduce(0) { $0 + $1.grossEarnings }
+            openHours = allocated.reduce(0) { $0 + $1.totalHours }
+        }
         let currentPayPeriodGross = completedGross + openGross
         let currentPayPeriodHours = completedHours + openHours
-
         let enabledTemplates = templates.filter(\.isEnabled)
-        guard !enabledTemplates.isEmpty else {
-            return (
-                payPeriodGross: currentPayPeriodGross,
-                payPeriodHours: currentPayPeriodHours,
-                projectedGross: currentPayPeriodGross,
-                projectedTakeHome: currentPayPeriodGross * (1 - takeHomeRate),
-                confidenceLabel: "Earned so far"
-            )
+        let resolvedConfiguration = configuration ?? JobConfiguration(
+            job: JobProfile(), payRates: payRates, nightRule: NightDifferentialRule(),
+            overtimeRule: nil, paySchedule: paySchedule, supplements: [], templates: templates
+        )
+
+        var planned: [DateInterval] = scheduledShifts.compactMap {
+            let start = max(date, $0.startDate)
+            let end = min(payPeriod.end, $0.endDate)
+            return end > start ? DateInterval(start: start, end: end) : nil
         }
-
-        let currentRate = EarningsEngine.payRate(at: date, payRates: payRates)
-        var remainingTemplateGross = 0.0
-        let normalizedStart = max(date, payPeriod.start)
-        var cursor = calendar.startOfDay(for: normalizedStart)
-
+        planned += openShifts.compactMap {
+            guard let endDate = $0.scheduledEndDate else { return nil }
+            let end = min(payPeriod.end, endDate)
+            return end > date ? DateInterval(start: date, end: end) : nil
+        }
+        var cursor = calendar.date(byAdding: .day, value: -1, to: calendar.startOfDay(for: date)) ?? date
         while cursor < payPeriod.end {
             let weekday = calendar.component(.weekday, from: cursor)
-            for template in enabledTemplates where template.weekday.rawValue == weekday {
-                let templateStart = calendar.date(bySettingHour: template.startHour, minute: template.startMinute, second: 0, of: cursor) ?? cursor
-                if templateStart >= normalizedStart && templateStart < payPeriod.end {
-                    remainingTemplateGross += template.scheduledHours * currentRate
+            for template in enabledTemplates where template.weekday.rawValue == weekday && template.scheduledHours > 0 {
+                let start = calendar.date(bySettingHour: template.startHour, minute: template.startMinute, second: 0, of: cursor) ?? cursor
+                var end = calendar.date(bySettingHour: template.endHour, minute: template.endMinute, second: 0, of: cursor) ?? start
+                if end <= start { end = calendar.date(byAdding: .day, value: 1, to: end) ?? end }
+                let allocatedStart = max(date, start)
+                let allocatedEnd = min(payPeriod.end, end)
+                if allocatedEnd > allocatedStart {
+                    planned.append(DateInterval(start: allocatedStart, end: allocatedEnd))
                 }
             }
-
             cursor = calendar.date(byAdding: .day, value: 1, to: cursor) ?? payPeriod.end
         }
 
-        let projectedGross = currentPayPeriodGross + remainingTemplateGross
+        // One-off schedules and repeating templates can describe the same work.
+        // Project their union once, and carry actual hours into overtime.
+        var history = shifts.filter { $0.endDate <= date }
+        for open in openShifts {
+            let end = min(date, open.scheduledEndDate ?? date)
+            guard end > open.startDate else { continue }
+            let breakdown = EarningsEngine.calculate(
+                start: open.startDate, end: end, payRates: payRates,
+                nightRule: resolvedConfiguration.nightRule, overtimeRule: resolvedConfiguration.overtimeRule,
+                historicalShifts: history, calendar: calendar
+            )
+            history.append(ShiftRecord(startDate: open.startDate, endDate: end, breakdown: breakdown))
+        }
+        let ordered = planned.sorted { $0.start < $1.start }
+        var merged: [DateInterval] = []
+        for interval in ordered {
+            if let last = merged.last, interval.start <= last.end {
+                merged[merged.count - 1] = DateInterval(start: last.start, end: max(last.end, interval.end))
+            } else {
+                merged.append(interval)
+            }
+        }
+        var futureGross = 0.0
+        for interval in merged {
+            let breakdown = EarningsEngine.calculate(
+                start: interval.start, end: interval.end, payRates: payRates,
+                nightRule: resolvedConfiguration.nightRule, overtimeRule: resolvedConfiguration.overtimeRule,
+                historicalShifts: history, calendar: calendar
+            )
+            futureGross += breakdown.grossEarnings
+            history.append(ShiftRecord(startDate: interval.start, endDate: interval.end, breakdown: breakdown))
+        }
+        let projectedGross = currentPayPeriodGross + futureGross
         return (
             payPeriodGross: currentPayPeriodGross,
             payPeriodHours: currentPayPeriodHours,
             projectedGross: projectedGross,
-            projectedTakeHome: projectedGross * (1 - takeHomeRate),
-            confidenceLabel: "Template projected"
+            projectedTakeHome: max(0, projectedGross * (1 - takeHomeRate)),
+            confidenceLabel: futureGross > 0 ? "Schedule projected" : "Earned so far"
         )
     }
 
@@ -95,12 +153,17 @@ enum ProjectionEngine {
         anchor: Date,
         calendar: Calendar
     ) -> DateInterval {
-        let day = calendar.component(.day, from: anchor)
-        let components = calendar.dateComponents([.year, .month], from: date)
-        let base = calendar.date(from: components) ?? date
-        let startThisMonth = calendar.date(bySetting: .day, value: min(day, calendar.range(of: .day, in: .month, for: base)?.count ?? day), of: base) ?? base
-        let start = date >= startThisMonth ? startThisMonth : calendar.date(byAdding: .month, value: -1, to: startThisMonth) ?? startThisMonth
-        let end = calendar.date(byAdding: .month, value: 1, to: start) ?? start
+        let anchorDay = calendar.component(.day, from: anchor)
+        let monthBase = calendar.date(from: calendar.dateComponents([.year, .month], from: date)) ?? date
+        func boundary(in month: Date) -> Date {
+            let day = min(anchorDay, calendar.range(of: .day, in: .month, for: month)?.count ?? anchorDay)
+            return calendar.date(byAdding: .day, value: day - 1, to: month) ?? month
+        }
+        let thisBoundary = boundary(in: monthBase)
+        let startMonth = date >= thisBoundary ? monthBase : calendar.date(byAdding: .month, value: -1, to: monthBase) ?? monthBase
+        let endMonth = calendar.date(byAdding: .month, value: 1, to: startMonth) ?? monthBase
+        let start = boundary(in: startMonth)
+        let end = boundary(in: endMonth)
         return DateInterval(start: start, end: end)
     }
 
@@ -287,7 +350,7 @@ enum SupplementAllocationService {
             return false
         }
 
-        return interval.contains(date)
+        return date >= interval.start && date < interval.end
     }
 
     private static func intersection(_ lhs: DateInterval, _ rhs: DateInterval) -> DateInterval? {

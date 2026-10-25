@@ -5,3 +5,5 @@ xcuserdata/
 *.xcarchive
 *.xcresult
 *.swp
+.build/
+.swiftpm/

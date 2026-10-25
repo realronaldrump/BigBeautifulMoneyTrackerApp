@@ -49,8 +49,10 @@ enum TaxEstimator {
         taxProfile: TaxProfile,
         payFrequency: PayFrequency? = nil
     ) -> TaxEstimate {
-        let resolvedAnnualizedGrossIncome = annualizedGrossIncome + annualizedTaxableSupplementalIncome
-        let pretaxDeductions = taxProfile.annualPretaxInsurance + taxProfile.annualRetirementContribution
+        let resolvedAnnualizedGrossIncome = max(0, annualizedGrossIncome + annualizedTaxableSupplementalIncome)
+        let insurance = min(resolvedAnnualizedGrossIncome, max(0, taxProfile.annualPretaxInsurance))
+        let retirement = min(resolvedAnnualizedGrossIncome - insurance, max(0, taxProfile.annualRetirementContribution))
+        let pretaxDeductions = insurance + retirement
         let standardDeduction = taxProfile.usesStandardDeduction ? standardDeduction(for: taxProfile.filingStatus) : 0
         let federalTaxableIncome = max(0, resolvedAnnualizedGrossIncome - pretaxDeductions - standardDeduction)
         let coloradoTaxableIncome = max(
@@ -65,22 +67,27 @@ enum TaxEstimator {
             payFrequency: payFrequency,
             roundsToWholeDollars: taxProfile.roundsColoradoWithholdingToWholeDollars
         )
+        // Section 125 insurance reduces FICA wages; traditional retirement
+        // deferrals reduce income-tax wages but remain subject to FICA (IRS Pub. 15).
+        let ficaWages = max(0, resolvedAnnualizedGrossIncome - insurance)
         let socialSecurityTax = taxProfile.includesSocialSecurityWithholding
-            ? min(resolvedAnnualizedGrossIncome, 184_500) * 0.062
+            ? min(ficaWages, 184_500) * 0.062
             : 0
-        let medicareTax = resolvedAnnualizedGrossIncome * 0.0145 + additionalMedicareTax(for: resolvedAnnualizedGrossIncome, status: taxProfile.filingStatus)
-        let annualizedTaxes = federalTax + coloradoTax + socialSecurityTax + medicareTax + annualExtraWithholding
-        let withholdingRate = resolvedAnnualizedGrossIncome > 0 ? annualizedTaxes / resolvedAnnualizedGrossIncome : 0
+        let medicareTax = ficaWages * 0.0145 + max(0, ficaWages - 200_000) * 0.009
+        let annualizedTaxes = max(0, federalTax + coloradoTax + annualExtraWithholding) + socialSecurityTax + medicareTax
+        let withholdingRate = resolvedAnnualizedGrossIncome > 0 ? min(1, annualizedTaxes / resolvedAnnualizedGrossIncome) : 0
+        let deductionRate = resolvedAnnualizedGrossIncome > 0 ? pretaxDeductions / resolvedAnnualizedGrossIncome : 0
 
         return TaxEstimate(
             annualizedGrossIncome: resolvedAnnualizedGrossIncome,
             estimatedWithholdingRate: withholdingRate,
-            currentShiftNetEstimate: max(0, (currentGross + currentTaxableSupplemental) * (1 - withholdingRate))
+            currentShiftNetEstimate: max(0, (currentGross + currentTaxableSupplemental) * (1 - withholdingRate - deductionRate)),
+            estimatedPayrollDeductionRate: deductionRate
         )
     }
 
     static func estimatedTakeHome(for gross: Double, estimate: TaxEstimate) -> Double {
-        max(0, gross * (1 - estimate.estimatedWithholdingRate))
+        max(0, gross * estimate.estimatedNetRate)
     }
 
     static func effectiveTakeHome(
@@ -118,6 +125,7 @@ enum TaxEstimator {
         let yearToDateGross = AggregationService.totalGross(for: allShifts.filter {
             $0.id != shift.id &&
             $0.job?.id == jobIdentifier &&
+            $0.endDate <= shift.startDate &&
             calendar.isDate($0.startDate, equalTo: shift.startDate, toGranularity: .year)
         })
 
@@ -201,20 +209,6 @@ enum TaxEstimator {
         }
 
         return (annualTax / periodsPerYear).rounded() * periodsPerYear
-    }
-
-    private static func additionalMedicareTax(for income: Double, status: FilingStatus) -> Double {
-        let threshold: Double
-        switch status {
-        case .marriedFilingJointly:
-            threshold = 250_000
-        case .marriedFilingSeparately:
-            threshold = 125_000
-        case .single, .headOfHousehold:
-            threshold = 200_000
-        }
-
-        return max(0, income - threshold) * 0.009
     }
 
     private static func federalBrackets(for status: FilingStatus) -> [FederalTaxBracket] {

@@ -71,5 +71,7 @@ struct MoneyBackground: View {
             )
             .ignoresSafeArea()
         }
+        .accessibilityHidden(true)
+        .allowsHitTesting(false)
     }
 }

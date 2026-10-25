@@ -7,7 +7,9 @@ enum PayPeriodPDFExporter {
         generatedAt: Date = .now,
         fileManager: FileManager = .default
     ) throws -> URL {
-        let directory = fileManager.temporaryDirectory.appending(path: "MoneyTrackerPaySummaries", directoryHint: .isDirectory)
+        let directory = fileManager.temporaryDirectory
+            .appending(path: "MoneyTrackerPaySummaries", directoryHint: .isDirectory)
+            .appending(path: UUID().uuidString, directoryHint: .isDirectory)
         try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
 
         let url = directory.appending(path: fileName(for: summary), directoryHint: .notDirectory)
@@ -124,6 +126,7 @@ enum PayPeriodPDFExporter {
             .reduce(into: "") { $0.append($1) }
             .replacingOccurrences(of: "--+", with: "-", options: .regularExpression)
             .trimmingCharacters(in: CharacterSet(charactersIn: "-"))
+            .prefix(40).description
         let formatter = DateFormatter()
         formatter.calendar = Calendar(identifier: .gregorian)
         formatter.locale = Locale(identifier: "en_US_POSIX")

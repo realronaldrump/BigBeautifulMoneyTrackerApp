@@ -22,7 +22,7 @@ enum DataBootstrapper {
             preferences.selectedHomeJobIdentifier = jobs.first?.id
         }
 
-        try context.save()
+        try PersistenceService.save(context)
     }
 
     static func first<T: PersistentModel>(_ type: T.Type, in context: ModelContext) throws -> T? {

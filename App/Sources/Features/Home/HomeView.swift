@@ -11,6 +11,7 @@ private struct HomeSheetDestination: Identifiable {
 }
 
 struct HomeView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var onOpenHistory: () -> Void = {}
 
     @Query private var preferences: [AppPreferences]
@@ -54,12 +55,18 @@ struct HomeView: View {
                     .background(Color.black.ignoresSafeArea())
             }
         }
+        .task(id: milestoneText) {
+            guard milestoneText != nil else { return }
+            do { try await Task.sleep(for: .seconds(3)) } catch { return }
+            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.3)) { milestoneText = nil }
+        }
         .navigationTitle("Home")
         .navigationBarTitleDisplayMode(.inline)
     }
 }
 
 private struct HomeDashboardView: View {
+    @Environment(\.modelContext) private var modelContext
     let preferences: AppPreferences
     let jobs: [JobProfile]
     let openShifts: [OpenShiftState]
@@ -73,6 +80,7 @@ private struct HomeDashboardView: View {
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: openShifts.isEmpty ? 60 : 1)) { context in
+            if let snapshot = try? ShiftController.dashboardSnapshot(in: modelContext, at: context.date) {
             HomeDashboardSceneView(
                 preferences: preferences,
                 jobs: jobs,
@@ -83,8 +91,12 @@ private struct HomeDashboardView: View {
                 milestoneText: $milestoneText,
                 errorText: $errorText,
                 onOpenHistory: onOpenHistory,
-                contextDate: context.date
+                contextDate: context.date,
+                snapshot: snapshot
             )
+            } else {
+                ContentUnavailableView("Unable to Load Earnings", systemImage: "externaldrive.badge.exclamationmark", description: Text("Your saved data could not be read. Reopen the app to try again."))
+            }
         }
     }
 }
@@ -92,6 +104,7 @@ private struct HomeDashboardView: View {
 private struct HomeDashboardSceneView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(AppTheme.self) private var theme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     let preferences: AppPreferences
     let jobs: [JobProfile]
@@ -110,9 +123,7 @@ private struct HomeDashboardSceneView: View {
     @Namespace private var modeToggleNamespace
     @Namespace private var compensationModeToggleNamespace
 
-    private var snapshot: DashboardSnapshot {
-        (try? ShiftController.dashboardSnapshot(in: modelContext, at: contextDate)) ?? .empty
-    }
+    let snapshot: DashboardSnapshot
 
     private var selectedCompensationMode: CompensationDisplayMode {
         snapshot.hasSelectableEffectiveCompensation
@@ -135,7 +146,7 @@ private struct HomeDashboardSceneView: View {
     }
 
     private var activeTickerLabel: String {
-        "\(selectedCompensationMode.title) \(preferences.selectedDisplayMode.compactTitle)".uppercased()
+        preferences.selectedDisplayMode == .gross ? "Gross earned this shift" : "Estimated take-home this shift"
     }
 
     private var activeRateLabel: String {
@@ -152,14 +163,7 @@ private struct HomeDashboardSceneView: View {
     private var activitySyncKey: String {
         let activeIdentifier = snapshot.activeJobs.map(\.id).map(\.uuidString).joined(separator: ",")
         let minute = Calendar.current.component(.minute, from: contextDate)
-        return "\(activeIdentifier)-\(minute)-\(preferences.selectedDisplayMode.rawValue)-\(selectedCompensationMode.rawValue)"
-    }
-
-    private var automationKey: String {
-        let activeIdentifier = openShifts.map(\.id).map(\.uuidString).joined(separator: ",")
-        let scheduledIdentifier = scheduledShifts.map(\.id).map(\.uuidString).joined(separator: ",")
-        let currentTime = Int(contextDate.timeIntervalSince1970)
-        return "\(activeIdentifier)-\(scheduledIdentifier)-\(currentTime)"
+        return "\(activeIdentifier)-\(minute)-\(preferences.selectedDisplayMode.rawValue)-\(selectedCompensationMode.rawValue)-\(preferences.liveActivitiesEnabled)"
     }
 
     private var startButtonTitle: String {
@@ -189,7 +193,7 @@ private struct HomeDashboardSceneView: View {
                 }
                 .padding(.horizontal, 22)
                 .padding(.top, 20)
-                .padding(.bottom, 130)
+                .padding(.bottom, 24)
             }
 
             if let milestoneText {
@@ -198,16 +202,32 @@ private struct HomeDashboardSceneView: View {
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            primaryAction
+                .padding(.horizontal, 20)
+                .padding(.vertical, 8)
+                .background(theme.trueBlack.opacity(0.96))
+        }
         .overlay(alignment: .bottom) {
             if let errorText {
-                Text(errorText)
-                    .font(.system(size: 14, weight: .medium, design: .rounded))
-                    .foregroundStyle(Color.white)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-                    .background(theme.secondaryPanel)
-                    .clipShape(Capsule())
-                    .padding(.bottom, 16)
+                HStack(spacing: 12) {
+                    Text(errorText)
+                        .font(TypeStyle.callout)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Button {
+                        self.errorText = nil
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .frame(minWidth: 44, minHeight: 44)
+                    }
+                    .accessibilityLabel("Dismiss error")
+                }
+                .foregroundStyle(Color.white)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(theme.secondaryPanel, in: RoundedRectangle(cornerRadius: 18))
+                .padding(.horizontal, 16)
+                .padding(.bottom, 16)
             }
         }
         .task(id: jobs.map(\.id)) {
@@ -219,9 +239,6 @@ private struct HomeDashboardSceneView: View {
         .task(id: activitySyncKey) {
             syncLiveActivityIfNeeded()
         }
-        .task(id: automationKey) {
-            await handleShiftAutomation()
-        }
     }
 
 
@@ -230,17 +247,18 @@ private struct HomeDashboardSceneView: View {
         return HStack(spacing: 0) {
             ForEach(EarningsDisplayMode.allCases) { mode in
                 Button {
-                    withAnimation(.spring(response: 0.38, dampingFraction: 0.78)) {
+                    withAnimation(reduceMotion ? nil : .spring(response: 0.38, dampingFraction: 0.78)) {
                         preferences.selectedDisplayMode = mode
                     }
-                    try? modelContext.save()
+                    saveChanges()
                     HapticManager.shared.fire(.selection, enabled: preferences.hapticsEnabled)
                 } label: {
-                    Text(mode == .gross ? "Gross" : "Take Home")
-                        .font(.system(size: 14, weight: .semibold, design: .rounded))
+                    Text(mode == .gross ? "Gross" : "Est. take-home")
+                        .font(.system(.subheadline, design: .rounded, weight: .semibold))
                         .foregroundStyle(mode == currentMode ? Color.black : Color.white.opacity(0.7))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .lineLimit(2)
+                        .padding(.vertical, 4)
                         .background {
                             if mode == currentMode {
                                 Capsule()
@@ -251,6 +269,7 @@ private struct HomeDashboardSceneView: View {
                         }
                 }
                 .buttonStyle(.plain)
+                .accessibilityAddTraits(mode == currentMode ? [.isSelected] : [])
             }
         }
         .padding(4)
@@ -262,17 +281,18 @@ private struct HomeDashboardSceneView: View {
         return HStack(spacing: 0) {
             ForEach(CompensationDisplayMode.allCases) { mode in
                 Button {
-                    withAnimation(.spring(response: 0.38, dampingFraction: 0.78)) {
+                    withAnimation(reduceMotion ? nil : .spring(response: 0.38, dampingFraction: 0.78)) {
                         preferences.selectedCompensationDisplayMode = mode
                     }
-                    try? modelContext.save()
+                    saveChanges()
                     HapticManager.shared.fire(.selection, enabled: preferences.hapticsEnabled)
                 } label: {
-                    Text(mode.title)
-                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    Text(mode == .actual ? "Shift pay" : "With supplements")
+                        .font(.system(.footnote, design: .rounded, weight: .semibold))
                         .foregroundStyle(mode == currentMode ? Color.black : Color.white.opacity(0.7))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .lineLimit(2)
+                        .padding(.vertical, 4)
                         .background {
                             if mode == currentMode {
                                 Capsule()
@@ -283,6 +303,7 @@ private struct HomeDashboardSceneView: View {
                         }
                 }
                 .buttonStyle(.plain)
+                .accessibilityAddTraits(mode == currentMode ? [.isSelected] : [])
             }
         }
         .padding(4)
@@ -298,7 +319,7 @@ private struct HomeDashboardSceneView: View {
                     .font(TypeStyle.headline)
                     .foregroundStyle(Color.white)
 
-                Text("Choose one or more jobs, then start tracking.")
+                Text(jobs.count > 1 ? "Choose the jobs you’re working, then start your shift." : "Ready when you are. Start your shift to see earnings live.")
                     .font(TypeStyle.body)
                     .foregroundStyle(theme.secondaryText)
                     .multilineTextAlignment(.center)
@@ -311,27 +332,22 @@ private struct HomeDashboardSceneView: View {
                 )
             }
 
-            Button {
-                startSelectedJobs()
-            } label: {
-                Text(startButtonTitle)
-                    .font(TypeStyle.title)
-                    .foregroundStyle(.black)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 22)
-                    .background(theme.accent(for: preferences.selectedDisplayMode))
-                    .clipShape(RoundedRectangle(cornerRadius: CornerRadius.cardLarge, style: .continuous))
-                    .shadow(color: theme.accent(for: preferences.selectedDisplayMode).opacity(0.32), radius: 26)
+            if jobs.count == 1, let job = jobs.first {
+                HStack(spacing: 10) {
+                    JobInitialBadge(name: job.displayName, accent: job.accent.color, size: 30)
+                    Text(job.displayName).font(TypeStyle.title3).foregroundStyle(.white)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.plain)
-            .disabled(selectedStartJobIdentifiers.isEmpty)
-            .opacity(selectedStartJobIdentifiers.isEmpty ? 0.7 : 1)
+
+            SummaryDrawer(snapshot: snapshot, mode: preferences.selectedDisplayMode, compensationMode: selectedCompensationMode)
 
             if let nextScheduledShift = scheduledShifts.first {
                 upcomingScheduledShiftCard(nextScheduledShift: nextScheduledShift)
             }
 
-            Spacer(minLength: 120)
+
         }
     }
 
@@ -344,16 +360,19 @@ private struct HomeDashboardSceneView: View {
 
                 VStack(spacing: 18) {
                     Text(activeTickerLabel)
-                        .font(TypeStyle.caption)
-                        .tracking(1.8)
+                        .font(TypeStyle.callout)
                         .foregroundStyle(theme.secondaryText)
 
                     RollingCurrencyText(amount: displayedAmount, mode: preferences.selectedDisplayMode)
+                    if selectedCompensationMode == .effective {
+                        Text("Includes prorated supplements")
+                            .font(TypeStyle.caption).foregroundStyle(theme.secondaryText)
+                    }
 
                     // Elapsed timer
                     if let earliestStart = snapshot.activeJobs.map(\.startDate).min() {
                         Text(earliestStart, style: .timer)
-                            .font(.system(size: 22, weight: .medium, design: .monospaced))
+                            .font(.system(.title2, design: .monospaced, weight: .medium))
                             .foregroundStyle(theme.secondaryText)
                             .monospacedDigit()
                     }
@@ -384,29 +403,31 @@ private struct HomeDashboardSceneView: View {
                 addJobMenu
             }
 
-            Button(role: .destructive) {
-                endActiveJobs()
-            } label: {
-                Text(snapshot.activeJobs.count == 1 ? "End Shift" : "End All Jobs")
-                    .font(.system(size: 22, weight: .bold, design: .rounded))
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, Spacing.lg)
-            }
-            .buttonStyle(.plain)
-            .glassCard(cornerRadius: CornerRadius.cardLarge)
         }
+    }
+
+    private var primaryAction: some View {
+        let isActive = !snapshot.activeJobs.isEmpty
+        return Button {
+            if isActive { endActiveJobs() } else { startSelectedJobs() }
+        } label: {
+            Label(isActive ? (snapshot.activeJobs.count == 1 ? "End shift" : "End all \(snapshot.activeJobs.count) jobs") : startButtonTitle,
+                  systemImage: isActive ? "stop.fill" : "play.fill")
+        }
+        .buttonStyle(AppActionButtonStyle(accent: isActive ? theme.roseAccent : theme.accent(for: preferences.selectedDisplayMode)))
+        .disabled(!isActive && selectedStartJobIdentifiers.isEmpty)
+        .accessibilityHint(isActive ? "Save tracked work to History" : "Begin tracking earnings for the selected jobs")
     }
 
     private var activeJobsCard: some View {
         VStack(alignment: .leading, spacing: Spacing.md) {
             HStack {
-                Text("Live Jobs")
+                Text("Active jobs")
                     .font(TypeStyle.title3)
                     .foregroundStyle(.white)
                 Spacer()
-                Text("Tap a job to adjust its timer")
-                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                Text("Tap to manage")
+                    .font(.system(.caption, design: .rounded, weight: .medium))
                     .foregroundStyle(theme.secondaryText)
             }
 
@@ -415,119 +436,52 @@ private struct HomeDashboardSceneView: View {
                     compensationModeToggle
                     Text(
                         selectedCompensationMode == .effective
-                            ? "Effective mode adds prorated supplemental pay for the live ticker."
-                            : "True mode shows only tracked shift earnings."
+                            ? "Includes the share of stipends and reimbursements allocated to this shift."
+                            : "Shift pay includes earnings from tracked hours."
                     )
-                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .font(.system(.caption, design: .rounded, weight: .medium))
                     .foregroundStyle(theme.secondaryText)
                 }
             }
 
-            if snapshot.activeJobs.count == 1 {
-                let activeJob = snapshot.activeJobs[0]
-                Button {
-                    if let openShift = openShifts.first(where: { $0.job?.id == activeJob.id }) {
-                        presentedSheet = HomeSheetDestination(kind: .activeShiftTools(openShift.id))
-                    }
-                } label: {
-                    HStack(alignment: .center) {
-                        VStack(alignment: .leading, spacing: 6) {
-                            HStack(spacing: Spacing.sm) {
-                                JobInitialBadge(name: activeJob.name, accent: activeJob.accent.color, size: 28)
-                                Text(activeJob.name)
-                                    .font(.system(size: 18, weight: .bold, design: .rounded))
-                                    .foregroundStyle(.white)
-                                    .lineLimit(1)
+            AdaptiveCardGrid(minimumWidth: snapshot.activeJobs.count == 1 ? 240 : 150, spacing: 10) {
+                ForEach(snapshot.activeJobs) { job in
+                    Button {
+                        if let open = openShifts.first(where: { $0.job?.id == job.id }) {
+                            presentedSheet = HomeSheetDestination(kind: .activeShiftTools(open.id))
+                        }
+                    } label: {
+                        VStack(alignment: .leading, spacing: 10) {
+                            HStack(spacing: 8) {
+                                JobInitialBadge(name: job.name, accent: job.accent.color, size: 28)
+                                Spacer(minLength: 4)
+                                Image(systemName: "chevron.right").font(.caption).foregroundStyle(theme.tertiaryText)
                             }
-                            
-                            HStack(spacing: Spacing.sm) {
-                                Text("Started \(activeJob.startDate.formatted(date: .omitted, time: .shortened))")
-                                    .font(.system(size: 13, weight: .medium, design: .rounded))
-                                    .foregroundStyle(theme.secondaryText)
-                                
-                                if let scheduledEndDate = activeJob.scheduledEndDate {
-                                    Text("•")
-                                        .foregroundStyle(theme.tertiaryText)
-                                    Text("Ends \(scheduledEndDate.formatted(date: .omitted, time: .shortened))")
-                                        .font(.system(size: 13, weight: .medium, design: .rounded))
-                                        .foregroundStyle(theme.secondaryText)
-                                }
+                            Text(job.name).font(TypeStyle.title3).foregroundStyle(.white)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Text(job.displayAmount(for: preferences.selectedDisplayMode, compensationMode: selectedCompensationMode), format: .currency(code: "USD"))
+                                .font(.system(.title2, design: .rounded, weight: .bold))
+                                .monospacedDigit().foregroundStyle(job.accent.color)
+                                .lineLimit(1).minimumScaleFactor(0.4)
+                            Text("Started \(job.startDate.formatted(date: .omitted, time: .shortened))")
+                                .font(TypeStyle.caption).foregroundStyle(theme.secondaryText)
+                            if let end = job.scheduledEndDate {
+                                Text("Planned end \(end.formatted(date: .abbreviated, time: .shortened))")
+                                    .font(TypeStyle.caption).foregroundStyle(theme.secondaryText)
                             }
                         }
-                        
-                        Spacer(minLength: 12)
-                        
-                        Text(
-                            activeJob
-                                .displayAmount(
-                                    for: preferences.selectedDisplayMode,
-                                    compensationMode: selectedCompensationMode
-                                )
-                                .formatted(.currency(code: "USD"))
-                        )
-                        .font(TypeStyle.title2)
-                        .fontWeight(.bold)
-                        .foregroundStyle(activeJob.accent.color)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.7)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(16)
+                        .background(job.accent.color.opacity(0.07), in: RoundedRectangle(cornerRadius: 16))
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(20)
-                }
-                .buttonStyle(.plain)
-                .glassCard(cornerRadius: CornerRadius.cardLarge, accent: activeJob.accent.color)
-            } else {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 10)], spacing: 10) {
-                    ForEach(snapshot.activeJobs) { activeJob in
-                        Button {
-                            if let openShift = openShifts.first(where: { $0.job?.id == activeJob.id }) {
-                                presentedSheet = HomeSheetDestination(kind: .activeShiftTools(openShift.id))
-                            }
-                        } label: {
-                            VStack(alignment: .leading, spacing: 10) {
-                                HStack(spacing: Spacing.sm) {
-                                    JobInitialBadge(name: activeJob.name, accent: activeJob.accent.color, size: 24)
-                                    Text(activeJob.name)
-                                        .font(.system(size: 16, weight: .bold, design: .rounded))
-                                        .foregroundStyle(.white)
-                                        .lineLimit(1)
-                                }
-
-                                Text(
-                                    activeJob
-                                        .displayAmount(
-                                            for: preferences.selectedDisplayMode,
-                                            compensationMode: selectedCompensationMode
-                                        )
-                                        .formatted(.currency(code: "USD"))
-                                )
-                                .font(TypeStyle.title2)
-                                .fontWeight(.bold)
-                                .foregroundStyle(activeJob.accent.color)
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.7)
-
-                                Text("Started \(activeJob.startDate.formatted(date: .omitted, time: .shortened))")
-                                    .font(TypeStyle.caption)
-                                    .foregroundStyle(theme.secondaryText)
-
-                                if let scheduledEndDate = activeJob.scheduledEndDate {
-                                    Text("Ends \(scheduledEndDate.formatted(date: .omitted, time: .shortened))")
-                                        .font(.system(size: 12, weight: .medium, design: .rounded))
-                                        .foregroundStyle(theme.secondaryText)
-                                }
-                            }
-                            .frame(maxWidth: .infinity, minHeight: 140, alignment: .leading)
-                            .padding(CornerRadius.cardSmall)
-                        }
-                        .buttonStyle(.plain)
-                        .glassCard(cornerRadius: CornerRadius.cardLarge, accent: activeJob.accent.color)
-                    }
+                    .buttonStyle(.plain)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityHint("Adjust timing, reminders, or end this job’s shift")
                 }
             }
         }
         .padding(18)
-        .glassCard(cornerRadius: CornerRadius.cardLarge)
+        .glassCard(cornerRadius: CornerRadius.cardLarge, hasShadow: false)
     }
 
     private var addJobMenu: some View {
@@ -545,7 +499,7 @@ private struct HomeDashboardSceneView: View {
                 Text("\(inactiveJobs.count) available")
                     .font(TypeStyle.caption)
             }
-            .font(.system(size: 16, weight: .semibold, design: .rounded))
+            .font(.system(.body, design: .rounded, weight: .semibold))
             .foregroundStyle(.white)
             .padding(.horizontal, 18)
             .padding(.vertical, CornerRadius.cardSmall)
@@ -561,10 +515,10 @@ private struct HomeDashboardSceneView: View {
                 .foregroundStyle(.white)
 
             Text(subtitle)
-                .font(.system(size: 14, weight: .medium, design: .rounded))
+                .font(.system(.subheadline, design: .rounded, weight: .medium))
                 .foregroundStyle(theme.secondaryText)
 
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 120), spacing: 10)], spacing: 10) {
+            AdaptiveCardGrid(minimumWidth: 140, spacing: 10) {
                 ForEach(jobs) { job in
                     let isSelected = selectedStartJobIdentifiers.contains(job.id)
                     Button {
@@ -574,13 +528,13 @@ private struct HomeDashboardSceneView: View {
                             HStack(spacing: Spacing.sm) {
                                 JobInitialBadge(name: job.displayName, accent: job.accent.color, size: 24)
                                 Text(job.displayName)
-                                    .font(.system(size: 15, weight: .bold, design: .rounded))
+                                    .font(.system(.callout, design: .rounded, weight: .bold))
                                     .foregroundStyle(.white)
-                                    .lineLimit(1)
+                                    .fixedSize(horizontal: false, vertical: true)
                             }
 
-                            Text(isSelected ? "Selected" : "Tap to include")
-                                .font(.system(size: 12, weight: .medium, design: .rounded))
+                            Label(isSelected ? "Selected" : "Include job", systemImage: isSelected ? "checkmark.circle.fill" : "circle")
+                                .font(.system(.caption, design: .rounded, weight: .medium))
                                 .foregroundStyle(isSelected ? job.accent.color : theme.secondaryText)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -591,7 +545,10 @@ private struct HomeDashboardSceneView: View {
                         }
                     }
                     .buttonStyle(.plain)
-                    .glassCard(cornerRadius: CornerRadius.cardLarge, accent: isSelected ? job.accent.color : .white)
+                    .glassCard(cornerRadius: CornerRadius.cardSmall, accent: isSelected ? job.accent.color : .white, hasShadow: false)
+                    .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+                    .accessibilityLabel(job.displayName)
+                    .accessibilityValue(isSelected ? "Selected" : "Not selected")
                 }
             }
         }
@@ -600,59 +557,39 @@ private struct HomeDashboardSceneView: View {
     }
 
     private func upcomingScheduledShiftCard(nextScheduledShift: ScheduledShift) -> some View {
-        VStack(alignment: .leading, spacing: Spacing.md) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 5) {
-                    Text(scheduledShifts.count == 1 ? "1 shift scheduled" : "\(scheduledShifts.count) shifts scheduled")
-                        .font(.system(size: 14, weight: .semibold, design: .rounded))
-                        .foregroundStyle(theme.secondaryText)
-
-                    Text(nextScheduledShift.startDate.formatted(date: .complete, time: .shortened))
-                        .font(TypeStyle.title2)
-                        .fontWeight(.bold)
-                        .foregroundStyle(.white)
-                }
-
-                Spacer()
-
-                Button {
-                    onOpenHistory()
-                } label: {
-                    Text("Manage")
-                        .font(.system(size: 14, weight: .semibold, design: .rounded))
-                        .foregroundStyle(Color.black)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 10)
-                        .background(theme.grossAccent)
-                        .clipShape(Capsule())
-                }
-                .buttonStyle(.plain)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                Label("Next scheduled shift", systemImage: "calendar")
+                    .font(TypeStyle.caption).foregroundStyle(theme.secondaryText)
+                Spacer(minLength: 4)
+                Button("Manage", action: onOpenHistory)
+                    .font(TypeStyle.callout).foregroundStyle(theme.grossAccent)
+                    .frame(minHeight: 44)
             }
-
-            if let job = nextScheduledShift.job {
-                jobBadge(for: job)
+            Text(nextScheduledShift.startDate.formatted(date: .complete, time: .shortened))
+                .font(TypeStyle.title3).foregroundStyle(.white)
+                .fixedSize(horizontal: false, vertical: true)
+            if let job = nextScheduledShift.job { jobBadge(for: job) }
+            Text("Planned until \(nextScheduledShift.endDate.formatted(date: .abbreviated, time: .shortened)).")
+                .font(TypeStyle.callout).foregroundStyle(theme.secondaryText)
+            Text("Applied while the app is open, or the next time you return.")
+                .font(TypeStyle.caption).foregroundStyle(theme.secondaryText)
+            if scheduledShifts.count > 1 {
+                Text("\(scheduledShifts.count) shifts scheduled").font(TypeStyle.caption).foregroundStyle(theme.secondaryText)
             }
-
-            Text("Auto-starts at \(nextScheduledShift.startDate.formatted(date: .omitted, time: .shortened)) and auto-stops at \(nextScheduledShift.endDate.formatted(date: .omitted, time: .shortened)).")
-                .font(.system(size: 14, weight: .medium, design: .rounded))
-                .foregroundStyle(theme.secondaryText)
-
             if !nextScheduledShift.note.isEmpty {
-                Text(nextScheduledShift.note)
-                    .font(TypeStyle.caption)
-                    .foregroundStyle(Color.white.opacity(0.88))
+                Text(nextScheduledShift.note).font(TypeStyle.callout).foregroundStyle(theme.secondaryText).lineLimit(3)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(18)
-        .glassCard(cornerRadius: CornerRadius.cardLarge)
+        .padding(18).glassCard(hasShadow: false)
     }
 
     private func jobBadge(for job: JobProfile) -> some View {
         HStack(spacing: Spacing.sm) {
             JobInitialBadge(name: job.displayName, accent: job.accent.color, size: 22)
             Text(job.displayName)
-                .font(.system(size: 12, weight: .bold, design: .rounded))
+                .font(.system(.caption, design: .rounded, weight: .bold))
                 .foregroundStyle(job.accent.color)
         }
         .padding(.horizontal, 12)
@@ -680,7 +617,7 @@ private struct HomeDashboardSceneView: View {
 
         if selectedStartJobIdentifiers.count == 1 {
             preferences.selectedHomeJobIdentifier = selectedStartJobIdentifiers.first
-            try? modelContext.save()
+            saveChanges()
         }
     }
 
@@ -694,7 +631,7 @@ private struct HomeDashboardSceneView: View {
             try ShiftController.startShifts(in: modelContext, jobIdentifiers: selectedIdentifiers)
             if selectedIdentifiers.count == 1 {
                 preferences.selectedHomeJobIdentifier = selectedIdentifiers.first
-                try? modelContext.save()
+                try PersistenceService.save(modelContext)
             }
             HapticManager.shared.fire(.action, enabled: preferences.hapticsEnabled)
         } catch {
@@ -706,7 +643,7 @@ private struct HomeDashboardSceneView: View {
         do {
             try ShiftController.startShifts(in: modelContext, jobIdentifiers: [job.id])
             preferences.selectedHomeJobIdentifier = job.id
-            try? modelContext.save()
+            try PersistenceService.save(modelContext)
             HapticManager.shared.fire(.action, enabled: preferences.hapticsEnabled)
         } catch {
             show(error.localizedDescription)
@@ -756,18 +693,15 @@ private struct HomeDashboardSceneView: View {
         }
 
         openShift.celebratedFirstHundred = true
-        try? modelContext.save()
+        do { try PersistenceService.save(modelContext) } catch {
+            show(error.localizedDescription)
+            return
+        }
         HapticManager.shared.fire(.success, enabled: preferences.hapticsEnabled)
-        withAnimation(.spring(response: 0.42, dampingFraction: 0.82)) {
+        withAnimation(reduceMotion ? nil : .spring(response: 0.42, dampingFraction: 0.82)) {
             milestoneText = "\(eligibleJob.name) crossed $100"
         }
 
-        try? await Task.sleep(for: .seconds(2.2))
-        await MainActor.run {
-            withAnimation(.easeOut(duration: 0.35)) {
-                milestoneText = nil
-            }
-        }
     }
 
     private func syncLiveActivityIfNeeded() {
@@ -795,78 +729,15 @@ private struct HomeDashboardSceneView: View {
         )
     }
 
-    private func handleShiftAutomation() async {
-        do {
-            var bannerText: String?
-            var shouldFireHaptic = false
-
-            let endedShifts = try ShiftController.autoEndShiftsIfNeeded(in: modelContext, at: contextDate)
-            if !endedShifts.isEmpty {
-                shouldFireHaptic = true
-                for endedShift in endedShifts {
-                    await ReminderManager.shared.notifyShiftAutoStopped(at: endedShift.endDate)
-                }
-
-                bannerText = endedShifts.count == 1
-                    ? "Scheduled stop reached for \(endedShifts[0].job?.displayName ?? "a job")"
-                    : "\(endedShifts.count) jobs auto-stopped"
-            }
-
-            let scheduleResult = try ShiftController.reconcileScheduledShifts(in: modelContext, at: contextDate)
-
-            let activeShiftStateChanged = !endedShifts.isEmpty || !scheduleResult.startedShifts.isEmpty
-            if activeShiftStateChanged {
-                let refreshedOpenShifts = (try? modelContext.fetch(FetchDescriptor<OpenShiftState>())) ?? []
-                await ReminderManager.shared.syncActiveShiftNotifications(for: refreshedOpenShifts)
-
-                let refreshedSnapshot = (try? ShiftController.dashboardSnapshot(in: modelContext, at: contextDate)) ?? .empty
-                await MainActor.run {
-                    syncLiveActivity(for: refreshedSnapshot)
-                }
-            }
-
-            if !scheduleResult.startedShifts.isEmpty {
-                shouldFireHaptic = true
-                if scheduleResult.startedShifts.count == 1 {
-                    bannerText = "\(scheduleResult.startedShifts[0].job?.displayName ?? "Scheduled job") started"
-                } else {
-                    bannerText = "\(scheduleResult.startedShifts.count) scheduled jobs started"
-                }
-            } else if !scheduleResult.autoCompletedShifts.isEmpty {
-                shouldFireHaptic = true
-                bannerText = scheduleResult.autoCompletedShifts.count == 1
-                    ? "Scheduled shift added to history"
-                    : "\(scheduleResult.autoCompletedShifts.count) scheduled shifts added to history"
-            }
-
-            if shouldFireHaptic {
-                HapticManager.shared.fire(.success, enabled: preferences.hapticsEnabled)
-            }
-
-            if let bannerText {
-                await MainActor.run {
-                    withAnimation(.spring(response: 0.42, dampingFraction: 0.84)) {
-                        milestoneText = bannerText
-                    }
-                }
-            }
-        } catch {
-            show(error.localizedDescription)
-        }
+    private func saveChanges() {
+        do { try PersistenceService.save(modelContext) } catch { show(error.localizedDescription) }
     }
 
     private func show(_ text: String) {
-        withAnimation(.easeOut(duration: 0.25)) {
+        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.25)) {
             errorText = text
         }
-        Task {
-            try? await Task.sleep(for: .seconds(2.8))
-            await MainActor.run {
-                withAnimation(.easeOut(duration: 0.25)) {
-                    errorText = nil
-                }
-            }
-        }
+
     }
 }
 
@@ -874,6 +745,7 @@ private struct ActiveShiftToolsView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @Environment(AppTheme.self) private var theme
+    @Query private var preferences: [AppPreferences]
 
     let openShift: OpenShiftState
 
@@ -891,7 +763,7 @@ private struct ActiveShiftToolsView: View {
         let scheduledEnd = openShift.scheduledEndDate ?? Date.now.addingTimeInterval(8 * 60 * 60)
         _hasScheduledEnd = State(initialValue: openShift.scheduledEndDate != nil)
         _scheduledEndDate = State(initialValue: scheduledEnd)
-        _selectedOffsets = State(initialValue: Set(openShift.scheduledReminderOffsets.isEmpty ? [30, 15, 5] : openShift.scheduledReminderOffsets))
+        _selectedOffsets = State(initialValue: Set(openShift.scheduledEndDate == nil ? [30, 15, 5] : openShift.scheduledReminderOffsets))
     }
 
     var body: some View {
@@ -899,7 +771,7 @@ private struct ActiveShiftToolsView: View {
             Section {
                 BrandHeader(
                     eyebrow: openShift.job?.displayName ?? "Shift Tools",
-                    subtitle: "Adjust timing, auto-stop, and reminders for this live job without leaving the ticker.",
+                    subtitle: "Adjust the start time, planned end, or reminders for this job.",
                     mode: .gross,
                     compact: true
                 )
@@ -908,7 +780,7 @@ private struct ActiveShiftToolsView: View {
             }
 
             Section("Fix Start Time") {
-                DatePicker("Shift started", selection: $startDate)
+                DatePicker("Shift started", selection: $startDate, in: ...Date.now)
                 Text("Use this only if you need to correct when you actually clocked in.")
                     .font(.footnote)
                     .foregroundStyle(theme.secondaryText)
@@ -917,7 +789,8 @@ private struct ActiveShiftToolsView: View {
             Section("Planned End") {
                 Toggle("Stop this shift automatically", isOn: $hasScheduledEnd)
                 if hasScheduledEnd {
-                    DatePicker("Shift should end", selection: $scheduledEndDate)
+                    DatePicker("Shift should end", selection: $scheduledEndDate, in: startDate...)
+                    ShiftDurationSummary(startDate: startDate, endDate: scheduledEndDate)
 
                     ForEach(reminderPresets, id: \.self) { offset in
                         Toggle(isOn: binding(for: offset)) {
@@ -927,13 +800,28 @@ private struct ActiveShiftToolsView: View {
                 }
             }
 
-            if let errorText {
-                Section {
-                    Text(errorText)
-                        .foregroundStyle(.red)
+            Section {
+                Button("Save & end this shift", systemImage: "stop.fill") {
+                    do {
+                        try ShiftController.updateOpenShift(
+                            in: modelContext, editing: openShift, startDate: startDate,
+                            scheduledEndDate: hasScheduledEnd ? scheduledEndDate : nil,
+                            reminderOffsets: Array(selectedOffsets).sorted(by: >)
+                        )
+                        try ShiftController.endShift(in: modelContext, openShift: openShift)
+                        HapticManager.shared.fire(.success, enabled: preferences.first?.hapticsEnabled ?? false)
+                        dismiss()
+                    } catch { errorText = error.localizedDescription }
                 }
+                .foregroundStyle(theme.roseAccent)
+            } footer: {
+                Text("Saves this job’s tracked work to History. Other active jobs keep running.")
+            }
+            if let errorText {
+                Section { AppInlineNotice(message: errorText) }
             }
         }
+        .appKeyboardToolbar()
         .scrollContentBackground(.hidden)
         .background(MoneyBackground(mode: .gross))
         .navigationTitle(openShift.job?.displayName ?? "Shift Tools")
@@ -992,33 +880,4 @@ private struct ActiveShiftToolsView: View {
             errorText = error.localizedDescription
         }
     }
-}
-
-private extension DashboardSnapshot {
-    static let empty = DashboardSnapshot(
-        currentBreakdown: nil,
-        activeJobs: [],
-        hasSupplementConfiguration: false,
-        currentGross: 0,
-        currentTakeHome: 0,
-        currentEffectiveGross: 0,
-        currentEffectiveTakeHome: 0,
-        payPeriodAggregation: .unified,
-        payPeriodGross: 0,
-        payPeriodTakeHome: 0,
-        payPeriodEffectiveGross: 0,
-        payPeriodEffectiveTakeHome: 0,
-        payPeriodHours: 0,
-        payPeriodNightPremium: 0,
-        allTimeGross: 0,
-        allTimeTakeHome: 0,
-        allTimeEffectiveGross: 0,
-        allTimeEffectiveTakeHome: 0,
-        projectedPaycheckGross: 0,
-        projectedPaycheckTakeHome: 0,
-        projectedPaycheckEffectiveGross: 0,
-        projectedPaycheckEffectiveTakeHome: 0,
-        projectedConfidenceLabel: "Earned so far",
-        allTimeHours: 0
-    )
 }

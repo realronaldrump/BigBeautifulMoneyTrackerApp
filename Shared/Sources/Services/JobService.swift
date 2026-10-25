@@ -11,9 +11,9 @@ enum JobServiceError: LocalizedError {
         case .maxJobsReached:
             "You can keep up to six jobs in the app."
         case .cannotDeleteOnlyActiveJob:
-            "Add another job before deleting this one."
+            "Add another job before archiving this one."
         case .cannotDeleteJobWithActiveShift(let jobName):
-            "End the active shift for \(jobName) before deleting this job."
+            "End the active shift for \(jobName) before archiving this job."
         }
     }
 }
@@ -69,11 +69,11 @@ enum JobService {
 
         for (index, job) in sortedJobs.enumerated() where job.sortOrder != index {
             job.sortOrder = index
-            job.updatedAt = .now
+            if !job.isArchived { job.updatedAt = .now }
         }
 
         for job in sortedJobs where !job.isArchived {
-            ensureConfiguration(for: job, in: context)
+            try ensureConfiguration(for: job, in: context)
         }
 
         return try jobs(in: context)
@@ -97,8 +97,8 @@ enum JobService {
             sortOrder: existingJobs.count
         )
         context.insert(newJob)
-        ensureConfiguration(for: newJob, in: context, anchorDate: anchorDate)
-        try context.save()
+        try ensureConfiguration(for: newJob, in: context, anchorDate: anchorDate)
+        try PersistenceService.save(context)
         return newJob
     }
 
@@ -127,6 +127,7 @@ enum JobService {
 
         job.isArchived = true
         job.updatedAt = .now
+        job.archivedAt = job.updatedAt
 
         let remainingJobs = activeJobs
             .filter { $0.id != job.id }
@@ -147,7 +148,7 @@ enum JobService {
             preferences.selectedHomeJobIdentifier = remainingJobs.first?.id
         }
 
-        try context.save()
+        try PersistenceService.save(context)
     }
 
     static func configuration(
@@ -205,18 +206,18 @@ enum JobService {
         for job: JobProfile,
         in context: ModelContext,
         anchorDate: Date = .now
-    ) {
+    ) throws {
         let normalizedAnchor = Calendar.current.startOfDay(for: anchorDate)
 
-        if ((try? context.fetch(FetchDescriptor<NightDifferentialRule>())) ?? []).contains(where: { $0.job?.id == job.id }) == false {
+        if (try context.fetch(FetchDescriptor<NightDifferentialRule>())).contains(where: { $0.job?.id == job.id }) == false {
             context.insert(NightDifferentialRule(job: job))
         }
 
-        if ((try? context.fetch(FetchDescriptor<OvertimeRuleSet>())) ?? []).contains(where: { $0.job?.id == job.id }) == false {
+        if (try context.fetch(FetchDescriptor<OvertimeRuleSet>())).contains(where: { $0.job?.id == job.id }) == false {
             context.insert(OvertimeRuleSet(job: job))
         }
 
-        if ((try? context.fetch(FetchDescriptor<PaySchedule>())) ?? []).contains(where: { $0.job?.id == job.id }) == false {
+        if (try context.fetch(FetchDescriptor<PaySchedule>())).contains(where: { $0.job?.id == job.id }) == false {
             context.insert(PaySchedule(job: job, anchorDate: normalizedAnchor))
         }
     }

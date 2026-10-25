@@ -4,19 +4,35 @@ Local-first iPhone earnings tracker built with SwiftUI, SwiftData, WidgetKit, Ac
 
 ## Current Status
 
-- Greenfield iOS project scaffolded with app target, widget/Live Activity extension, and unit tests.
-- Main flow implemented: onboarding, one-tap start/end shift, live ticker, history, settings, templates, reminders, Siri shortcuts, widgets, and Live Activity.
-- Earnings engine supports exact time-based gross calculation, night differential splitting, rate changes, and optional overtime thresholds.
-- Tax engine estimates federal + Colorado + FICA take-home using current settings and year-to-date context.
-- App Store preflight scan is `GREENLIT` with no critical findings.
-- iOS archive has succeeded locally at least once from this machine, but current archive attempts depend on local Xcode account/provisioning state.
+- SwiftUI app with onboarding, concurrent jobs, live shift tracking, history editing, schedules, templates, summaries, and PDF exports.
+- Earnings support dated rates, night premiums, daily and weekly overtime, and a configurable workweek start.
+- Newly saved shifts retain priced earning segments so later settings changes do not move their earnings between periods.
+- Take-home estimates use 2026 federal, Colorado, and FICA rules, with insurance, retirement, and paycheck adjustments.
+- SwiftData stays local. The app and widgets share an App Group store; existing app data is copied with SQLite's online backup before switching stores.
+- See [the correctness review](docs/review-2026-10-24.md) and [UI/UX polish notes](docs/ui-ux-review-2026-10-25.md) for changes, test coverage, and device verification limits.
 
-## Build
+## Local Validation
+
+Run the shared calculation and SwiftData tests on a Mac, without a simulator:
+
+```bash
+swift test
+```
+
+Generate the Xcode project and compile the app and widget without signing:
 
 ```bash
 xcodegen generate
-xcodebuild -project BigBeautifulMoneyTracker.xcodeproj -scheme BigBeautifulMoneyTracker -destination 'platform=iOS Simulator,name=iPhone 17 Pro Max,OS=26.2' build
+xcodebuild -project BigBeautifulMoneyTracker.xcodeproj -scheme BigBeautifulMoneyTracker -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO build
 ```
+
+Compile the complete iOS test target without launching a simulator:
+
+```bash
+xcodebuild -project BigBeautifulMoneyTracker.xcodeproj -scheme BigBeautifulMoneyTracker -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build-for-testing
+```
+
+The Mac suite excludes the ActivityKit and UIKit/PDF tests. Those tests remain in the iOS test target. Generic builds check compilation; they do not verify rendered UI or device behavior.
 
 ## Archive
 

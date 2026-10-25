@@ -1,5 +1,6 @@
 import SwiftData
 import SwiftUI
+import UIKit
 
 struct SettingsView: View {
     @Environment(\.modelContext) private var modelContext
@@ -9,6 +10,8 @@ struct SettingsView: View {
     @Query private var templates: [ScheduleTemplate]
 
     @State private var creatingJob = false
+    @State private var pendingCreatedJob: JobProfile?
+    @State private var createdJobDestination: JobProfile?
 
     var body: some View {
         if let preferences = preferences.first,
@@ -20,11 +23,13 @@ struct SettingsView: View {
                 templates: templates,
                 creatingJob: $creatingJob
             )
-            .sheet(isPresented: $creatingJob) {
-                NavigationStack {
-                    JobEditorView()
-                }
+            .sheet(isPresented: $creatingJob, onDismiss: {
+                createdJobDestination = pendingCreatedJob
+                pendingCreatedJob = nil
+            }) {
+                NavigationStack { JobEditorView { pendingCreatedJob = $0 } }
             }
+            .navigationDestination(item: $createdJobDestination) { JobSettingsView(job: $0) }
         } else {
             ProgressView()
                 .tint(.white)
@@ -50,6 +55,8 @@ private struct SettingsContent: View {
     @Binding var creatingJob: Bool
     @State private var jobPendingDeletion: JobProfile?
     @State private var deleteErrorText: String?
+    @State private var notificationStatus: String?
+    @State private var notificationsDenied = false
 
     var body: some View {
         ZStack {
@@ -59,7 +66,7 @@ private struct SettingsContent: View {
                 Section {
                     BrandHeader(
                         eyebrow: "Settings",
-                        subtitle: "Keep the home screen simple while each job carries its own rates, schedules, and shift rules.",
+                        subtitle: "Make the app work for your pay, schedule, and preferences.",
                         mode: preferences.selectedDisplayMode,
                         compact: true
                     )
@@ -74,7 +81,7 @@ private struct SettingsContent: View {
                     }
                     Toggle("Haptics", isOn: $preferences.hapticsEnabled)
                     Toggle("Live Activities", isOn: $preferences.liveActivitiesEnabled)
-                    Toggle("Widgets", isOn: $preferences.lockScreenWidgetsEnabled)
+                    Toggle("Show earnings in widgets", isOn: $preferences.lockScreenWidgetsEnabled)
                 } header: {
                     settingsLabel("Main Screen", icon: "rectangle.on.rectangle", color: theme.grossAccent)
                 }
@@ -99,7 +106,7 @@ private struct SettingsContent: View {
                             Button(role: .destructive) {
                                 jobPendingDeletion = job
                             } label: {
-                                Label("Delete", systemImage: "trash")
+                                Label("Archive", systemImage: "archivebox")
                             }
                             .disabled(jobs.count <= 1)
                         }
@@ -107,7 +114,7 @@ private struct SettingsContent: View {
                             Button(role: .destructive) {
                                 jobPendingDeletion = job
                             } label: {
-                                Label("Delete Job", systemImage: "trash")
+                                Label("Archive job", systemImage: "archivebox")
                             }
                             .disabled(jobs.count <= 1)
                         }
@@ -131,63 +138,73 @@ private struct SettingsContent: View {
                     Text("Each job keeps its own pay history, shift rules, and templates.")
                 }
 
-                TakeHomeEstimateSettings(taxProfile: taxProfile)
+                Section {
+                    NavigationLink {
+                        TakeHomeSettingsScreen(taxProfile: taxProfile)
+                    } label: {
+                        Label {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Take-home estimate")
+                                Text("Taxes, insurance, retirement, and paycheck adjustments")
+                                    .font(TypeStyle.caption).foregroundStyle(theme.secondaryText)
+                            }
+                        } icon: { Image(systemName: "banknote").foregroundStyle(theme.takeHomeAccent) }
+                    }
+                } header: {
+                    settingsLabel("Paycheck estimates", icon: "dollarsign.circle", color: theme.takeHomeAccent)
+                }
 
                 Section {
                     Toggle("Schedule reminders", isOn: $preferences.remindersEnabled)
-                    Button("Request reminder permission") {
-                        Task { await ReminderManager.shared.requestAuthorization() }
-                    }
-                    Button("Sync reminder schedule") {
+                    Button("Allow notifications") {
                         Task {
-                            await ReminderManager.shared.syncShiftReminders(
-                                templates: templates,
-                                isEnabled: preferences.remindersEnabled
-                            )
+                            let allowed = await ReminderManager.shared.requestAuthorization()
+                            notificationsDenied = !allowed
+                            notificationStatus = allowed ? "Notifications are allowed." : "Notifications are off. Enable them for Money Tracker in iPhone Settings."
                         }
                     }
-                    NavigationLink("Manage templates") {
+                    if let notificationStatus {
+                        Text(notificationStatus).font(.footnote).foregroundStyle(theme.secondaryText)
+                    }
+                    if notificationsDenied, let settingsURL = URL(string: UIApplication.openSettingsURLString) {
+                        Link("Open iPhone Settings", destination: settingsURL)
+                    }
+                    NavigationLink("Schedule templates") {
                         TemplatesView()
                     }
                 } header: {
-                    settingsLabel("Automation", icon: "gearshape.2.fill", color: Color(red: 0.58, green: 0.40, blue: 0.92))
+                    settingsLabel("Reminders", icon: "bell.fill", color: Color(red: 0.58, green: 0.40, blue: 0.92))
+                } footer: {
+                    Text("Changes to templates and reminder preferences are saved automatically.")
                 }
 
                 Section {
-                    Text("Your shift and pay data stays on this device by default.")
-                    Text("The app does not require an account, employer login, or payroll-provider connection.")
-                        .font(.footnote)
-                        .foregroundStyle(theme.secondaryText)
-                    Text("If your iPhone uses Apple-managed backup services, app data may be included according to your device settings.")
-                        .font(.footnote)
-                        .foregroundStyle(theme.secondaryText)
+                    DisclosureGroup("Privacy & storage") {
+                        Text("Your shifts and pay are stored on this iPhone and shared with the app’s widgets. No account or employer connection is required.")
+                            .font(TypeStyle.callout)
+                        Text("Apple-managed device backups may include this data according to your iPhone settings.")
+                            .font(TypeStyle.caption).foregroundStyle(theme.secondaryText)
+                    }
                 } header: {
-                    settingsLabel("Data & Access", icon: "lock.shield.fill", color: Color(red: 0.30, green: 0.72, blue: 0.68))
-                }
-
-                Section {
-                    Text("Davis's Big Beautiful Money Tracker App is for individual hourly workers tracking their own shifts and earnings.")
-                    Text("It is not tied to any employer, payroll provider, client, or organization, and it does not require an account.")
-                        .font(.footnote)
-                        .foregroundStyle(theme.secondaryText)
-                } header: {
-                    settingsLabel("About This App", icon: "heart.fill", color: theme.roseAccent)
+                    settingsLabel("About", icon: "lock.shield.fill", color: Color(red: 0.30, green: 0.72, blue: 0.68))
                 }
             }
         }
         .formStyle(.grouped)
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
+        .appKeyboardToolbar()
         .scrollContentBackground(.hidden)
-        .safeAreaPadding(.bottom, 120)
+        .safeAreaPadding(.bottom, 20)
         .tint(theme.grossAccent)
+        .onDisappear { PersistenceService.saveReportingFailure(modelContext) }
         .confirmationDialog(
-            "Delete Job?",
+            "Archive job?",
             isPresented: deleteConfirmationIsPresented,
             titleVisibility: .visible
         ) {
             if let jobPendingDeletion {
-                Button("Delete \(jobPendingDeletion.displayName)", role: .destructive) {
+                Button("Archive \(jobPendingDeletion.displayName)", role: .destructive) {
                     archiveJob(jobPendingDeletion)
                 }
             }
@@ -197,7 +214,7 @@ private struct SettingsContent: View {
         } message: {
             Text("This removes the job from active tracking and clears future schedules and templates. Completed shifts stay in History.")
         }
-        .alert("Unable to Delete Job", isPresented: deleteErrorIsPresented) {
+        .alert("Unable to Archive Job", isPresented: deleteErrorIsPresented) {
             Button("OK") {
                 deleteErrorText = nil
             }
@@ -245,6 +262,21 @@ private struct SettingsContent: View {
     }
 }
 
+private struct TakeHomeSettingsScreen: View {
+    @Environment(\.modelContext) private var modelContext
+    let taxProfile: TaxProfile
+
+    var body: some View {
+        Form { TakeHomeEstimateSettings(taxProfile: taxProfile) }
+            .navigationTitle("Take-home estimate")
+            .navigationBarTitleDisplayMode(.inline)
+            .scrollContentBackground(.hidden)
+            .background(MoneyBackground(mode: .takeHome))
+            .appKeyboardToolbar()
+            .onDisappear { PersistenceService.saveReportingFailure(modelContext) }
+    }
+}
+
 private struct TakeHomeEstimateSettings: View {
     @Environment(AppTheme.self) private var theme
 
@@ -284,6 +316,8 @@ private struct TakeHomeEstimateSettings: View {
             }
         } header: {
             settingsLabel("Take-Home Estimate", icon: "banknote.fill", color: theme.takeHomeAccent)
+        } footer: {
+            Text("Estimates use 2026 federal and Colorado tax rules.")
         }
 
         Section {
@@ -319,7 +353,7 @@ private struct TakeHomeEstimateSettings: View {
                 detail: "Matches DR 0004 line 2. Use 0 if payroll withholds Colorado from full taxable wages.",
                 value: $taxProfile.coloradoAnnualWithholdingAllowance,
                 prefix: "$",
-                suffix: "per yr",
+                suffix: "per year",
                 fractionDigits: 2,
                 allowsNegative: false
             )
@@ -341,10 +375,10 @@ private struct TakeHomeEstimateSettings: View {
                 icon: "cross.case.fill",
                 tint: Color(red: 0.30, green: 0.72, blue: 0.68),
                 title: "Pre-tax insurance",
-                detail: "Annual amount taken out before income tax, like medical, dental, or vision premiums.",
+                detail: "Annual Section 125 medical, dental, or vision premiums taken out before income and payroll taxes.",
                 value: $taxProfile.annualPretaxInsurance,
                 prefix: "$",
-                suffix: "per yr",
+                suffix: "per year",
                 fractionDigits: 2,
                 allowsNegative: false
             )
@@ -356,14 +390,14 @@ private struct TakeHomeEstimateSettings: View {
                 detail: "Annual 401(k), 403(b), or similar contributions that reduce taxable income.",
                 value: $taxProfile.annualRetirementContribution,
                 prefix: "$",
-                suffix: "per yr",
+                suffix: "per year",
                 fractionDigits: 2,
                 allowsNegative: false
             )
         } header: {
             settingsLabel("Annual Pre-Tax Deductions", icon: "minus.circle.fill", color: Color(red: 0.30, green: 0.72, blue: 0.68))
         } footer: {
-            Text("These are yearly totals, not one-paycheck amounts.")
+            Text("Enter yearly totals. These deductions reduce both taxable income and estimated cash take-home.")
         }
 
         Section {
@@ -418,7 +452,7 @@ private struct TakeHomeEstimateOverview: View {
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Tune this from a real paycheck")
-                        .font(.system(size: 16, weight: .bold, design: .rounded))
+                        .font(.system(.body, design: .rounded, weight: .bold))
                         .foregroundStyle(.white)
 
                     Text("The app starts with tax assumptions, then these settings let your actual paystub pull the estimate closer.")
@@ -462,7 +496,7 @@ private struct TakeHomeEstimateChip: View {
                 .textCase(.uppercase)
 
             Text(value)
-                .font(.system(size: 14, weight: .bold, design: .rounded))
+                .font(.system(.subheadline, design: .rounded, weight: .bold))
                 .foregroundStyle(.white)
                 .lineLimit(1)
                 .minimumScaleFactor(0.82)
@@ -483,6 +517,7 @@ private struct TakeHomeEstimateChip: View {
 
 private struct TaxSettingInputRow: View {
     @Environment(AppTheme.self) private var theme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     let icon: String
     let tint: Color
@@ -499,31 +534,12 @@ private struct TaxSettingInputRow: View {
     }
 
     var body: some View {
-        ViewThatFits(in: .horizontal) {
-            rowContent(axis: .horizontal)
-            rowContent(axis: .vertical)
+        VStack(alignment: .leading, spacing: 12) {
+            labelContent
+            inputContent
         }
-        .accessibilityElement(children: .combine)
-    }
-
-    @ViewBuilder
-    private func rowContent(axis: Axis) -> some View {
-        let isVertical = axis == .vertical
-
-        Group {
-            if isVertical {
-                VStack(alignment: .leading, spacing: 12) {
-                    labelContent
-                    inputContent
-                }
-            } else {
-                HStack(alignment: .center, spacing: 12) {
-                    labelContent
-                    Spacer(minLength: 12)
-                    inputContent
-                }
-            }
-        }
+        .padding(.vertical, 6)
+        .accessibilityElement(children: .contain)
     }
 
     private var labelContent: some View {
@@ -532,7 +548,7 @@ private struct TaxSettingInputRow: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
-                    .font(.system(size: 16, weight: .semibold, design: .rounded))
+                    .font(.system(.body, design: .rounded, weight: .semibold))
                     .foregroundStyle(.primary)
 
                 Text(detail)
@@ -544,36 +560,41 @@ private struct TaxSettingInputRow: View {
     }
 
     private var inputContent: some View {
-        HStack(spacing: 4) {
-            if let prefix {
-                Text(prefix)
-                    .foregroundStyle(theme.secondaryText)
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 8) {
+                    numberEntry
+                    unitLabel
+                }
+            } else {
+                HStack(spacing: 8) { numberEntry; unitLabel }
             }
-
-            TextField("0", value: $value, format: numberFormat)
-                .keyboardType(allowsNegative ? .numbersAndPunctuation : .decimalPad)
-                .multilineTextAlignment(.trailing)
-                .font(.system(size: 16, weight: .bold, design: .rounded))
-                .foregroundStyle(.primary)
-                .frame(minWidth: 72)
-                .accessibilityLabel(title)
-
-            Text(suffix)
-                .font(TypeStyle.micro)
-                .foregroundStyle(theme.tertiaryText)
-                .lineLimit(1)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .frame(width: 156)
-        .background(
-            RoundedRectangle(cornerRadius: 11, style: .continuous)
-                .fill(tint.opacity(0.12))
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: 11, style: .continuous)
-                .strokeBorder(tint.opacity(0.22), lineWidth: 1)
+        .padding(.horizontal, 12).padding(.vertical, 10)
+        .frame(maxWidth: .infinity, minHeight: 44)
+        .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
+        .overlay { RoundedRectangle(cornerRadius: 12).strokeBorder(tint.opacity(0.22), lineWidth: 1) }
+    }
+
+    private var numberEntry: some View {
+        HStack(spacing: 6) {
+            if let prefix { Text(prefix).foregroundStyle(theme.secondaryText) }
+            TextField("0", value: Binding(
+                get: { value },
+                set: { if $0.isFinite && (allowsNegative || $0 >= 0) { value = $0 } }
+            ), format: numberFormat)
+            .keyboardType(allowsNegative ? .numbersAndPunctuation : .decimalPad)
+            .multilineTextAlignment(.trailing)
+            .font(.system(.body, design: .rounded, weight: .bold))
+            .foregroundStyle(.primary)
+            .frame(minWidth: 72)
+            .accessibilityLabel(title)
         }
+    }
+
+    private var unitLabel: some View {
+        Text(suffix).font(TypeStyle.caption).foregroundStyle(theme.secondaryText)
+            .fixedSize(horizontal: false, vertical: true)
     }
 }
 
@@ -586,7 +607,7 @@ private struct TaxAdjustmentHelpRow: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 Text("Match the paystub difference")
-                    .font(.system(size: 15, weight: .bold, design: .rounded))
+                    .font(.system(.callout, design: .rounded, weight: .bold))
                     .foregroundStyle(.primary)
 
                 Text("If payroll withholds more than the app, enter a positive adjustment. If the app withholds too much, enter a negative adjustment.")
@@ -684,7 +705,7 @@ private struct JobSettingsView: View {
                     }
                 }
                 .onDisappear {
-                    try? modelContext.save()
+                    PersistenceService.saveReportingFailure(modelContext)
                 }
             } else {
                 ProgressView()
@@ -753,19 +774,17 @@ private struct JobSettingsForm: View {
                     Button {
                         editingRate = rate
                     } label: {
-                        HStack {
-                            Text("Starting \(rate.effectiveDate.formatted(date: .abbreviated, time: .omitted))")
-                            Spacer()
-                            Text(rate.hourlyRate, format: .currency(code: "USD"))
-                        }
+                        AppValueRow(title: "From \(rate.effectiveDate.formatted(date: .abbreviated, time: .omitted))", value: rate.hourlyRate.formatted(.currency(code: "USD")) + " / hr", accent: theme.grossAccent)
                     }
                 }
 
-                Button("Add a pay change") {
+                Button(payRates.isEmpty ? "Add hourly rate" : "Add a pay change") {
                     creatingRate = true
                 }
             } header: {
                 settingsLabel("Hourly Pay", icon: "banknote.fill", color: theme.grossAccent)
+            } footer: {
+                if payRates.isEmpty { Text("Add an hourly rate before you start tracking this job.") }
             }
 
             Section {
@@ -789,28 +808,12 @@ private struct JobSettingsForm: View {
                         Button {
                             editingSupplement = supplement
                         } label: {
-                            HStack(alignment: .center, spacing: 12) {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(supplement.displayLabel)
-                                        .foregroundStyle(.primary)
-
-                                    Text(supplementSummary(supplement))
-                                        .font(.footnote)
-                                        .foregroundStyle(theme.secondaryText)
-                                        .multilineTextAlignment(.leading)
-                                }
-
-                                Spacer()
-
-                                VStack(alignment: .trailing, spacing: 4) {
-                                    Text(supplement.amountPerInterval, format: .currency(code: "USD"))
-                                        .foregroundStyle(.primary)
-                                    if !supplement.isEnabled {
-                                        Text("Disabled")
-                                            .font(.footnote)
-                                            .foregroundStyle(theme.secondaryText)
-                                    }
-                                }
+                            VStack(alignment: .leading, spacing: 4) {
+                                AppValueRow(title: supplement.displayLabel, value: supplement.amountPerInterval.formatted(.currency(code: "USD")))
+                                Text(supplementSummary(supplement))
+                                    .font(TypeStyle.caption).foregroundStyle(theme.secondaryText)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                if !supplement.isEnabled { Text("Disabled").font(TypeStyle.caption).foregroundStyle(theme.secondaryText) }
                             }
                         }
                     }
@@ -830,7 +833,7 @@ private struct JobSettingsForm: View {
                 if nightRule.isEnabled {
                     DatePicker("Night bonus starts", selection: nightBonusStartBinding, displayedComponents: .hourAndMinute)
                     DatePicker("Night bonus ends", selection: nightBonusEndBinding, displayedComponents: .hourAndMinute)
-                    TextField("Extra pay percent", value: $nightRule.percentIncrease, format: .percent.precision(.fractionLength(0...1)))
+                    TextField("Extra pay percent", value: Binding(get: { nightRule.percentIncrease }, set: { if $0.isFinite && $0 >= 0 { nightRule.percentIncrease = $0 } }), format: .percent.precision(.fractionLength(0...1)))
                         .keyboardType(.decimalPad)
                 }
             } header: {
@@ -847,63 +850,83 @@ private struct JobSettingsForm: View {
 
             if overtimeRule.isEnabled {
                 Section {
-                    HStack {
-                        Text("Threshold")
-                        Spacer()
-                        TextField("hrs", value: Binding(
-                            get: { overtimeRule.dailyThresholdHours ?? 8 },
-                            set: { overtimeRule.dailyThresholdHours = $0 }
-                        ), format: .number.precision(.fractionLength(1)))
-                            .keyboardType(.decimalPad)
-                            .multilineTextAlignment(.trailing)
-                            .frame(width: 72)
-                        Text("hrs")
-                            .foregroundStyle(.secondary)
-                    }
-                    HStack {
-                        Text("Rate Multiplier")
-                        Spacer()
-                        Text("×")
-                            .foregroundStyle(.secondary)
-                        TextField("×", value: $overtimeRule.dailyMultiplier, format: .number.precision(.fractionLength(2)))
-                            .keyboardType(.decimalPad)
-                            .multilineTextAlignment(.trailing)
-                            .frame(width: 60)
+                    Toggle("Daily overtime", isOn: Binding(
+                        get: { overtimeRule.dailyThresholdHours != nil },
+                        set: { overtimeRule.dailyThresholdHours = $0 ? 8 : nil }
+                    ))
+                    if overtimeRule.dailyThresholdHours != nil {
+                        HStack {
+                            Text("Threshold")
+                            Spacer()
+                            TextField("hrs", value: Binding(
+                                get: { overtimeRule.dailyThresholdHours ?? 8 },
+                                set: { if $0.isFinite && $0 > 0 { overtimeRule.dailyThresholdHours = $0 } }
+                            ), format: .number.precision(.fractionLength(1)))
+                                .keyboardType(.decimalPad)
+                                .multilineTextAlignment(.trailing)
+                                .frame(width: 72)
+                            Text("hrs")
+                                .foregroundStyle(.secondary)
+                        }
+                        HStack {
+                            Text("Rate Multiplier")
+                            Spacer()
+                            Text("×")
+                                .foregroundStyle(.secondary)
+                            TextField("×", value: Binding(get: { overtimeRule.dailyMultiplier }, set: { if $0.isFinite && $0 >= 1 { overtimeRule.dailyMultiplier = $0 } }), format: .number.precision(.fractionLength(2)))
+                                .keyboardType(.decimalPad)
+                                .multilineTextAlignment(.trailing)
+                                .frame(width: 60)
+                        }
                     }
                 } header: {
                     settingsLabel("Daily Overtime", icon: "sun.max.fill", color: Color(red: 0.98, green: 0.73, blue: 0.25))
                 } footer: {
-                    Text("Hours beyond \(formattedThreshold(overtimeRule.dailyThresholdHours ?? 8)) in a single shift are paid at ×\(formattedMultiplier(overtimeRule.dailyMultiplier)).")
+                    Text(overtimeRule.dailyThresholdHours == nil ? "Daily overtime is off." : "Hours beyond \(formattedThreshold(overtimeRule.dailyThresholdHours ?? 8)) in a calendar day are paid at ×\(formattedMultiplier(overtimeRule.dailyMultiplier)).")
                 }
 
                 Section {
-                    HStack {
-                        Text("Threshold")
-                        Spacer()
-                        TextField("hrs", value: Binding(
-                            get: { overtimeRule.weeklyThresholdHours ?? 40 },
-                            set: { overtimeRule.weeklyThresholdHours = $0 }
-                        ), format: .number.precision(.fractionLength(1)))
-                            .keyboardType(.decimalPad)
-                            .multilineTextAlignment(.trailing)
-                            .frame(width: 72)
-                        Text("hrs")
-                            .foregroundStyle(.secondary)
-                    }
-                    HStack {
-                        Text("Rate Multiplier")
-                        Spacer()
-                        Text("×")
-                            .foregroundStyle(.secondary)
-                        TextField("×", value: $overtimeRule.weeklyMultiplier, format: .number.precision(.fractionLength(2)))
-                            .keyboardType(.decimalPad)
-                            .multilineTextAlignment(.trailing)
-                            .frame(width: 60)
+                    Toggle("Weekly overtime", isOn: Binding(
+                        get: { overtimeRule.weeklyThresholdHours != nil },
+                        set: { overtimeRule.weeklyThresholdHours = $0 ? 40 : nil }
+                    ))
+                    if overtimeRule.weeklyThresholdHours != nil {
+                        Picker("Workweek starts", selection: Binding(
+                            get: { overtimeRule.workweekStartRawValue ?? Calendar.current.firstWeekday },
+                            set: { overtimeRule.workweekStartRawValue = $0 }
+                        )) {
+                            ForEach(ScheduleWeekday.allCases) { weekday in
+                                Text(weekday.title).tag(weekday.rawValue)
+                            }
+                        }
+                        HStack {
+                            Text("Threshold")
+                            Spacer()
+                            TextField("hrs", value: Binding(
+                                get: { overtimeRule.weeklyThresholdHours ?? 40 },
+                                set: { if $0.isFinite && $0 > 0 { overtimeRule.weeklyThresholdHours = $0 } }
+                            ), format: .number.precision(.fractionLength(1)))
+                                .keyboardType(.decimalPad)
+                                .multilineTextAlignment(.trailing)
+                                .frame(width: 72)
+                            Text("hrs")
+                                .foregroundStyle(.secondary)
+                        }
+                        HStack {
+                            Text("Rate Multiplier")
+                            Spacer()
+                            Text("×")
+                                .foregroundStyle(.secondary)
+                            TextField("×", value: Binding(get: { overtimeRule.weeklyMultiplier }, set: { if $0.isFinite && $0 >= 1 { overtimeRule.weeklyMultiplier = $0 } }), format: .number.precision(.fractionLength(2)))
+                                .keyboardType(.decimalPad)
+                                .multilineTextAlignment(.trailing)
+                                .frame(width: 60)
+                        }
                     }
                 } header: {
                     settingsLabel("Weekly Overtime", icon: "calendar", color: Color(red: 0.32, green: 0.62, blue: 0.98))
                 } footer: {
-                    Text("Hours beyond \(formattedThreshold(overtimeRule.weeklyThresholdHours ?? 40)) in a work week are paid at ×\(formattedMultiplier(overtimeRule.weeklyMultiplier)).")
+                    Text(overtimeRule.weeklyThresholdHours == nil ? "Weekly overtime is off." : "Hours beyond \(formattedThreshold(overtimeRule.weeklyThresholdHours ?? 40)) in a work week are paid at ×\(formattedMultiplier(overtimeRule.weeklyMultiplier)).")
                 }
 
                 Section {
@@ -940,8 +963,8 @@ private struct JobSettingsForm: View {
                         SettingsSectionIcon(icon: "trash.fill", color: theme.roseAccent)
 
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("Delete this job")
-                                .font(.system(size: 16, weight: .semibold, design: .rounded))
+                            Text("Archive this job")
+                                .font(.system(.body, design: .rounded, weight: .semibold))
                             Text("Past shifts stay in History")
                                 .font(.footnote)
                                 .foregroundStyle(theme.secondaryText)
@@ -952,24 +975,24 @@ private struct JobSettingsForm: View {
                 }
                 .disabled(activeJobCount <= 1)
             } header: {
-                settingsLabel("Remove Job", icon: "trash.fill", color: theme.roseAccent)
+                settingsLabel("Archive job", icon: "trash.fill", color: theme.roseAccent)
             } footer: {
                 Text(removeJobFooter)
             }
         }
         .confirmationDialog(
-            "Delete \(job.displayName)?",
+            "Archive \(job.displayName)?",
             isPresented: $confirmingDeletion,
             titleVisibility: .visible
         ) {
-            Button("Delete \(job.displayName)", role: .destructive) {
+            Button("Archive \(job.displayName)", role: .destructive) {
                 archiveJob()
             }
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Completed shifts stay in History. Future schedules and templates for this job are removed.")
         }
-        .alert("Unable to Delete Job", isPresented: deleteErrorIsPresented) {
+        .alert("Unable to Archive Job", isPresented: deleteErrorIsPresented) {
             Button("OK") {
                 deleteErrorText = nil
             }
@@ -1071,6 +1094,7 @@ private struct JobEditorView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(AppTheme.self) private var theme
 
+    var onCreated: (JobProfile) -> Void = { _ in }
     @State private var name = ""
     @State private var accent: JobAccentStyle = .sky
     @State private var errorText: String?
@@ -1089,7 +1113,10 @@ private struct JobEditorView: View {
             }
 
             Section {
-                TextField("Job name", text: $name)
+                HStack(spacing: 12) {
+                    JobInitialBadge(name: name.isEmpty ? "Job" : name, accent: accent.color, size: 40)
+                    TextField("Job name", text: $name).textInputAutocapitalization(.words)
+                }
                 Picker("Accent", selection: $accent) {
                     ForEach(JobAccentStyle.allCases) { accent in
                         Text(accent.title).tag(accent)
@@ -1101,8 +1128,7 @@ private struct JobEditorView: View {
 
             if let errorText {
                 Section {
-                    Text(errorText)
-                        .foregroundStyle(.red)
+                    AppInlineNotice(message: errorText)
                 } header: {
                     settingsLabel("Issue", icon: "exclamationmark.triangle.fill", color: theme.roseAccent)
                 }
@@ -1110,6 +1136,7 @@ private struct JobEditorView: View {
         }
         .navigationTitle("Add Job")
         .navigationBarTitleDisplayMode(.inline)
+        .appKeyboardToolbar()
         .scrollContentBackground(.hidden)
         .background(MoneyBackground(mode: .gross))
         .toolbar {
@@ -1127,11 +1154,12 @@ private struct JobEditorView: View {
 
     private func save() {
         do {
-            _ = try JobService.createJob(
+            let job = try JobService.createJob(
                 in: modelContext,
                 name: name.trimmingCharacters(in: .whitespacesAndNewlines),
                 accent: accent
             )
+            onCreated(job)
             dismiss()
         } catch {
             errorText = error.localizedDescription
@@ -1255,9 +1283,14 @@ private struct SupplementEditorView: View {
             if let editingSupplement {
                 Section {
                     Button(role: .destructive) {
-                        modelContext.delete(editingSupplement)
-                        try? modelContext.save()
-                        dismiss()
+                        do {
+                            modelContext.delete(editingSupplement)
+                            try PersistenceService.save(modelContext)
+                            dismiss()
+                        } catch {
+                            modelContext.rollback()
+                            errorText = error.localizedDescription
+                        }
                     } label: {
                         Text("Delete this supplemental item")
                     }
@@ -1268,9 +1301,7 @@ private struct SupplementEditorView: View {
 
             if let errorText {
                 Section {
-                    Text(errorText)
-                        .font(.footnote)
-                        .foregroundStyle(.red)
+                    AppInlineNotice(message: errorText)
                 } header: {
                     settingsLabel("Issue", icon: "exclamationmark.triangle.fill", color: theme.roseAccent)
                 }
@@ -1278,6 +1309,7 @@ private struct SupplementEditorView: View {
         }
         .navigationTitle(editingSupplement == nil ? "Add Supplement" : "Edit Supplement")
         .navigationBarTitleDisplayMode(.inline)
+        .appKeyboardToolbar()
         .scrollContentBackground(.hidden)
         .background(MoneyBackground(mode: .takeHome))
         .sheet(isPresented: $showingScheduleHelp) {
@@ -1369,7 +1401,7 @@ private struct SupplementEditorView: View {
         }
 
         do {
-            try modelContext.save()
+            try PersistenceService.save(modelContext)
             dismiss()
         } catch {
             errorText = error.localizedDescription
@@ -1421,9 +1453,7 @@ private struct RateEditorView: View {
 
             if let errorText {
                 Section {
-                    Text(errorText)
-                        .font(.footnote)
-                        .foregroundStyle(.red)
+                    AppInlineNotice(message: errorText)
                 } header: {
                     settingsLabel("Issue", icon: "exclamationmark.triangle.fill", color: theme.roseAccent)
                 }
@@ -1431,6 +1461,7 @@ private struct RateEditorView: View {
         }
         .navigationTitle(editingRate == nil ? "Add Rate" : "Edit Rate")
         .navigationBarTitleDisplayMode(.inline)
+        .appKeyboardToolbar()
         .scrollContentBackground(.hidden)
         .background(MoneyBackground(mode: .gross))
         .toolbar {
@@ -1444,14 +1475,32 @@ private struct RateEditorView: View {
                         return
                     }
 
+                    let normalizedDate = Calendar.current.startOfDay(for: effectiveDate)
+                    do {
+                        let rates = try modelContext.fetch(FetchDescriptor<PayRateSchedule>())
+                        if rates.contains(where: {
+                            $0.job?.id == job.id && $0.id != editingRate?.id && Calendar.current.isDate($0.effectiveDate, inSameDayAs: normalizedDate)
+                        }) {
+                            errorText = "A rate already exists on this date. Edit that rate or choose another date."
+                            return
+                        }
+                    } catch {
+                        errorText = error.localizedDescription
+                        return
+                    }
                     if let editingRate {
-                        editingRate.effectiveDate = effectiveDate
+                        editingRate.effectiveDate = normalizedDate
                         editingRate.hourlyRate = hourlyRate
                     } else {
-                        modelContext.insert(PayRateSchedule(job: job, effectiveDate: effectiveDate, hourlyRate: hourlyRate))
+                        modelContext.insert(PayRateSchedule(job: job, effectiveDate: normalizedDate, hourlyRate: hourlyRate))
                     }
-                    try? modelContext.save()
-                    dismiss()
+                    do {
+                        try PersistenceService.save(modelContext)
+                        dismiss()
+                    } catch {
+                        modelContext.rollback()
+                        errorText = error.localizedDescription
+                    }
                 }
                 .disabled(!canSave)
             }
@@ -1487,7 +1536,7 @@ private struct SupplementSchedulePreviewCard: View {
             HStack(alignment: .top, spacing: Spacing.md) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("How this timing works")
-                        .font(.system(size: 13, weight: .bold, design: .rounded))
+                        .font(.system(.footnote, design: .rounded, weight: .bold))
                         .foregroundStyle(.white)
 
                     Text("The two dates do different jobs: one lines up the repeating cycle and the other turns the supplement on.")
@@ -1609,7 +1658,7 @@ private struct SupplementScheduleInsightRow: View {
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
-                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                    .font(.system(.footnote, design: .rounded, weight: .bold))
                     .foregroundStyle(.white)
 
                 Text(text)
@@ -1654,7 +1703,7 @@ private struct SupplementScheduleHelpSheet: View {
                         Button("Done") {
                             dismiss()
                         }
-                        .font(.system(size: 14, weight: .bold, design: .rounded))
+                        .font(.system(.subheadline, design: .rounded, weight: .bold))
                         .foregroundStyle(theme.takeHomeAccent)
                     }
 
@@ -1676,7 +1725,7 @@ private struct SupplementScheduleHelpSheet: View {
 
                     VStack(alignment: .leading, spacing: 8) {
                         Text("In plain English")
-                            .font(.system(size: 13, weight: .bold, design: .rounded))
+                            .font(.system(.footnote, design: .rounded, weight: .bold))
                             .foregroundStyle(theme.takeHomeAccent)
 
                         Text(plainEnglishSummary)
@@ -1793,7 +1842,7 @@ private struct SupplementScheduleDefinitionCard: View {
                     }
 
                 Text(title)
-                    .font(.system(size: 15, weight: .bold, design: .rounded))
+                    .font(.system(.callout, design: .rounded, weight: .bold))
                     .foregroundStyle(.white)
             }
 
@@ -1849,7 +1898,7 @@ private struct SettingsSectionHeader: View {
             SettingsSectionIcon(icon: icon, color: color)
 
             Text(title)
-                .font(.system(size: 13, weight: .bold, design: .rounded))
+                .font(.system(.footnote, design: .rounded, weight: .bold))
                 .foregroundStyle(.white.opacity(0.96))
         }
         .padding(.top, 6)

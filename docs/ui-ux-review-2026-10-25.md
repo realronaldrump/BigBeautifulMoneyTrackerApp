@@ -1,0 +1,27 @@
+# UI/UX review and polish — October 25, 2026
+
+This pass reviewed onboarding, Home, navigation, History, shift editors, settings, job setup, templates, summaries, pay-period details, widgets, and Live Activities. It builds on the earlier correctness fixes. Changes remain local and uncommitted; the existing name, logo, dark palette, and version metadata are preserved.
+
+## Improvements
+
+- **Clearer hierarchy:** Compact headers give the screen's purpose more prominence while retaining the full app name and logo. Repeated introductory copy and excessive bottom padding were removed. Cards use consistent corners, spacing, and quieter backgrounds. Secondary text has stronger contrast.
+- **Reachable shift controls:** Home keeps start/end actions above the navigation bar rather than below the scrolling cards. Off-shift Home includes pay-period and all-time totals. Active-job cards allow names to wrap, show each job's earnings clearly, and lead to its controls. A job can be ended individually without ending the others; edits in that sheet are saved before ending. An intentionally empty reminder selection is preserved.
+- **Predictable navigation:** All four tab labels stay visible in fixed positions. The custom bar hides while the keyboard is showing. Selection animations respect Reduce Motion.
+- **Shorter onboarding:** The initial setup focuses on hourly rate, pay frequency, and cycle start. Tax assumptions are available in a disclosure. Currency and units are explicit, invalid rates have visible feedback, the keyboard has a Done control, and the begin action stays reachable.
+- **Useful History navigation:** Search matches job names, notes, and dates. Filters separate completed/scheduled work and individual jobs, including archived jobs. Completed records are grouped by month. Empty states offer useful next actions. Gross and estimated take-home have explicit labels; overnight time ranges include the ending weekday. Notes and premiums are easier to scan.
+- **Safer, clearer editors:** Shift forms show their job, duration, and overnight ending date. Invalid ranges explain why Save is unavailable. Decimal keyboards can be dismissed. Permanent shift/template removal requires a deliberate confirmation rather than a full swipe deleting immediately.
+- **Focused settings:** Tax, insurance, retirement, and withholding controls live on a dedicated take-home screen. Numeric controls use the full row width and put units beneath the entry at accessibility sizes. A newly created job leads directly to its pay setup, with a clear first-rate action. Existing archive behavior is labeled Archive rather than Delete. Reminder copy reflects automatic resync, and denied notification permission offers a link to iPhone Settings. Privacy details use a disclosure rather than repeated explanatory sections.
+- **Readable summaries:** Combined totals appear before the chart and archive. Hero amounts identify whether they represent the current period, active shifts, or all time, and whether they are gross or estimated take-home. Value rows stack when needed. Totals and detail grids adapt to the available width and use a single column at accessibility sizes. Disclosure controls are real accessible buttons rather than an unlabeled card-wide tap gesture. Chart bars have explicit accessibility labels and currency values.
+- **Pay-period details:** Archive cards and metrics avoid crowded horizontal rows. Status tags wrap. Large currency figures stay on one line, and detail rows adapt to long labels. Day/night/overtime presentation clarifies that overtime hours overlap the day/night categories.
+- **Widgets and Live Activities:** Idle widgets show pay-period totals, or all-time totals when periods differ, instead of an unhelpful zero shift amount. Amount labels identify the period and gross/take-home basis. Small-widget spacing accommodates the extra context. Live Activity labels use plain earnings terminology rather than “True” pay.
+- **Accessibility and consistency:** Shared typography scales with Dynamic Type; compact data layouts have explicit fallbacks. Controls have meaningful labels, selection and disclosure state are exposed, decorative identity badges are hidden from VoiceOver, and new animations respect Reduce Motion. Existing Reduce Transparency behavior remains supported.
+
+## Verification
+
+- `swift test`: **64 shared calculation/persistence tests passed**. The existing archive-error copy assertion was updated to match the clearer Archive wording.
+- Unsigned generic iOS app + widget build: **passed**.
+- Generic iOS Simulator `build-for-testing`: **passed**, compiling the complete iOS test target without executing it or launching a simulator.
+- Shared SwiftUI components were rendered offscreen on macOS at **320 and 390 points**, with both the normal and accessibility layout branches. The review covered long job names and labels, large monetary values, wrapping tags, total grids, notices, branding, and the primary action. These are component layout checks, not iPhone screenshots. macOS font behavior does not establish iOS Dynamic Type sizing.
+- `git diff --check`: **passed**.
+
+No real financial data was changed by validation. No iPhone or simulator was installed, booted, launched, or used to execute tests. Full iOS interaction checks for navigation, search, sheet dismissal, keyboard transitions, VoiceOver focus order, and widget/Live Activity rendering remain pending runtime authorization and validation.

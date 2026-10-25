@@ -1,8 +1,8 @@
 import ActivityKit
 import Foundation
 
-struct ShiftActivityAttributes: ActivityAttributes {
-    public struct ContentState: Codable, Hashable {
+struct ShiftActivityAttributes: ActivityAttributes, Sendable {
+    public struct ContentState: Codable, Hashable, Sendable {
         var mode: EarningsDisplayMode
         var compensationMode: CompensationDisplayMode
         var syncedAmount: Double

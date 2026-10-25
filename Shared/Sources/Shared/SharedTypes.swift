@@ -1,6 +1,6 @@
 import Foundation
 
-enum EarningsDisplayMode: String, Codable, CaseIterable, Identifiable {
+enum EarningsDisplayMode: String, Codable, CaseIterable, Identifiable, Sendable {
     case gross
     case takeHome
 
@@ -25,7 +25,7 @@ enum EarningsDisplayMode: String, Codable, CaseIterable, Identifiable {
     }
 }
 
-enum CompensationDisplayMode: String, Codable, CaseIterable, Identifiable {
+enum CompensationDisplayMode: String, Codable, CaseIterable, Identifiable, Sendable {
     case actual
     case effective
 
@@ -208,57 +208,76 @@ enum ScheduleWeekday: Int, Codable, CaseIterable, Identifiable {
 
 enum LocalizedNumericInput {
     static func decimalValue(from text: String, locale: Locale = .current) -> Double? {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
-            return nil
+        var input = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !input.isEmpty else { return nil }
+        var sign = ""
+        if input.first == "-" || input.first == "+" {
+            sign = String(input.removeFirst())
         }
+        guard !input.isEmpty else { return nil }
 
         let formatter = NumberFormatter()
         formatter.locale = locale
         formatter.numberStyle = .decimal
-
-        if let value = formatter.number(from: trimmed)?.doubleValue {
-            return value
-        }
-
-        let allowedCharacters = CharacterSet(charactersIn: "0123456789-.,")
-        let sanitizedScalars = trimmed.unicodeScalars.filter { allowedCharacters.contains($0) }
-        var sanitized = String(String.UnicodeScalarView(sanitizedScalars))
-        guard !sanitized.isEmpty else {
-            return nil
-        }
-
-        let isNegative = sanitized.hasPrefix("-")
-        sanitized.removeAll { $0 == "-" }
-
-        let separatorCharacter: Character?
-        if let lastDot = sanitized.lastIndex(of: "."),
-           let lastComma = sanitized.lastIndex(of: ",") {
-            separatorCharacter = lastDot > lastComma ? "." : ","
-        } else if sanitized.contains(".") {
-            separatorCharacter = "."
-        } else if sanitized.contains(",") {
-            separatorCharacter = ","
-        } else {
-            separatorCharacter = nil
-        }
-
-        let localeDecimalSeparator = formatter.decimalSeparator ?? "."
-        let decimalIndex = separatorCharacter.flatMap { sanitized.lastIndex(of: $0) }
-        var normalizedDigits = ""
-
-        for index in sanitized.indices {
-            let character = sanitized[index]
-            if character.isNumber {
-                normalizedDigits.append(character)
-            } else if let decimalIndex, index == decimalIndex {
-                normalizedDigits.append(contentsOf: localeDecimalSeparator)
+        let localeDecimal = formatter.decimalSeparator ?? "."
+        let localeGrouping = formatter.groupingSeparator ?? ","
+        // Normalize the space variants used for grouping by decimal keyboards.
+        let usesSpaceGrouping = localeGrouping.unicodeScalars.allSatisfy { CharacterSet.whitespaces.contains($0) }
+        if usesSpaceGrouping {
+            for space in [" ", "\u{00a0}", "\u{202f}"] {
+                input = input.replacingOccurrences(of: space, with: localeGrouping)
             }
         }
 
-        let normalized = (isNegative ? "-" : "") + normalizedDigits
+        let allowedSeparators = Set([".", ",", localeDecimal, localeGrouping])
+        guard input.allSatisfy({ character in
+            character.wholeNumberValue != nil || allowedSeparators.contains(String(character))
+        }) else { return nil }
 
-        return formatter.number(from: normalized)?.doubleValue
+        func validGrouping(_ value: String, separator: String) -> Bool {
+            let groups = value.components(separatedBy: separator)
+            guard groups.count > 1, let first = groups.first, !first.isEmpty else { return false }
+            let primarySize = max(1, formatter.groupingSize)
+            let secondarySize = formatter.secondaryGroupingSize > 0 ? formatter.secondaryGroupingSize : primarySize
+            guard groups.last?.count == primarySize, first.count <= secondarySize else { return false }
+            return groups.enumerated().allSatisfy { index, group in
+                !group.isEmpty && group.allSatisfy { $0.wholeNumberValue != nil }
+                    && (index == 0 || index == groups.count - 1 || group.count == secondarySize)
+            }
+        }
+
+        var decimalSeparator: String?
+        var groupingSeparator: String?
+        if input.contains("."), input.contains(",") {
+            decimalSeparator = input.lastIndex(of: ".")! > input.lastIndex(of: ",")! ? "." : ","
+            groupingSeparator = decimalSeparator == "." ? "," : "."
+        } else if input.contains(localeDecimal) {
+            decimalSeparator = localeDecimal
+        } else if input.contains(localeGrouping), validGrouping(input, separator: localeGrouping) {
+            groupingSeparator = localeGrouping
+        } else if input.contains(".") || input.contains(",") {
+            decimalSeparator = input.contains(".") ? "." : ","
+        }
+
+        let parts = decimalSeparator.map { input.components(separatedBy: $0) } ?? [input]
+        guard parts.count <= 2 else { return nil }
+        var integer = parts[0]
+        if usesSpaceGrouping, integer.contains(localeGrouping) {
+            groupingSeparator = localeGrouping
+        }
+        if let groupingSeparator {
+            guard validGrouping(integer, separator: groupingSeparator) else { return nil }
+            integer = integer.replacingOccurrences(of: groupingSeparator, with: "")
+        }
+        let fraction = parts.count == 2 ? parts[1] : ""
+        guard integer.allSatisfy({ $0.wholeNumberValue != nil }),
+              fraction.allSatisfy({ $0.wholeNumberValue != nil }),
+              !integer.isEmpty || !fraction.isEmpty else { return nil }
+        let digits = integer.compactMap(\.wholeNumberValue).map(String.init).joined()
+        let fractionalDigits = fraction.compactMap(\.wholeNumberValue).map(String.init).joined()
+        let normalized = sign + (digits.isEmpty ? "0" : digits) + (parts.count == 2 ? "." + fractionalDigits : "")
+        guard let value = Double(normalized), value.isFinite else { return nil }
+        return value
     }
 
     static func decimalText(for value: Double, locale: Locale = .current, maximumFractionDigits: Int = 2) -> String {
@@ -272,6 +291,18 @@ enum LocalizedNumericInput {
     }
 }
 
+struct EarningsSegment: Codable, Equatable, Sendable {
+    var startDate: Date
+    var endDate: Date
+    var baseEarnings: Double
+    var nightPremiumEarnings: Double
+    var overtimePremiumEarnings: Double
+    var nightHours: Double
+    var overtimeHours: Double
+
+    var hours: Double { endDate.timeIntervalSince(startDate) / 3600 }
+}
+
 struct EarningsBreakdown: Codable, Equatable {
     var totalHours: Double
     var grossEarnings: Double
@@ -282,12 +313,18 @@ struct EarningsBreakdown: Codable, Equatable {
     var nightHours: Double
     var overtimeHours: Double
     var effectiveRate: Double
+    var segments: [EarningsSegment] = []
 }
 
 struct TaxEstimate: Codable, Equatable {
     var annualizedGrossIncome: Double
     var estimatedWithholdingRate: Double
     var currentShiftNetEstimate: Double
+    var estimatedPayrollDeductionRate: Double = 0
+
+    var estimatedNetRate: Double {
+        max(0, 1 - estimatedWithholdingRate - estimatedPayrollDeductionRate)
+    }
 }
 
 enum PayPeriodAggregationState: Equatable {

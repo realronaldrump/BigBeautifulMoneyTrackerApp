@@ -20,5 +20,6 @@ struct JobInitialBadge: View {
                 Circle()
                     .fill(accent.opacity(0.14))
             )
+            .accessibilityHidden(true)
     }
 }

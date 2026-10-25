@@ -8,8 +8,10 @@ enum EarningsEngine {
         nightRule: NightDifferentialRule,
         overtimeRule: OvertimeRuleSet?,
         historicalShifts: [ShiftRecord],
+        pricedSegments: [EarningsSegment] = [],
         calendar: Calendar = .current
     ) -> EarningsBreakdown {
+        let calendar = overtimeRule?.workCalendar(calendar) ?? calendar
         guard end > start else {
             return EarningsBreakdown(
                 totalHours: 0,
@@ -24,13 +26,17 @@ enum EarningsEngine {
             )
         }
 
-        let sortedBoundaries = buildBoundaries(
+        var sortedBoundaries = buildBoundaries(
             start: start,
             end: end,
             payRates: payRates,
             nightRule: nightRule,
             calendar: calendar
         )
+        if !pricedSegments.isEmpty {
+            let priceBoundaries = pricedSegments.flatMap { [$0.startDate, $0.endDate] }.filter { $0 > start && $0 < end }
+            sortedBoundaries = Array(Set(sortedBoundaries + priceBoundaries)).sorted()
+        }
 
         var baseEarnings = 0.0
         var nightPremiumEarnings = 0.0
@@ -39,11 +45,14 @@ enum EarningsEngine {
         var nightHours = 0.0
         var overtimeHours = 0.0
         var effectiveRate = 0.0
+        var segments: [EarningsSegment] = []
 
         var currentDayStart: Date?
         var currentWeekStart: Date?
         var dayHoursWorked = 0.0
         var weekHoursWorked = 0.0
+        // A backdated entry must never count shifts that happen after it.
+        let priorShifts = historicalShifts.filter { $0.endDate <= start }
 
         for index in 0..<(sortedBoundaries.count - 1) {
             let segmentStart = sortedBoundaries[index]
@@ -54,8 +63,8 @@ enum EarningsEngine {
             if currentDayStart != dayStart {
                 currentDayStart = dayStart
                 dayHoursWorked = historicalHours(
-                    in: DateInterval(start: dayStart, end: calendar.date(byAdding: .day, value: 1, to: dayStart)!),
-                    historicalShifts: historicalShifts
+                    in: DateInterval(start: dayStart, end: calendar.date(byAdding: .day, value: 1, to: dayStart) ?? segmentEnd),
+                    historicalShifts: priorShifts
                 )
             }
 
@@ -64,13 +73,17 @@ enum EarningsEngine {
                 currentWeekStart = weekInterval.start
                 weekHoursWorked = historicalHours(
                     in: weekInterval,
-                    historicalShifts: historicalShifts
+                    historicalShifts: priorShifts
                 )
             }
 
-            let baseRate = payRate(at: segmentStart, payRates: payRates)
-            let nightPercent = isNightShift(date: segmentStart, rule: nightRule, calendar: calendar) ? nightRule.percentIncrease : 0
+            let savedPrice = pricedSegments.first { $0.startDate <= segmentStart && $0.endDate > segmentStart && $0.hours > 0 }
+            let baseRate = savedPrice.map { $0.baseEarnings / $0.hours } ?? payRate(at: segmentStart, payRates: payRates)
+            let configuredNightPercent = isNightShift(date: segmentStart, rule: nightRule, calendar: calendar) && nightRule.percentIncrease.isFinite
+                ? max(0, nightRule.percentIncrease) : 0
+            let nightPercent = savedPrice.map { $0.baseEarnings > 0 ? $0.nightPremiumEarnings / $0.baseEarnings : 0 } ?? configuredNightPercent
             var remainingHours = segmentEnd.timeIntervalSince(segmentStart) / 3600
+            var chunkStart = segmentStart
 
             while remainingHours > 0.000_001 {
                 let dailyThreshold = overtimeRule?.isEnabled == true ? overtimeRule?.dailyThresholdHours : nil
@@ -95,6 +108,16 @@ enum EarningsEngine {
                 baseEarnings += baseRate * chunkHours
                 nightPremiumEarnings += baseRate * nightPercent * chunkHours
                 overtimePremiumEarnings += baseRate * (1 + nightPercent) * max(0, overtimeMultiplier - 1) * chunkHours
+                let chunkEnd = min(segmentEnd, chunkStart.addingTimeInterval(chunkHours * 3600))
+                segments.append(EarningsSegment(
+                    startDate: chunkStart, endDate: chunkEnd,
+                    baseEarnings: baseRate * chunkHours,
+                    nightPremiumEarnings: baseRate * nightPercent * chunkHours,
+                    overtimePremiumEarnings: baseRate * (1 + nightPercent) * max(0, overtimeMultiplier - 1) * chunkHours,
+                    nightHours: nightPercent > 0 ? chunkHours : 0,
+                    overtimeHours: overtimeMultiplier > 1 ? chunkHours : 0
+                ))
+                chunkStart = chunkEnd
 
                 if nightPercent > 0 {
                     nightHours += chunkHours
@@ -123,7 +146,8 @@ enum EarningsEngine {
             regularHours: regularHours,
             nightHours: nightHours,
             overtimeHours: overtimeHours,
-            effectiveRate: effectiveRate
+            effectiveRate: effectiveRate,
+            segments: segments
         )
     }
 
@@ -135,10 +159,9 @@ enum EarningsEngine {
         historicalShifts: [ShiftRecord],
         calendar: Calendar = .current
     ) -> Double {
-        let oneSecondEarlier = moment.addingTimeInterval(-1)
         let breakdown = calculate(
-            start: oneSecondEarlier,
-            end: moment,
+            start: moment,
+            end: moment.addingTimeInterval(1),
             payRates: payRates,
             nightRule: nightRule,
             overtimeRule: overtimeRule,
@@ -149,8 +172,11 @@ enum EarningsEngine {
     }
 
     static func payRate(at date: Date, payRates: [PayRateSchedule]) -> Double {
-        let sorted = payRates.sorted { $0.effectiveDate < $1.effectiveDate }
-        return sorted.last(where: { $0.effectiveDate <= date })?.hourlyRate ?? sorted.first?.hourlyRate ?? 0
+        let sorted = payRates.sorted {
+            $0.effectiveDate == $1.effectiveDate ? $0.id.uuidString < $1.id.uuidString : $0.effectiveDate < $1.effectiveDate
+        }
+        let rate = sorted.last(where: { $0.effectiveDate <= date })?.hourlyRate ?? sorted.first?.hourlyRate ?? 0
+        return rate.isFinite ? max(0, rate) : 0
     }
 
     private static func buildBoundaries(
@@ -230,12 +256,12 @@ enum EarningsEngine {
     }
 
     private static func isThresholdActive(currentHours: Double, threshold: Double?) -> Bool {
-        guard let threshold else { return false }
+        guard let threshold, threshold.isFinite, threshold > 0 else { return false }
         return currentHours >= threshold - 0.000_001
     }
 
     private static func thresholdDistance(currentHours: Double, threshold: Double?, alreadyActive: Bool) -> Double {
-        guard let threshold, !alreadyActive else { return .infinity }
+        guard let threshold, threshold.isFinite, threshold > 0, !alreadyActive else { return .infinity }
         return max(threshold - currentHours, 0.000_001)
     }
 
@@ -246,8 +272,8 @@ enum EarningsEngine {
     ) -> Double {
         guard let overtimeRule, overtimeRule.isEnabled else { return 1 }
 
-        let dailyMultiplier = dailyActive ? overtimeRule.dailyMultiplier : 1
-        let weeklyMultiplier = weeklyActive ? overtimeRule.weeklyMultiplier : 1
+        let dailyMultiplier = dailyActive && overtimeRule.dailyMultiplier.isFinite ? max(1, overtimeRule.dailyMultiplier) : 1
+        let weeklyMultiplier = weeklyActive && overtimeRule.weeklyMultiplier.isFinite ? max(1, overtimeRule.weeklyMultiplier) : 1
 
         switch overtimeRule.precedence {
         case .highestRateWins:

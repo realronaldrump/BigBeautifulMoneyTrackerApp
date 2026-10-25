@@ -1,7 +1,7 @@
 import ActivityKit
 import Foundation
 
-struct ShiftLiveActivityPayload: Equatable {
+struct ShiftLiveActivityPayload: Equatable, Sendable {
     var title: String
     var contentState: ShiftActivityAttributes.ContentState
     var staleDate: Date
@@ -15,6 +15,7 @@ enum ShiftLiveActivitySyncAction: Equatable {
 @MainActor
 enum LiveActivityManager {
     static let staleInterval: TimeInterval = 2 * 60
+    private static var syncTask: Task<Void, Never>?
 
     static func sync(
         for snapshot: DashboardSnapshot,
@@ -95,15 +96,33 @@ enum LiveActivityManager {
     static func startOrUpdate(_ payload: ShiftLiveActivityPayload) {
         guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
 
+        let previous = syncTask
+        previous?.cancel()
+        syncTask = Task {
+            await previous?.value
+            guard !Task.isCancelled else { return }
+            await applyUpdate(payload)
+        }
+    }
+
+    // Create and consume ActivityKit's non-Sendable handles on the same
+    // executor. Only immutable content crosses the main-actor boundary.
+    @concurrent
+    nonisolated private static func applyUpdate(_ payload: ShiftLiveActivityPayload) async {
         let attributes = ShiftActivityAttributes(title: payload.title)
         let content = ActivityContent(state: payload.contentState, staleDate: payload.staleDate)
-
-        Task {
-            if let activity = Activity<ShiftActivityAttributes>.activities.first {
-                await activity.update(content)
-            } else {
-                _ = try? Activity<ShiftActivityAttributes>.request(attributes: attributes, content: content)
+        let matchingID = Activity<ShiftActivityAttributes>.activities.first { $0.attributes.title == payload.title }?.id
+        let obsoleteIDs = Activity<ShiftActivityAttributes>.activities.map(\.id).filter { $0 != matchingID }
+        for identifier in obsoleteIDs {
+            if let activity = Activity<ShiftActivityAttributes>.activities.first(where: { $0.id == identifier }) {
+                await activity.end(nil, dismissalPolicy: .immediate)
             }
+        }
+        guard !Task.isCancelled else { return }
+        if let matching = Activity<ShiftActivityAttributes>.activities.first(where: { $0.id == matchingID }) {
+            await matching.update(content)
+        } else {
+            _ = try? Activity<ShiftActivityAttributes>.request(attributes: attributes, content: content)
         }
     }
 
@@ -135,12 +154,20 @@ enum LiveActivityManager {
     }
 
     private static func end(_ contentState: ShiftActivityAttributes.ContentState) {
-        let content = ActivityContent(state: contentState, staleDate: nil)
+        let previous = syncTask
+        previous?.cancel()
+        syncTask = Task {
+            await previous?.value
+            guard !Task.isCancelled else { return }
+            await applyEnd(contentState)
+        }
+    }
 
-        Task {
-            for activity in Activity<ShiftActivityAttributes>.activities {
-                await activity.end(content, dismissalPolicy: .immediate)
-            }
+    @concurrent
+    nonisolated private static func applyEnd(_ contentState: ShiftActivityAttributes.ContentState) async {
+        let content = ActivityContent(state: contentState, staleDate: nil)
+        for activity in Activity<ShiftActivityAttributes>.activities {
+            await activity.end(content, dismissalPolicy: .immediate)
         }
     }
 

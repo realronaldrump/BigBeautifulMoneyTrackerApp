@@ -7,6 +7,9 @@ enum ShiftControllerError: LocalizedError {
     case invalidShiftRange
     case invalidScheduledEnd
     case noJobsSelected
+    case futureStart
+    case overlappingShift(jobName: String)
+    case futureCompletedShift
 
     var errorDescription: String? {
         switch self {
@@ -23,6 +26,12 @@ enum ShiftControllerError: LocalizedError {
             return "The planned end needs to be later than the shift start."
         case .noJobsSelected:
             return "Pick at least one job to start tracking."
+        case .futureStart:
+            return "An active shift cannot start in the future. Use a scheduled shift for future work."
+        case .overlappingShift(let jobName):
+            return "This overlaps another shift for \(jobName). Adjust its timing in History before saving."
+        case .futureCompletedShift:
+            return "A completed shift cannot end in the future. Use Schedule Future Shift for planned work."
         }
     }
 }
@@ -86,6 +95,7 @@ enum ShiftController {
     ) throws -> [OpenShiftState] {
         try DataBootstrapper.seedIfNeeded(in: context)
 
+        guard date <= .now else { throw ShiftControllerError.futureStart }
         if let scheduledEndDate, scheduledEndDate <= date {
             throw ShiftControllerError.invalidScheduledEnd
         }
@@ -102,6 +112,7 @@ enum ShiftController {
         let paySchedules = try context.fetch(FetchDescriptor<PaySchedule>())
         let templates = try context.fetch(FetchDescriptor<ScheduleTemplate>())
         let existingOpenShifts = try context.fetch(FetchDescriptor<OpenShiftState>())
+        let completedShifts = try context.fetch(FetchDescriptor<ShiftRecord>())
 
         for job in selectedJobs {
             let configuration = JobService.configuration(
@@ -115,6 +126,12 @@ enum ShiftController {
 
             guard !configuration.payRates.isEmpty else {
                 throw ShiftControllerError.missingPayRate(jobName: job.displayName)
+            }
+            let end = scheduledEndDate ?? .distantFuture
+            guard !completedShifts.contains(where: {
+                $0.job?.id == job.id && $0.startDate < end && $0.endDate > date
+            }) else {
+                throw ShiftControllerError.overlappingShift(jobName: job.displayName)
             }
         }
 
@@ -133,7 +150,7 @@ enum ShiftController {
             resolvedShifts.append(openShift)
         }
 
-        try context.save()
+        try PersistenceService.save(context)
         return resolvedShifts.sorted { $0.startDate < $1.startDate }
     }
 
@@ -181,7 +198,7 @@ enum ShiftController {
         let allOpenShifts = try context.fetch(openShiftDescriptor)
 
         let targetedOpenShifts: [OpenShiftState]
-        if let openShiftIdentifiers, !openShiftIdentifiers.isEmpty {
+        if let openShiftIdentifiers {
             targetedOpenShifts = allOpenShifts.filter { openShiftIdentifiers.contains($0.id) }
         } else {
             targetedOpenShifts = allOpenShifts
@@ -199,6 +216,22 @@ enum ShiftController {
         var completedShifts = try context.fetch(FetchDescriptor<ShiftRecord>())
         var endedShifts: [ShiftRecord] = []
 
+        // Validate the entire selection before inserting or deleting anything.
+        for openShift in targetedOpenShifts {
+            let end = min(date, openShift.scheduledEndDate ?? date)
+            guard end > openShift.startDate else {
+                throw ShiftControllerError.invalidShiftRange
+            }
+            guard payRates.contains(where: { $0.job?.id == openShift.job?.id }) else {
+                throw ShiftControllerError.missingPayRate(jobName: openShift.job?.displayName)
+            }
+            if completedShifts.contains(where: {
+                $0.job?.id == openShift.job?.id && $0.startDate < end && $0.endDate > openShift.startDate
+            }) {
+                throw ShiftControllerError.overlappingShift(jobName: openShift.job?.displayName ?? "this job")
+            }
+        }
+
         for openShift in targetedOpenShifts {
             let job = try resolvedJob(for: openShift.job?.id, in: context)
             let configuration = JobService.configuration(
@@ -214,10 +247,11 @@ enum ShiftController {
                 throw ShiftControllerError.missingPayRate(jobName: job.displayName)
             }
 
+            let end = min(date, openShift.scheduledEndDate ?? date)
             let jobHistoricalShifts = completedShifts.filter { $0.job?.id == job.id }
             let breakdown = EarningsEngine.calculate(
                 start: openShift.startDate,
-                end: date,
+                end: end,
                 payRates: configuration.payRates,
                 nightRule: configuration.nightRule,
                 overtimeRule: configuration.overtimeRule,
@@ -227,7 +261,7 @@ enum ShiftController {
             let shift = ShiftRecord(
                 job: job,
                 startDate: openShift.startDate,
-                endDate: date,
+                endDate: end,
                 note: openShift.note,
                 breakdown: breakdown
             )
@@ -238,7 +272,12 @@ enum ShiftController {
             endedShifts.append(shift)
         }
 
-        try context.save()
+        for shift in endedShifts {
+            if let job = shift.job {
+                try recalculateOvertime(in: context, for: job, affectedStart: shift.startDate, affectedEnd: shift.endDate)
+            }
+        }
+        try PersistenceService.save(context)
         return endedShifts.sorted { $0.startDate < $1.startDate }
     }
 
@@ -254,6 +293,10 @@ enum ShiftController {
         guard endDate > startDate else {
             throw ShiftControllerError.invalidShiftRange
         }
+        let oldJob = shift?.job
+        let oldStart = shift?.startDate
+        let oldEnd = shift?.endDate
+        guard endDate <= .now else { throw ShiftControllerError.futureCompletedShift }
 
         let payRates = try context.fetch(FetchDescriptor<PayRateSchedule>())
         let nightRules = try context.fetch(FetchDescriptor<NightDifferentialRule>())
@@ -279,6 +322,16 @@ enum ShiftController {
                 return existing.id != shift.id && existing.job?.id == job.id
             }
 
+        guard !existingShifts.contains(where: { $0.startDate < endDate && $0.endDate > startDate }) else {
+            throw ShiftControllerError.overlappingShift(jobName: job.displayName)
+        }
+        let activeShifts = try context.fetch(FetchDescriptor<OpenShiftState>())
+        guard !activeShifts.contains(where: {
+            $0.job?.id == job.id && $0.startDate < endDate && ($0.scheduledEndDate ?? .distantFuture) > startDate
+        }) else {
+            throw ShiftControllerError.overlappingShift(jobName: job.displayName)
+        }
+
         let breakdown = EarningsEngine.calculate(
             start: startDate,
             end: endDate,
@@ -293,16 +346,7 @@ enum ShiftController {
             shift.startDate = startDate
             shift.endDate = endDate
             shift.note = note
-            shift.totalHours = breakdown.totalHours
-            shift.grossEarnings = breakdown.grossEarnings
-            shift.baseEarnings = breakdown.baseEarnings
-            shift.nightPremiumEarnings = breakdown.nightPremiumEarnings
-            shift.overtimePremiumEarnings = breakdown.overtimePremiumEarnings
-            shift.regularHours = breakdown.regularHours
-            shift.nightHours = breakdown.nightHours
-            shift.overtimeHours = breakdown.overtimeHours
-            shift.effectiveRateAtClockOut = breakdown.effectiveRate
-            shift.updatedAt = .now
+            shift.apply(breakdown)
         } else {
             context.insert(
                 ShiftRecord(
@@ -315,7 +359,11 @@ enum ShiftController {
             )
         }
 
-        try context.save()
+        if let oldJob, let oldStart, let oldEnd {
+            try recalculateOvertime(in: context, for: oldJob, affectedStart: oldStart, affectedEnd: oldEnd)
+        }
+        try recalculateOvertime(in: context, for: job, affectedStart: startDate, affectedEnd: endDate)
+        try PersistenceService.save(context)
     }
 
     static func saveScheduledShift(
@@ -331,6 +379,16 @@ enum ShiftController {
             throw ShiftControllerError.invalidShiftRange
         }
 
+        let existing = try context.fetch(FetchDescriptor<ScheduledShift>())
+        let completed = try context.fetch(FetchDescriptor<ShiftRecord>())
+        guard !existing.contains(where: {
+            $0.id != shift?.id && $0.job?.id == job.id && $0.startDate < endDate && $0.endDate > startDate
+        }), !completed.contains(where: {
+            $0.job?.id == job.id && $0.startDate < endDate && $0.endDate > startDate
+        }) else {
+            throw ShiftControllerError.overlappingShift(jobName: job.displayName)
+        }
+
         if let shift {
             shift.job = job
             shift.startDate = startDate
@@ -341,17 +399,59 @@ enum ShiftController {
             context.insert(ScheduledShift(job: job, startDate: startDate, endDate: endDate, note: note))
         }
 
-        try context.save()
+        try PersistenceService.save(context)
     }
 
     static func deleteShift(_ shift: ShiftRecord, in context: ModelContext) throws {
+        let job = shift.job
+        let start = shift.startDate
+        let end = shift.endDate
         context.delete(shift)
-        try context.save()
+        if let job {
+            try recalculateOvertime(in: context, for: job, affectedStart: start, affectedEnd: end)
+        }
+        try PersistenceService.save(context)
+    }
+
+    /// Backdating, moving, or deleting history changes later overtime in the
+    /// affected workweeks. Leave unrelated stored pay history untouched.
+    private static func recalculateOvertime(
+        in context: ModelContext,
+        for job: JobProfile,
+        affectedStart: Date,
+        affectedEnd: Date
+    ) throws {
+        let configuration = JobService.configuration(
+            for: job,
+            payRates: try context.fetch(FetchDescriptor<PayRateSchedule>()),
+            nightRules: try context.fetch(FetchDescriptor<NightDifferentialRule>()),
+            overtimeRules: try context.fetch(FetchDescriptor<OvertimeRuleSet>()),
+            paySchedules: try context.fetch(FetchDescriptor<PaySchedule>()),
+            templates: []
+        )
+        guard configuration.overtimeRule?.isEnabled == true, !configuration.payRates.isEmpty else { return }
+        let calendar = configuration.overtimeRule?.workCalendar(.current) ?? .current
+        let firstWeek = calendar.dateInterval(of: .weekOfYear, for: affectedStart)
+        let lastWeek = calendar.dateInterval(of: .weekOfYear, for: max(affectedStart, affectedEnd.addingTimeInterval(-0.001)))
+        let start = firstWeek?.start ?? affectedStart
+        let end = lastWeek?.end ?? affectedEnd
+        let records = try context.fetch(FetchDescriptor<ShiftRecord>(sortBy: [SortDescriptor(\ShiftRecord.startDate)]))
+            .filter { $0.job?.id == job.id }
+        for record in records where record.startDate < end && record.endDate > start {
+            let breakdown = EarningsEngine.calculate(
+                start: record.startDate, end: record.endDate,
+                payRates: configuration.payRates, nightRule: configuration.nightRule,
+                overtimeRule: configuration.overtimeRule,
+                historicalShifts: records.filter { $0.id != record.id },
+                pricedSegments: record.earningsSegments, calendar: calendar
+            )
+            record.apply(breakdown)
+        }
     }
 
     static func deleteScheduledShift(_ shift: ScheduledShift, in context: ModelContext) throws {
         context.delete(shift)
-        try context.save()
+        try PersistenceService.save(context)
     }
 
     static func updateOpenShift(
@@ -374,10 +474,19 @@ enum ShiftController {
             throw ShiftControllerError.invalidScheduledEnd
         }
 
+        guard startDate <= .now else { throw ShiftControllerError.futureStart }
+        let completed = try context.fetch(FetchDescriptor<ShiftRecord>())
+        let end = scheduledEndDate ?? .distantFuture
+        guard !completed.contains(where: {
+            $0.job?.id == targetOpenShift.job?.id && $0.startDate < end && $0.endDate > startDate
+        }) else {
+            throw ShiftControllerError.overlappingShift(jobName: targetOpenShift.job?.displayName ?? "this job")
+        }
+
         targetOpenShift.startDate = startDate
         targetOpenShift.scheduledEndDate = scheduledEndDate
         targetOpenShift.scheduledReminderOffsets = scheduledEndDate == nil ? [] : reminderOffsets
-        try context.save()
+        try PersistenceService.save(context)
     }
 
     @discardableResult
@@ -403,16 +512,15 @@ enum ShiftController {
     }
 
     static func reconcileScheduledShifts(in context: ModelContext, at date: Date = .now) throws -> ScheduledShiftAutomationResult {
-        try DataBootstrapper.seedIfNeeded(in: context)
-
-        let allJobs = try JobService.jobs(in: context)
         let scheduledDescriptor = FetchDescriptor<ScheduledShift>(
             sortBy: [SortDescriptor(\ScheduledShift.startDate)]
         )
         let scheduledShifts = try context.fetch(scheduledDescriptor)
-        guard !scheduledShifts.isEmpty else {
+        guard scheduledShifts.contains(where: { $0.startDate <= date }) else {
             return ScheduledShiftAutomationResult()
         }
+        try DataBootstrapper.seedIfNeeded(in: context)
+        let allJobs = try JobService.jobs(in: context)
 
         let payRates = try context.fetch(FetchDescriptor<PayRateSchedule>())
         let nightRules = try context.fetch(FetchDescriptor<NightDifferentialRule>())
@@ -426,6 +534,29 @@ enum ShiftController {
         )
         var result = ScheduledShiftAutomationResult()
         var discardedArchivedSchedules = false
+
+        // Preflight every due schedule so a later missing rate or conflict cannot
+        // leave earlier schedules partly converted in the shared context.
+        let dueSchedules = scheduledShifts.filter { $0.startDate <= date && $0.job?.isArchived != true }
+        for scheduled in dueSchedules {
+            guard scheduled.endDate > scheduled.startDate else { throw ShiftControllerError.invalidShiftRange }
+            guard let job = scheduled.job ?? allJobs.first else { continue }
+            guard payRates.contains(where: { $0.job?.id == job.id }) else {
+                throw ShiftControllerError.missingPayRate(jobName: job.displayName)
+            }
+            let overlapsCompleted = completedShifts.contains {
+                $0.job?.id == job.id && $0.startDate < scheduled.endDate && $0.endDate > scheduled.startDate
+            }
+            let overlapsOpen = existingOpenShifts.contains {
+                $0.job?.id == job.id && $0.startDate < scheduled.endDate && ($0.scheduledEndDate ?? .distantFuture) > scheduled.startDate
+            }
+            let overlapsSchedule = dueSchedules.contains {
+                $0.id != scheduled.id && $0.job?.id == job.id && $0.startDate < scheduled.endDate && $0.endDate > scheduled.startDate
+            }
+            guard !overlapsCompleted, !overlapsOpen, !overlapsSchedule else {
+                throw ShiftControllerError.overlappingShift(jobName: job.displayName)
+            }
+        }
 
         for scheduledShift in scheduledShifts {
             guard scheduledShift.startDate <= date else {
@@ -492,23 +623,35 @@ enum ShiftController {
         }
 
         if discardedArchivedSchedules || !result.autoCompletedShifts.isEmpty || !result.startedShifts.isEmpty {
-            try context.save()
+            for shift in result.autoCompletedShifts {
+                if let job = shift.job {
+                    try recalculateOvertime(in: context, for: job, affectedStart: shift.startDate, affectedEnd: shift.endDate)
+                }
+            }
+            try PersistenceService.save(context)
         }
 
         return result
     }
 
-    static func summarySnapshot(in context: ModelContext, at date: Date = .now) throws -> SummarySnapshot {
-        try DataBootstrapper.seedIfNeeded(in: context)
+    static func summarySnapshot(in context: ModelContext, at date: Date = .now, calendar: Calendar = .current) throws -> SummarySnapshot {
         let snapshotData = try loadSnapshotData(in: context)
 
-        let jobSummaries = snapshotData.jobs.map { job in
-            buildJobSummary(for: job, from: snapshotData, at: date)
+        let jobSummaries = snapshotData.jobs.filter { !$0.isArchived }.map { job in
+            buildJobSummary(for: job, from: snapshotData, at: date, calendar: calendar)
         }
 
         let combinedBreakdown = combineBreakdowns(jobSummaries.compactMap(\.currentBreakdown))
         let combinedCurrentGross = combinedBreakdown?.grossEarnings ?? 0
-        let combinedAnnualizedGrossIncome = jobSummaries.reduce(0) { $0 + $1.annualizedGrossIncome }
+        let observedIncome = TaxEstimator.annualizedGrossIncome(
+            currentGross: combinedCurrentGross,
+            yearToDateGrossExcludingCurrentShift: AggregationService.totalGross(
+                for: snapshotData.completedShifts,
+                in: DateInterval(start: calendar.dateInterval(of: .year, for: date)?.start ?? date, end: date)
+            ),
+            currentHourlyRate: 0, templates: [], today: date, calendar: calendar, fallbackExpectedWeeklyHours: 0
+        )
+        let combinedAnnualizedGrossIncome = max(observedIncome, jobSummaries.reduce(0) { $0 + $1.annualizedGrossIncome })
         let combinedAnnualizedTaxableSupplementIncome = jobSummaries.reduce(0) { $0 + $1.annualizedTaxableSupplementIncome }
         let combinedPayFrequency = combinedPayFrequency(from: snapshotData, jobSummaries: jobSummaries)
         let combinedAnnualExtraWithholding = TaxEstimator.annualExtraWithholding(
@@ -551,7 +694,16 @@ enum ShiftController {
         let projectedSupplementTotals = payPeriodAggregation == .unified
             ? combinedSupplementTotals(jobSummaries.map(\.rollup.projectedEffective))
             : .zero
-        let allTimeSupplementTotals = combinedSupplementTotals(jobSummaries.map(\.rollup.allTimeEffective))
+        var allTimeSupplementTotals = combinedSupplementTotals(jobSummaries.map(\.rollup.allTimeEffective))
+        for job in snapshotData.jobs where job.isArchived {
+            let supplements = snapshotData.supplements.filter { $0.job?.id == job.id }
+            if let window = SupplementAllocationService.lifetimeWindow(through: min(date, job.archivedAt ?? job.updatedAt), supplements: supplements, calendar: calendar) {
+                let totals = SupplementAllocationService.totals(for: SupplementAllocationService.allocations(for: supplements, within: window, calendar: calendar))
+                allTimeSupplementTotals.total += totals.total
+                allTimeSupplementTotals.taxableTotal += totals.taxableTotal
+                allTimeSupplementTotals.nonTaxableTotal += totals.nonTaxableTotal
+            }
+        }
         let combinedAllTimeHours = AggregationService.totalHours(for: snapshotData.completedShifts) + (combinedBreakdown?.totalHours ?? 0)
         let combinedRollup = SummaryRollup(
             activeShiftCount: snapshotData.openShifts.count,
@@ -580,14 +732,14 @@ enum ShiftController {
             allTimeTakeHome: TaxEstimator.estimatedTakeHome(for: combinedAllTimeGross, estimate: combinedTaxEstimate),
             allTimeHours: combinedAllTimeHours,
             weeklyGross: jobSummaries.reduce(0) { $0 + $1.rollup.weeklyGross },
-            totalNightPremium: jobSummaries.reduce(0) { $0 + $1.rollup.totalNightPremium },
-            totalOvertimePremium: jobSummaries.reduce(0) { $0 + $1.rollup.totalOvertimePremium },
-            totalOvertimeHours: jobSummaries.reduce(0) { $0 + $1.rollup.totalOvertimeHours },
+            totalNightPremium: AggregationService.totalNightPremium(for: snapshotData.completedShifts) + (combinedBreakdown?.nightPremiumEarnings ?? 0),
+            totalOvertimePremium: AggregationService.totalOvertimePremium(for: snapshotData.completedShifts) + (combinedBreakdown?.overtimePremiumEarnings ?? 0),
+            totalOvertimeHours: AggregationService.totalOvertimeHours(for: snapshotData.completedShifts) + (combinedBreakdown?.overtimeHours ?? 0),
             averageShiftGross: AggregationService.averageShiftGross(for: snapshotData.completedShifts),
             averageShiftHours: AggregationService.averageShiftHours(for: snapshotData.completedShifts),
             highestShiftGross: AggregationService.highestShift(in: snapshotData.completedShifts)?.grossEarnings ?? 0,
             currentBlendedRate: combinedBreakdown?.effectiveRate ?? 0,
-            hasSupplementConfiguration: jobSummaries.contains(where: { $0.rollup.hasSupplementConfiguration }),
+            hasSupplementConfiguration: allTimeSupplementTotals.total > 0 || jobSummaries.contains(where: { $0.rollup.hasSupplementConfiguration }),
             payPeriodEffective: payPeriodAggregation == .unified
                 ? SupplementAllocationService.effectiveSnapshot(
                     regularGross: payPeriodGross,
@@ -616,7 +768,7 @@ enum ShiftController {
         if payPeriodAggregation == .variesByJob {
             projectedConfidenceLabel = "Varies by job"
         } else if jobSummaries.contains(where: { $0.rollup.projectedGross > $0.rollup.payPeriodGross + 0.001 }) {
-            projectedConfidenceLabel = "Projected from job templates"
+            projectedConfidenceLabel = "Projected from job schedules"
         } else {
             projectedConfidenceLabel = "Earned so far"
         }
@@ -628,8 +780,8 @@ enum ShiftController {
         )
     }
 
-    static func dashboardSnapshot(in context: ModelContext, at date: Date = .now) throws -> DashboardSnapshot {
-        let summary = try summarySnapshot(in: context, at: date)
+    static func dashboardSnapshot(in context: ModelContext, at date: Date = .now, calendar: Calendar = .current) throws -> DashboardSnapshot {
+        let summary = try summarySnapshot(in: context, at: date, calendar: calendar)
         let openShifts = try context.fetch(
             FetchDescriptor<OpenShiftState>(sortBy: [SortDescriptor(\OpenShiftState.startDate)])
         )
@@ -689,7 +841,7 @@ enum ShiftController {
 
     private static func loadSnapshotData(in context: ModelContext) throws -> SnapshotData {
         SnapshotData(
-            jobs: try JobService.jobs(in: context),
+            jobs: try JobService.jobs(in: context, includeArchived: true),
             completedShifts: try context.fetch(FetchDescriptor<ShiftRecord>()),
             openShifts: try context.fetch(FetchDescriptor<OpenShiftState>()).filter { $0.job?.isArchived != true },
             scheduledShifts: try context.fetch(FetchDescriptor<ScheduledShift>()).filter { $0.job?.isArchived != true },
@@ -707,7 +859,8 @@ enum ShiftController {
     private static func buildJobSummary(
         for job: JobProfile,
         from snapshotData: SnapshotData,
-        at date: Date
+        at date: Date,
+        calendar: Calendar
     ) -> JobSummarySnapshot {
         let configuration = JobService.configuration(
             for: job,
@@ -731,47 +884,48 @@ enum ShiftController {
             openShifts.map {
                 EarningsEngine.calculate(
                     start: $0.startDate,
-                    end: date,
+                    end: min(date, $0.scheduledEndDate ?? date),
                     payRates: configuration.payRates,
                     nightRule: configuration.nightRule,
                     overtimeRule: configuration.overtimeRule,
-                    historicalShifts: completedShifts
+                    historicalShifts: completedShifts,
+                    calendar: calendar
                 )
             }
         )
 
-        let payPeriodInterval = ProjectionEngine.payPeriodInterval(for: date, schedule: configuration.paySchedule)
+        let payPeriodInterval = ProjectionEngine.payPeriodInterval(for: date, schedule: configuration.paySchedule, calendar: calendar)
         let payPeriodWindow = DateInterval(start: payPeriodInterval.start, end: min(payPeriodInterval.end, date))
         let payPeriodSupplementTotals = SupplementAllocationService.totals(
             for: SupplementAllocationService.allocations(
                 for: configuration.supplements,
                 within: payPeriodWindow,
-                calendar: Calendar.current
+                calendar: calendar
             )
         )
         let projectedSupplementTotals = SupplementAllocationService.totals(
             for: SupplementAllocationService.allocations(
                 for: configuration.supplements,
                 within: payPeriodInterval,
-                calendar: Calendar.current
+                calendar: calendar
             )
         )
         let allTimeSupplementTotals = SupplementAllocationService.lifetimeWindow(
             through: date,
             supplements: configuration.supplements,
-            calendar: Calendar.current
+            calendar: calendar
         )
         .map {
             SupplementAllocationService.totals(
                 for: SupplementAllocationService.allocations(
                     for: configuration.supplements,
                     within: $0,
-                    calendar: Calendar.current
+                    calendar: calendar
                 )
             )
         } ?? .zero
 
-        let yearInterval = Calendar.current.dateInterval(of: .year, for: date)
+        let yearInterval = calendar.dateInterval(of: .year, for: date)
         let ytdGrossCompleted = AggregationService.totalGross(for: completedShifts, in: yearInterval)
         let currentRate = currentBreakdown?.effectiveRate ?? EarningsEngine.payRate(at: date, payRates: configuration.payRates)
         let annualizedGrossIncome = TaxEstimator.annualizedGrossIncome(
@@ -780,13 +934,13 @@ enum ShiftController {
             currentHourlyRate: currentRate,
             templates: configuration.templates,
             today: date,
-            calendar: Calendar.current,
+            calendar: calendar,
             fallbackExpectedWeeklyHours: snapshotData.taxProfile.expectedWeeklyHours
         )
         let annualizedTaxableSupplementIncome = SupplementAllocationService.annualizedTaxableIncome(
             asOf: date,
             supplements: configuration.supplements,
-            calendar: Calendar.current
+            calendar: calendar
         )
         let taxEstimate = TaxEstimator.estimate(
             currentGross: currentBreakdown?.grossEarnings ?? 0,
@@ -810,7 +964,7 @@ enum ShiftController {
             payFrequency: configuration.paySchedule.frequency
         )
 
-        let takeHomeRate = taxEstimate.estimatedWithholdingRate
+        let takeHomeRate = 1 - taxEstimate.estimatedNetRate
         let projection = ProjectionEngine.projectedPaycheck(
             asOf: date,
             shifts: completedShifts,
@@ -818,10 +972,30 @@ enum ShiftController {
             paySchedule: configuration.paySchedule,
             payRates: configuration.payRates,
             templates: configuration.templates,
-            takeHomeRate: takeHomeRate
+            takeHomeRate: takeHomeRate,
+            configuration: configuration,
+            openShifts: openShifts,
+            scheduledShifts: scheduledShifts,
+            calendar: calendar
         )
 
-        let weeklyInterval = Calendar.current.dateInterval(of: .weekOfYear, for: date)
+        let weeklyInterval = calendar.dateInterval(of: .weekOfYear, for: date)
+        func allocatedCompleted(in interval: DateInterval) -> [EarningsBreakdown] {
+            completedShifts.map {
+                ShiftEarningsAllocation.completed($0, within: interval, configuration: configuration, historicalShifts: completedShifts, calendar: calendar)
+            }
+        }
+        func allocatedOpen(in interval: DateInterval) -> [EarningsBreakdown] {
+            openShifts.map {
+                ShiftEarningsAllocation.partial(start: $0.startDate, end: min(date, $0.scheduledEndDate ?? date), within: interval, configuration: configuration, historicalShifts: completedShifts, calendar: calendar)
+            }
+        }
+        let periodNightPremium = allocatedCompleted(in: payPeriodWindow).reduce(0) { $0 + $1.nightPremiumEarnings }
+            + allocatedOpen(in: payPeriodWindow).reduce(0) { $0 + $1.nightPremiumEarnings }
+        let weeklyGross = weeklyInterval.map { interval in
+            allocatedCompleted(in: interval).reduce(0) { $0 + $1.grossEarnings }
+                + allocatedOpen(in: interval).reduce(0) { $0 + $1.grossEarnings }
+        } ?? 0
         let allTimeGross = AggregationService.totalGross(for: completedShifts) + (currentBreakdown?.grossEarnings ?? 0)
         let allTimeHours = AggregationService.totalHours(for: completedShifts) + (currentBreakdown?.totalHours ?? 0)
         let activeSupplementTotals = proratedSupplementTotals(
@@ -846,13 +1020,13 @@ enum ShiftController {
             payPeriodGross: projection.payPeriodGross,
             payPeriodTakeHome: TaxEstimator.estimatedTakeHome(for: projection.payPeriodGross, estimate: taxEstimate),
             payPeriodHours: projection.payPeriodHours,
-            payPeriodNightPremium: AggregationService.totalNightPremium(for: completedShifts, in: payPeriodInterval) + (currentBreakdown?.nightPremiumEarnings ?? 0),
+            payPeriodNightPremium: periodNightPremium,
             projectedGross: projection.projectedGross,
             projectedTakeHome: projection.projectedTakeHome,
             allTimeGross: allTimeGross,
             allTimeTakeHome: TaxEstimator.estimatedTakeHome(for: allTimeGross, estimate: taxEstimate),
             allTimeHours: allTimeHours,
-            weeklyGross: AggregationService.totalGross(for: completedShifts, in: weeklyInterval) + (currentBreakdown?.grossEarnings ?? 0),
+            weeklyGross: weeklyGross,
             totalNightPremium: AggregationService.totalNightPremium(for: completedShifts) + (currentBreakdown?.nightPremiumEarnings ?? 0),
             totalOvertimePremium: AggregationService.totalOvertimePremium(for: completedShifts) + (currentBreakdown?.overtimePremiumEarnings ?? 0),
             totalOvertimeHours: AggregationService.totalOvertimeHours(for: completedShifts) + (currentBreakdown?.overtimeHours ?? 0),

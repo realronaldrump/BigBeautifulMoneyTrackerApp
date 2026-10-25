@@ -14,116 +14,82 @@ struct OnboardingView: View {
     @State private var payFrequency: PayFrequency = .biweekly
     @State private var anchorDate = Calendar.current.startOfDay(for: .now)
     @State private var errorText: String?
+    @FocusState private var rateIsFocused: Bool
 
     var body: some View {
         ZStack {
             MoneyBackground(mode: .gross)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 22) {
+                    BrandHeader(eyebrow: "Make every hour count", subtitle: "Track your shifts and see what you earn, as you earn it.", mode: .gross)
 
-            ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 24) {
-                    BrandHeader(
-                        eyebrow: "Welcome",
-                        subtitle: "Built for individual hourly workers tracking their own shifts and pay, with no employer setup, invitation, or account required.",
-                        mode: .gross
-                    )
-                    .padding(.top, 24)
-
-                    formCard
-
-                    if let errorText {
-                        Text(errorText)
-                            .font(.system(size: 14, weight: .medium, design: .rounded))
-                            .foregroundStyle(.red)
-                    }
-
-                    Button(action: completeOnboarding) {
-                        Text("Begin Tracking")
-                            .font(.system(size: 22, weight: .bold, design: .rounded))
-                            .foregroundStyle(.black)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 20)
-                            .background(theme.grossAccent)
-                            .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(!canBeginTracking)
-                    .opacity(canBeginTracking ? 1 : 0.7)
-                }
-                .padding(.horizontal, 22)
-                .padding(.bottom, 40)
-            }
-        }
-        .task {
-            try? DataBootstrapper.seedIfNeeded(in: modelContext)
-        }
-    }
-
-    private var formCard: some View {
-        VStack(spacing: 18) {
-            GroupBox {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Made for individual hourly workers")
-                        .font(.system(size: 18, weight: .semibold, design: .rounded))
-                        .foregroundStyle(.white)
-
-                    Text("Track your own shifts and earnings without joining a company, getting employer approval, or creating an account.")
-                        .font(.system(size: 15, weight: .medium, design: .rounded))
-                        .foregroundStyle(theme.secondaryText)
-                }
-            } label: {
-                Label("Who It's For", systemImage: "person.crop.circle.badge.checkmark")
-                    .foregroundStyle(.white)
-            }
-
-            GroupBox {
-                VStack(alignment: .leading, spacing: 14) {
-                    TextField("Your hourly pay", text: $hourlyRateText)
-                        .keyboardType(.decimalPad)
-                    Picker("My paycheck arrives", selection: $payFrequency) {
-                        ForEach(PayFrequency.allCases) { frequency in
-                            Text(frequency.title).tag(frequency)
+                    VStack(alignment: .leading, spacing: 18) {
+                        Text("Set up your pay").font(TypeStyle.title2).foregroundStyle(.white)
+                            .accessibilityAddTraits(.isHeader)
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Hourly rate").font(TypeStyle.callout).foregroundStyle(theme.secondaryText)
+                            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                Text("$").foregroundStyle(theme.secondaryText)
+                                TextField("0.00", text: $hourlyRateText)
+                                    .keyboardType(.decimalPad)
+                                    .focused($rateIsFocused)
+                                    .accessibilityLabel("Hourly rate in dollars")
+                                Text("/ hour").font(TypeStyle.callout).foregroundStyle(theme.secondaryText)
+                            }
+                            .font(.system(.title, design: .rounded, weight: .bold))
+                            .padding(16)
+                            .background(theme.secondaryPanel, in: RoundedRectangle(cornerRadius: 16))
+                            if !hourlyRateText.isEmpty && !canBeginTracking {
+                                Text("Enter a valid amount greater than zero.")
+                                    .font(TypeStyle.caption).foregroundStyle(theme.roseAccent)
+                            }
                         }
+                        Picker("Pay frequency", selection: $payFrequency) {
+                            ForEach(PayFrequency.allCases) { frequency in Text(frequency.title).tag(frequency) }
+                        }
+                        DatePicker("Pay period began", selection: $anchorDate, displayedComponents: .date)
+                            .datePickerStyle(.compact)
+                        Text("Choose the first day of your current pay cycle. You can adjust it later in Settings.")
+                            .font(TypeStyle.caption).foregroundStyle(theme.secondaryText)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
-                    DatePicker("This pay period started on", selection: $anchorDate, displayedComponents: .date)
-                    Text("If you’re not sure, choose the day your current paycheck cycle began. You can change it later.")
-                        .font(.footnote)
-                        .foregroundStyle(theme.secondaryText)
+                    .padding(20)
+                    .glassCard(accent: theme.grossAccent, hasShadow: false)
+
+                    DisclosureGroup("How take-home is estimated") {
+                        Text("Estimates start with single filing status, the standard deduction, and 2026 federal and Colorado tax rules. Adjust insurance, retirement, and tax details in Settings.")
+                            .font(TypeStyle.callout).foregroundStyle(theme.secondaryText)
+                            .padding(.top, 10).fixedSize(horizontal: false, vertical: true)
+                    }
+                    .font(TypeStyle.callout).foregroundStyle(.white)
+                    .padding(18).glassCard(hasShadow: false)
+
+                    Label("Private on this iPhone. No account needed.", systemImage: "lock.shield")
+                        .font(TypeStyle.caption).foregroundStyle(theme.secondaryText)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                    if let errorText { AppInlineNotice(message: errorText) }
                 }
-                .textFieldStyle(.roundedBorder)
-            } label: {
-                Label("Your Pay", systemImage: "dollarsign.ring")
-                    .foregroundStyle(.white)
-            }
-
-            GroupBox {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Take-home estimate defaults")
-                        .font(.system(size: 18, weight: .semibold, design: .rounded))
-                        .foregroundStyle(.white)
-
-                    Text("For now I’ll estimate your take-home assuming you file single, this is your only income, and you use the regular deduction most people with one job use.")
-                        .font(.system(size: 15, weight: .medium, design: .rounded))
-                        .foregroundStyle(theme.secondaryText)
-
-                    Text("If your paycheck needs a closer match later, you can fine-tune insurance, retirement, and tax details in Settings.")
-                        .font(.footnote)
-                        .foregroundStyle(theme.secondaryText)
-                }
-            } label: {
-                Label("Take Home Estimate", systemImage: "sun.max.trianglebadge.exclamationmark")
-                    .foregroundStyle(.white)
+                .padding(20)
             }
         }
-        .padding(18)
-        .background(
-            RoundedRectangle(cornerRadius: 30, style: .continuous)
-                .fill(theme.panelFill(for: .gross))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 30, style: .continuous)
-                        .strokeBorder(theme.brandStroke, lineWidth: 1)
-                )
-        )
         .tint(theme.grossAccent)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            VStack(spacing: 8) {
+                Button {
+                    rateIsFocused = false
+                    completeOnboarding()
+                } label: { Label("Begin tracking", systemImage: "arrow.right") }
+                .buttonStyle(AppActionButtonStyle(accent: theme.grossAccent))
+                .disabled(!canBeginTracking)
+                if hourlyRateText.isEmpty {
+                    Text("Enter your hourly rate to begin.").font(TypeStyle.caption).foregroundStyle(theme.secondaryText)
+                }
+            }
+            .padding(.horizontal, 20).padding(.vertical, 10)
+            .background(theme.trueBlack.opacity(0.96))
+        }
+        .appKeyboardToolbar()
+        .toolbar(.hidden, for: .navigationBar)
     }
 
     private func completeOnboarding() {
@@ -185,7 +151,7 @@ struct OnboardingView: View {
                 modelContext.insert(PayRateSchedule(job: job, effectiveDate: anchorDate, hourlyRate: hourlyRate))
             }
 
-            try modelContext.save()
+            try PersistenceService.save(modelContext)
             HapticManager.shared.fire(.success, enabled: preferences.hapticsEnabled)
         } catch {
             errorText = error.localizedDescription

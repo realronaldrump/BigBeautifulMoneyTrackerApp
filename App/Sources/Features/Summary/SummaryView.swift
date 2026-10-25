@@ -18,10 +18,6 @@ struct SummaryView: View {
     @Query private var templates: [ScheduleTemplate]
     @Query(sort: \ShiftRecord.startDate, order: .reverse) private var shifts: [ShiftRecord]
 
-    private var snapshot: SummarySnapshot {
-        (try? ShiftController.summarySnapshot(in: modelContext, at: .now)) ?? .empty
-    }
-
     private var mode: EarningsDisplayMode {
         preferences.first?.selectedDisplayMode ?? .gross
     }
@@ -30,9 +26,9 @@ struct SummaryView: View {
         theme.accent(for: mode)
     }
 
-    private var payPeriodArchive: PayPeriodArchiveSnapshot {
+    private func payPeriodArchive(asOf date: Date) -> PayPeriodArchiveSnapshot {
         PayPeriodService.archiveSnapshot(
-            asOf: .now,
+            asOf: date,
             jobs: jobs,
             completedShifts: shifts,
             openShifts: openShifts,
@@ -47,6 +43,18 @@ struct SummaryView: View {
     }
 
     var body: some View {
+        TimelineView(.periodic(from: .now, by: 30)) { timeline in
+            if let snapshot = try? ShiftController.summarySnapshot(in: modelContext, at: timeline.date) {
+                summaryContent(snapshot: snapshot, payPeriodArchive: payPeriodArchive(asOf: timeline.date))
+            } else {
+                ContentUnavailableView("Unable to Load Summary", systemImage: "externaldrive.badge.exclamationmark", description: Text("Your saved data could not be read. Reopen the app to try again."))
+            }
+        }
+        .navigationTitle("Summary")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func summaryContent(snapshot: SummarySnapshot, payPeriodArchive: PayPeriodArchiveSnapshot) -> some View {
         ZStack {
             MoneyBackground(mode: mode)
 
@@ -54,26 +62,10 @@ struct SummaryView: View {
                 VStack(spacing: Spacing.lg) {
                     BrandHeader(
                         eyebrow: "Summary",
-                        subtitle: "Combined overview first, then each job's details.",
+                        subtitle: "Your earnings at a glance, with details for each job.",
                         mode: mode,
-                        compact: false
+                        compact: true
                     )
-
-                    // MARK: - Earnings chart
-                    if !shifts.isEmpty {
-                        EarningsChart(
-                            shifts: shifts,
-                            mode: mode,
-                            taxProfile: taxProfiles.first,
-                            paySchedules: paySchedules,
-                            payRates: payRates,
-                            templates: templates
-                        )
-                    }
-
-                    if !payPeriodArchive.sections.isEmpty {
-                        PayPeriodArchivePreviewCard(snapshot: payPeriodArchive, mode: mode)
-                    }
 
                     // MARK: - Combined card
                     SummaryJobCard(
@@ -84,6 +76,24 @@ struct SummaryView: View {
                         mode: mode,
                         isCombined: true
                     )
+
+                    // MARK: - Earnings chart
+                    if !shifts.isEmpty {
+                        EarningsChart(
+                            shifts: shifts,
+                            mode: mode,
+                            taxProfile: taxProfiles.first,
+                            paySchedules: paySchedules,
+                            payRates: payRates,
+                            templates: templates,
+                            nightRules: nightRules,
+                            overtimeRules: overtimeRules
+                        )
+                    }
+
+                    if !payPeriodArchive.sections.isEmpty {
+                        PayPeriodArchivePreviewCard(snapshot: payPeriodArchive, mode: mode)
+                    }
 
                     // MARK: - Per-job cards
                     ForEach(snapshot.jobs) { job in
@@ -98,7 +108,7 @@ struct SummaryView: View {
                     }
                 }
                 .padding(18)
-                .padding(.bottom, 130)
+                .padding(.bottom, 24)
             }
         }
         .navigationTitle("Summary")
@@ -117,6 +127,8 @@ private struct EarningsChart: View {
     let paySchedules: [PaySchedule]
     let payRates: [PayRateSchedule]
     let templates: [ScheduleTemplate]
+    let nightRules: [NightDifferentialRule]
+    let overtimeRules: [OvertimeRuleSet]
 
     private struct WeekBucket: Identifiable {
         let id: Date
@@ -141,12 +153,19 @@ private struct EarningsChart: View {
             buckets[interval.start] = WeekBucket(id: interval.start, label: label)
         }
 
-        // Distribute shifts into buckets
+        // Allocate crossing shifts using the same segments as the pay archive.
         for shift in shifts {
-            guard let interval = calendar.dateInterval(of: .weekOfYear, for: shift.startDate) else { continue }
-            if buckets[interval.start] != nil {
-                buckets[interval.start]!.gross += shift.grossEarnings
-                buckets[interval.start]!.takeHome += estimatedTakeHome(for: shift, calendar: calendar)
+            let takeHomeRatio = shift.grossEarnings > 0 ? estimatedTakeHome(for: shift, calendar: calendar) / shift.grossEarnings : 0
+            let configuration = shift.job.map {
+                JobService.configuration(for: $0, payRates: payRates, nightRules: nightRules, overtimeRules: overtimeRules, paySchedules: paySchedules, templates: templates)
+            }
+            for start in Array(buckets.keys) {
+                guard let interval = calendar.dateInterval(of: .weekOfYear, for: start) else { continue }
+                let gross = configuration.map {
+                    ShiftEarningsAllocation.completed(shift, within: interval, configuration: $0, historicalShifts: shifts.filter { $0.job?.id == shift.job?.id }, calendar: calendar).grossEarnings
+                } ?? AggregationService.totalGross(for: [shift], in: interval)
+                buckets[start]?.gross += gross
+                buckets[start]?.takeHome += gross * takeHomeRatio
             }
         }
 
@@ -178,7 +197,11 @@ private struct EarningsChart: View {
                     )
                 )
                 .cornerRadius(6)
+                .accessibilityLabel(Text("Week of \(week.label)"))
+                .accessibilityValue(Text((mode == .gross ? week.gross : week.takeHome).formatted(.currency(code: "USD"))))
             }
+            .accessibilityLabel(mode == .gross ? "Weekly gross earnings" : "Weekly estimated take-home")
+            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
             .chartYAxis {
                 AxisMarks(position: .leading) { value in
                     AxisGridLine()
@@ -186,7 +209,7 @@ private struct EarningsChart: View {
                     AxisValueLabel {
                         if let amount = value.as(Double.self) {
                             Text(amount.formatted(.currency(code: "USD").precision(.fractionLength(0))))
-                                .font(.system(size: 10, weight: .medium, design: .rounded))
+                                .font(.system(.caption2, design: .rounded, weight: .medium))
                                 .foregroundStyle(theme.secondaryText)
                         }
                     }
@@ -197,7 +220,7 @@ private struct EarningsChart: View {
                     AxisValueLabel {
                         if let label = value.as(String.self) {
                             Text(label)
-                                .font(.system(size: 10, weight: .medium, design: .rounded))
+                                .font(.system(.caption2, design: .rounded, weight: .medium))
                                 .foregroundStyle(theme.secondaryText)
                         }
                     }
@@ -230,6 +253,7 @@ private struct EarningsChart: View {
 
 private struct SummaryJobCard: View {
     @Environment(AppTheme.self) private var theme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     let title: String
     let accent: Color
@@ -262,7 +286,7 @@ private struct SummaryJobCard: View {
                         rows: [
                             ("Live Shifts", "\(rollup.activeShiftCount)"),
                             ("Gross", rollup.activeGross.asCurrency),
-                            ("Take-Home", rollup.activeTakeHome.asCurrency),
+                            ("Est. take-home", rollup.activeTakeHome.asCurrency),
                         ]
                     )
                 }
@@ -295,7 +319,7 @@ private struct SummaryJobCard: View {
                     icon: "clock.arrow.circlepath",
                     rows: [
                         ("Gross", rollup.allTimeGross.asCurrency),
-                        ("Take-Home", rollup.allTimeTakeHome.asCurrency),
+                        ("Est. take-home", rollup.allTimeTakeHome.asCurrency),
                         ("Hours", rollup.allTimeHours.asHours),
                     ]
                 )
@@ -333,47 +357,33 @@ private struct SummaryJobCard: View {
     // MARK: Header
 
     private var cardHeader: some View {
-        HStack(spacing: 12) {
-            JobInitialBadge(name: title, accent: accent, size: 40)
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title)
-                    .font(TypeStyle.title2)
-                    .fontWeight(.bold)
-                    .foregroundStyle(.white)
-
-                statusLine
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top, spacing: 12) {
+                JobInitialBadge(name: title, accent: accent, size: 36)
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(title).font(TypeStyle.title2).foregroundStyle(.white)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityAddTraits(.isHeader)
+                    Text("\(rollup.completedShiftCount) completed · \(rollup.scheduledShiftCount) scheduled" + (rollup.activeShiftCount > 0 ? " · \(rollup.activeShiftCount) active" : ""))
+                        .font(TypeStyle.caption).foregroundStyle(theme.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
-
-            Spacer()
-
-            // Hero figure: the mode-appropriate pay-period amount
-            Text(heroAmount.asCurrency)
-                .font(.system(size: 22, weight: .heavy, design: .rounded))
-                .foregroundStyle(accent)
-        }
-    }
-
-    private var statusLine: some View {
-        HStack(spacing: 6) {
-            statusChip("\(rollup.completedShiftCount) done", icon: "checkmark.circle.fill")
-            statusChip("\(rollup.scheduledShiftCount) scheduled", icon: "calendar.badge.clock")
-            if rollup.activeShiftCount > 0 {
-                statusChip("\(rollup.activeShiftCount) live", icon: "bolt.fill")
+            VStack(alignment: .leading, spacing: 5) {
+                Text(heroContext).font(TypeStyle.caption).foregroundStyle(theme.secondaryText)
+                Text(heroAmount.asCurrency)
+                    .font(.system(.title, design: .rounded, weight: .bold))
+                    .foregroundStyle(accent).monospacedDigit()
+                    .lineLimit(1).minimumScaleFactor(0.35)
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func statusChip(_ text: String, icon: String) -> some View {
-        HStack(spacing: 3) {
-            Image(systemName: icon)
-                .font(.system(size: 8))
-            Text(text)
-                .font(.system(size: 11, weight: .medium, design: .rounded))
-                .lineLimit(1)
-                .fixedSize(horizontal: true, vertical: false)
-        }
-        .foregroundStyle(theme.tertiaryText)
+    private var heroContext: String {
+        let basis = isCombined && rollup.payPeriodAggregation == .variesByJob
+            ? (rollup.activeShiftCount > 0 ? "Active shifts" : "All time") : "Current pay period"
+        return basis + " · " + (mode == .gross ? "gross earnings" : "estimated take-home")
     }
 
     private var payPeriodRows: [(String, String)] {
@@ -383,7 +393,7 @@ private struct SummaryJobCard: View {
 
         return [
             ("Gross", rollup.payPeriodGross.asCurrency),
-            ("Take-Home", rollup.payPeriodTakeHome.asCurrency),
+            ("Est. take-home", rollup.payPeriodTakeHome.asCurrency),
             ("Hours", rollup.payPeriodHours.asHours),
             ("Night Premium", rollup.payPeriodNightPremium.asCurrency),
         ]
@@ -396,8 +406,8 @@ private struct SummaryJobCard: View {
 
         return [
             ("Gross", rollup.projectedGross.asCurrency),
-            ("Take-Home", rollup.projectedTakeHome.asCurrency),
-            ("Confidence", confidenceLabel),
+            ("Est. take-home", rollup.projectedTakeHome.asCurrency),
+            ("Projection basis", confidenceLabel),
         ]
     }
 
@@ -460,7 +470,7 @@ private struct SummaryJobCard: View {
         VStack(alignment: .leading, spacing: 0) {
             // Tappable section header
             Button {
-                withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                withAnimation(reduceMotion ? nil : .spring(response: 0.35, dampingFraction: 0.82)) {
                     if isExpanded {
                         expandedSections.remove(title)
                     } else {
@@ -473,9 +483,8 @@ private struct SummaryJobCard: View {
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(accent.opacity(0.72))
 
-                    Text(title.uppercased())
-                        .font(.system(size: 11, weight: .bold, design: .rounded))
-                        .tracking(1.4)
+                    Text(title)
+                        .font(.system(.caption2, design: .rounded, weight: .bold))
                         .foregroundStyle(accent.opacity(0.72))
 
                     Spacer()
@@ -491,6 +500,9 @@ private struct SummaryJobCard: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(title)
+            .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
+            .accessibilityHint(isExpanded ? "Hide details" : "Show details")
 
             // Collapsible rows
             if isExpanded {
@@ -526,20 +538,7 @@ private struct SummaryRow: View {
     let label: String
     let value: String
 
-    var body: some View {
-        HStack {
-            Text(label)
-                .font(.system(size: 14, weight: .regular, design: .rounded))
-                .foregroundStyle(theme.secondaryText)
-
-            Spacer()
-
-            Text(value)
-                .font(.system(size: 15, weight: .semibold, design: .rounded))
-                .foregroundStyle(.white)
-        }
-        .padding(.vertical, 9)
-    }
+    var body: some View { AppValueRow(title: label, value: value) }
 }
 
 // MARK: - Formatting helpers
@@ -552,43 +551,4 @@ private extension Double {
     var asHours: String {
         formatted(.number.precision(.fractionLength(1))) + " hrs"
     }
-}
-
-// MARK: - Empty state
-
-private extension SummarySnapshot {
-    static let empty = SummarySnapshot(
-        combined: SummaryRollup(
-            activeShiftCount: 0,
-            scheduledShiftCount: 0,
-            completedShiftCount: 0,
-            activeGross: 0,
-            activeTakeHome: 0,
-            activeEffective: .zero,
-            payPeriodAggregation: .unified,
-            payPeriodGross: 0,
-            payPeriodTakeHome: 0,
-            payPeriodHours: 0,
-            payPeriodNightPremium: 0,
-            projectedGross: 0,
-            projectedTakeHome: 0,
-            allTimeGross: 0,
-            allTimeTakeHome: 0,
-            allTimeHours: 0,
-            weeklyGross: 0,
-            totalNightPremium: 0,
-            totalOvertimePremium: 0,
-            totalOvertimeHours: 0,
-            averageShiftGross: 0,
-            averageShiftHours: 0,
-            highestShiftGross: 0,
-            currentBlendedRate: 0,
-            hasSupplementConfiguration: false,
-            payPeriodEffective: .zero,
-            projectedEffective: .zero,
-            allTimeEffective: .zero
-        ),
-        projectedConfidenceLabel: "Earned so far",
-        jobs: []
-    )
 }

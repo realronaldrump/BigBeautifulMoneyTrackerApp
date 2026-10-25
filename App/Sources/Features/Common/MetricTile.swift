@@ -9,20 +9,21 @@ struct MetricTile: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
-            Text(title.uppercased())
+            Text(title)
                 .font(TypeStyle.micro)
-                .tracking(1.2)
+                .fixedSize(horizontal: false, vertical: true)
                 .foregroundStyle(theme.tertiaryText)
 
             Text(value)
-                .font(TypeStyle.title2)
+                .font(.system(.title3, design: .rounded, weight: .bold))
+                .monospacedDigit()
                 .foregroundStyle(Color.white)
-                .lineLimit(2)
-                .minimumScaleFactor(0.75)
+                .lineLimit(1)
+                .minimumScaleFactor(0.4)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(CornerRadius.cardSmall)
-        .glassCard(cornerRadius: CornerRadius.cardLarge, accent: accent)
+        .background(accent.opacity(0.07), in: RoundedRectangle(cornerRadius: CornerRadius.cardSmall))
+        .accessibilityElement(children: .combine)
     }
 }
-

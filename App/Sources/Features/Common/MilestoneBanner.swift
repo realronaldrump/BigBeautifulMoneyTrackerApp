@@ -8,7 +8,7 @@ struct MilestoneBanner: View {
 
     var body: some View {
         Text(text)
-            .font(.system(size: 14, weight: .semibold, design: .rounded))
+            .font(.system(.subheadline, design: .rounded, weight: .semibold))
             .foregroundStyle(Color.black)
             .padding(.horizontal, 16)
             .padding(.vertical, 12)

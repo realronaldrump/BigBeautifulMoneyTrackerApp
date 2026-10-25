@@ -6,7 +6,6 @@ struct TemplatesView: View {
 
     @Query(sort: \ScheduleTemplate.weekdayRawValue) private var templates: [ScheduleTemplate]
     @Query(sort: \JobProfile.sortOrder) private var jobs: [JobProfile]
-    @Query private var preferences: [AppPreferences]
 
     @State private var editingTemplate: ScheduleTemplate?
     @State private var creatingTemplate = false
@@ -42,9 +41,8 @@ struct TemplatesView: View {
                 LazyVStack(spacing: 14) {
                     BrandHeader(
                         eyebrow: selectedJobName ?? "Schedule Templates",
-                        subtitle: selectedJobName == nil
-                            ? "Build repeating shifts for one or many jobs and keep reminders and projections ready."
-                            : "Build repeating shifts for \(selectedJobName!).",
+                        subtitle: selectedJobName.map { "Repeating work for \($0), used in projections and reminders." }
+                            ?? "Repeating shifts for paycheck projections and weekly reminders.",
                         mode: .gross,
                         compact: true
                     )
@@ -74,6 +72,7 @@ struct TemplatesView: View {
                 } label: {
                     Image(systemName: "plus")
                 }
+                .accessibilityLabel("Add schedule template")
                 .disabled(activeJobs.isEmpty)
             }
         }
@@ -95,28 +94,18 @@ struct TemplatesView: View {
                 )
             }
         }
-        .onDisappear {
-            Task {
-                await ReminderManager.shared.syncShiftReminders(
-                    templates: templates,
-                    isEnabled: preferences.first?.remindersEnabled ?? false
-                )
-            }
-        }
     }
 
     private var emptyState: some View {
-        VStack(spacing: 16) {
-            Text("No templates yet")
-                .font(.system(size: 28, weight: .bold, design: .rounded))
-                .foregroundStyle(.white)
-
-            Text("Build a repeating shift once, and the app can keep reminders and projections ready for the right job.")
-                .font(.system(size: 15, weight: .medium, design: .rounded))
-                .foregroundStyle(theme.secondaryText)
-                .multilineTextAlignment(.center)
+        ContentUnavailableView {
+            Label("Plan your usual week", systemImage: "calendar.badge.plus")
+        } description: {
+            Text("Create a template for a shift you work regularly. Templates help forecast pay and remind you before work.")
+        } actions: {
+            Button("Add a template") { creatingTemplate = true }
+                .buttonStyle(AppActionButtonStyle(accent: theme.grossAccent))
+                .disabled(activeJobs.isEmpty)
         }
-        .padding(.top, 72)
     }
 }
 
@@ -137,6 +126,8 @@ private struct TemplateEditorView: View {
     @State private var endMinute: Int
     @State private var reminderMinutesBefore: Int
     @State private var isEnabled: Bool
+    @State private var errorText: String?
+    @State private var confirmingDeletion = false
 
     init(editingTemplate: ScheduleTemplate?, preselectedJobID: UUID?, availableJobs: [JobProfile]) {
         self.editingTemplate = editingTemplate
@@ -176,17 +167,49 @@ private struct TemplateEditorView: View {
                 }
             }
 
-            TextField("Template name", text: $name)
-            Picker("Weekday", selection: $weekday) {
-                ForEach(ScheduleWeekday.allCases) { weekday in
-                    Text(weekday.title).tag(weekday)
+            Section("Template") {
+                TextField("Template name", text: $name).textInputAutocapitalization(.words)
+                Picker("Weekday", selection: $weekday) {
+                    ForEach(ScheduleWeekday.allCases) { weekday in Text(weekday.title).tag(weekday) }
                 }
             }
-            DatePicker("Start time", selection: startTimeBinding, displayedComponents: .hourAndMinute)
-            DatePicker("End time", selection: endTimeBinding, displayedComponents: .hourAndMinute)
-            Stepper("Reminder: \(reminderMinutesBefore) min before", value: $reminderMinutesBefore, in: 0...180, step: 5)
-            Toggle("Enabled", isOn: $isEnabled)
+            Section("Shift timing") {
+                DatePicker("Start time", selection: startTimeBinding, displayedComponents: .hourAndMinute)
+                DatePicker("End time", selection: endTimeBinding, displayedComponents: .hourAndMinute)
+                if scheduledMinutes > 0 {
+                    AppValueRow(title: "Scheduled duration", value: (Double(scheduledMinutes) / 60).formatted(.number.precision(.fractionLength(0...2))) + " hours")
+                    if endHour * 60 + endMinute < startHour * 60 + startMinute {
+                        Label("Ends the next day", systemImage: "moon.stars").font(TypeStyle.caption).foregroundStyle(.secondary)
+                    }
+                } else {
+                    AppInlineNotice(message: "Choose different start and end times.")
+                }
+            }
+            Section {
+                Stepper(reminderMinutesBefore == 0 ? "At shift start" : "\(reminderMinutesBefore) minutes before", value: $reminderMinutesBefore, in: 0...180, step: 5)
+                Toggle("Use this template", isOn: $isEnabled)
+            } header: { Text("Planning & reminders") } footer: {
+                Text("Templates inform projections and weekly reminders. They do not start a tracked shift.")
+            }
+            if editingTemplate != nil {
+                Section {
+                    Button("Delete template", role: .destructive) { confirmingDeletion = true }
+                }
+            }
+            if let errorText { Section { AppInlineNotice(message: errorText) } }
         }
+        .appKeyboardToolbar()
+        .confirmationDialog("Delete template?", isPresented: $confirmingDeletion, titleVisibility: .visible) {
+            Button("Delete template", role: .destructive) {
+                guard let editingTemplate else { return }
+                do {
+                    modelContext.delete(editingTemplate)
+                    try PersistenceService.save(modelContext)
+                    dismiss()
+                } catch { errorText = error.localizedDescription }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: { Text("Future reminders and projections will no longer include this template.") }
         .navigationTitle(editingTemplate == nil ? "New Template" : "Edit Template")
         .navigationBarTitleDisplayMode(.inline)
         .scrollContentBackground(.hidden)
@@ -199,9 +222,15 @@ private struct TemplateEditorView: View {
                 Button("Save") {
                     save()
                 }
-                .disabled(resolvedJob == nil)
+                .disabled(resolvedJob == nil || name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || (startHour == endHour && startMinute == endMinute))
             }
         }
+    }
+
+    private var scheduledMinutes: Int {
+        let start = startHour * 60 + startMinute
+        let end = endHour * 60 + endMinute
+        return end >= start ? end - start : 1440 - start + end
     }
 
     private var resolvedJob: JobProfile? {
@@ -215,7 +244,7 @@ private struct TemplateEditorView: View {
 
         if let editingTemplate {
             editingTemplate.job = resolvedJob
-            editingTemplate.name = name
+            editingTemplate.name = name.trimmingCharacters(in: .whitespacesAndNewlines)
             editingTemplate.weekday = weekday
             editingTemplate.startHour = startHour
             editingTemplate.startMinute = startMinute
@@ -227,7 +256,7 @@ private struct TemplateEditorView: View {
             modelContext.insert(
                 ScheduleTemplate(
                     job: resolvedJob,
-                    name: name,
+                    name: name.trimmingCharacters(in: .whitespacesAndNewlines),
                     weekday: weekday,
                     startHour: startHour,
                     startMinute: startMinute,
@@ -238,8 +267,13 @@ private struct TemplateEditorView: View {
                 )
             )
         }
-        try? modelContext.save()
-        dismiss()
+        do {
+            try PersistenceService.save(modelContext)
+            dismiss()
+        } catch {
+            modelContext.rollback()
+            errorText = error.localizedDescription
+        }
     }
 
     private var startTimeBinding: Binding<Date> {
@@ -280,7 +314,7 @@ private struct TemplateCardView: View {
                         HStack(spacing: Spacing.sm) {
                             JobInitialBadge(name: job.displayName, accent: job.accent.color, size: 22)
                             Text(job.displayName)
-                                .font(.system(size: 12, weight: .bold, design: .rounded))
+                                .font(.system(.caption, design: .rounded, weight: .bold))
                                 .foregroundStyle(job.accent.color)
                         }
                     }
@@ -295,19 +329,21 @@ private struct TemplateCardView: View {
             }
 
             Text("\(template.weekday.title) • \(templateTimeLabel(hour: template.startHour, minute: template.startMinute)) - \(templateTimeLabel(hour: template.endHour, minute: template.endMinute))")
-                .font(.system(size: 14, weight: .medium, design: .rounded))
+                .font(.system(.subheadline, design: .rounded, weight: .medium))
                 .foregroundStyle(theme.secondaryText)
 
-            HStack(spacing: 10) {
-                Label("\(template.reminderMinutesBefore) min reminder", systemImage: "bell.badge")
+            WrappingHStack {
+                Label(template.reminderMinutesBefore == 0 ? "Reminder at start" : "\(template.reminderMinutesBefore) min before", systemImage: "bell.badge")
                 Label(template.isEnabled ? "Enabled" : "Paused", systemImage: template.isEnabled ? "checkmark.circle" : "pause.circle")
             }
-            .font(.system(size: 12, weight: .semibold, design: .rounded))
+            .font(.system(.caption, design: .rounded, weight: .semibold))
             .foregroundStyle(template.isEnabled ? theme.takeHomeAccent : theme.secondaryText)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(18)
-        .glassCard(cornerRadius: CornerRadius.cardLarge, accent: template.job?.accent.color ?? .white)
+        .glassCard(cornerRadius: CornerRadius.cardLarge, accent: template.job?.accent.color ?? .white, hasShadow: false)
+        .accessibilityElement(children: .combine)
+        .accessibilityHint("Edit template timing and reminders")
     }
 }
 

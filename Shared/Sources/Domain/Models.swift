@@ -10,6 +10,7 @@ final class JobProfile {
     var isArchived: Bool
     var createdAt: Date
     var updatedAt: Date
+    var archivedAt: Date?
 
     init(
         id: UUID = UUID(),
@@ -25,6 +26,7 @@ final class JobProfile {
         self.isArchived = isArchived
         self.createdAt = .now
         self.updatedAt = .now
+        self.archivedAt = nil
     }
 
     var accent: JobAccentStyle {
@@ -54,6 +56,7 @@ final class ShiftRecord {
     var nightHours: Double
     var overtimeHours: Double
     var effectiveRateAtClockOut: Double
+    var earningsSegmentsData: Data?
     var createdAt: Date
     var updatedAt: Date
 
@@ -79,8 +82,28 @@ final class ShiftRecord {
         self.nightHours = breakdown.nightHours
         self.overtimeHours = breakdown.overtimeHours
         self.effectiveRateAtClockOut = breakdown.effectiveRate
+        self.earningsSegmentsData = breakdown.segments.isEmpty ? nil : try? JSONEncoder().encode(breakdown.segments)
         self.createdAt = .now
         self.updatedAt = .now
+    }
+
+    var earningsSegments: [EarningsSegment] {
+        guard let earningsSegmentsData else { return [] }
+        return (try? JSONDecoder().decode([EarningsSegment].self, from: earningsSegmentsData)) ?? []
+    }
+
+    func apply(_ breakdown: EarningsBreakdown) {
+        totalHours = breakdown.totalHours
+        grossEarnings = breakdown.grossEarnings
+        baseEarnings = breakdown.baseEarnings
+        nightPremiumEarnings = breakdown.nightPremiumEarnings
+        overtimePremiumEarnings = breakdown.overtimePremiumEarnings
+        regularHours = breakdown.regularHours
+        nightHours = breakdown.nightHours
+        overtimeHours = breakdown.overtimeHours
+        effectiveRateAtClockOut = breakdown.effectiveRate
+        earningsSegmentsData = breakdown.segments.isEmpty ? nil : try? JSONEncoder().encode(breakdown.segments)
+        updatedAt = .now
     }
 }
 
@@ -181,6 +204,7 @@ final class OvertimeRuleSet {
     var dailyMultiplier: Double
     var weeklyMultiplier: Double
     var precedenceRawValue: String
+    var workweekStartRawValue: Int?
 
     init(
         id: UUID = UUID(),
@@ -200,11 +224,20 @@ final class OvertimeRuleSet {
         self.dailyMultiplier = dailyMultiplier
         self.weeklyMultiplier = weeklyMultiplier
         self.precedenceRawValue = precedence.rawValue
+        self.workweekStartRawValue = nil
     }
 
     var precedence: OvertimePrecedence {
         get { OvertimePrecedence(rawValue: precedenceRawValue) ?? .highestRateWins }
         set { precedenceRawValue = newValue.rawValue }
+    }
+
+    func workCalendar(_ calendar: Calendar) -> Calendar {
+        var result = calendar
+        if let workweekStartRawValue, (1...7).contains(workweekStartRawValue) {
+            result.firstWeekday = workweekStartRawValue
+        }
+        return result
     }
 }
 
@@ -457,7 +490,7 @@ final class AppPreferences {
         remindersEnabled: Bool = false,
         liveActivitiesEnabled: Bool = true,
         lockScreenWidgetsEnabled: Bool = true,
-        cloudSyncEnabled: Bool = true,
+        cloudSyncEnabled: Bool = false,
         onboardingCompleted: Bool = false
     ) {
         self.id = id

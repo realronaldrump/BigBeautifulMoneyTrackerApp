@@ -259,7 +259,7 @@ enum PayPeriodService {
         calendar: Calendar,
         forceIncludeCurrent: Bool
     ) -> PayPeriodSummary? {
-        let isCurrent = interval.contains(date)
+        let isCurrent = date >= interval.start && date < interval.end
         let status: PayPeriodStatus = isCurrent ? .current : .closed
         let periodEndForEstimate = min(interval.end, date)
         let currentRate = EarningsEngine.payRate(at: periodEndForEstimate, payRates: configuration.payRates)
@@ -282,8 +282,7 @@ enum PayPeriodService {
                 calendar: calendar
             )
         }
-        let allocatedOpenShifts = isCurrent
-            ? openShifts.compactMap { openShift in
+        let allocatedOpenShifts = openShifts.compactMap { openShift in
                 allocatedOpenShift(
                     openShift,
                     configuration: configuration,
@@ -294,7 +293,6 @@ enum PayPeriodService {
                     calendar: calendar
                 )
             }
-            : []
 
         let preTaxShifts = allocatedCompletedShifts + allocatedOpenShifts
         let totals = totals(for: preTaxShifts)
@@ -313,10 +311,9 @@ enum PayPeriodService {
             periodGross: totals.gross,
             payFrequency: configuration.paySchedule.frequency
         )
-        let annualizedTaxableSupplementIncome = SupplementAllocationService.annualizedTaxableIncome(
-            asOf: periodEndForEstimate,
-            supplements: configuration.supplements,
-            calendar: calendar
+        let annualizedTaxableSupplementIncome = TaxEstimator.paycheckAnnualizedGross(
+            periodGross: supplementTotals.taxableTotal,
+            payFrequency: configuration.paySchedule.frequency
         )
         let taxEstimate = TaxEstimator.estimate(
             currentGross: totals.gross,
@@ -440,10 +437,11 @@ enum PayPeriodService {
         taxRate: Double,
         calendar: Calendar
     ) -> PayPeriodShiftSummary? {
-        guard date > openShift.startDate,
+        let actualEnd = min(date, openShift.scheduledEndDate ?? date)
+        guard actualEnd > openShift.startDate,
               let allocation = allocation(
                 originalStart: openShift.startDate,
-                originalEnd: date,
+                originalEnd: actualEnd,
                 interval: interval
               )
         else {
@@ -464,7 +462,7 @@ enum PayPeriodService {
             jobIdentifier: openShift.job?.id,
             jobName: configuration.job.displayName,
             startDate: openShift.startDate,
-            endDate: date,
+            endDate: actualEnd,
             allocatedStartDate: allocation.start,
             allocatedEndDate: allocation.end,
             note: openShift.note,
@@ -657,24 +655,11 @@ enum PayPeriodService {
         completedShifts: [ShiftRecord],
         calendar: Calendar
     ) -> EarningsBreakdown {
-        let stored = storedBreakdown(for: shift)
-        guard allocation.fraction < 0.999 else {
-            return stored
-        }
-
-        guard !configuration.payRates.isEmpty else {
-            return proratedBreakdown(stored, fraction: allocation.fraction)
-        }
-
-        let historicalShifts = completedShifts.filter {
-            $0.id != shift.id && $0.endDate <= shift.startDate
-        }
-
-        return partialBreakdown(
-            start: shift.startDate,
-            allocation: allocation,
+        ShiftEarningsAllocation.completed(
+            shift,
+            within: DateInterval(start: allocation.start, end: allocation.end),
             configuration: configuration,
-            historicalShifts: historicalShifts,
+            historicalShifts: completedShifts,
             calendar: calendar
         )
     }
@@ -686,74 +671,13 @@ enum PayPeriodService {
         historicalShifts: [ShiftRecord],
         calendar: Calendar
     ) -> EarningsBreakdown {
-        let throughEnd = EarningsEngine.calculate(
+        ShiftEarningsAllocation.partial(
             start: start,
             end: allocation.end,
-            payRates: configuration.payRates,
-            nightRule: configuration.nightRule,
-            overtimeRule: configuration.overtimeRule,
+            within: DateInterval(start: allocation.start, end: allocation.end),
+            configuration: configuration,
             historicalShifts: historicalShifts,
             calendar: calendar
-        )
-
-        guard allocation.start > start else {
-            return throughEnd
-        }
-
-        let beforeAllocation = EarningsEngine.calculate(
-            start: start,
-            end: allocation.start,
-            payRates: configuration.payRates,
-            nightRule: configuration.nightRule,
-            overtimeRule: configuration.overtimeRule,
-            historicalShifts: historicalShifts,
-            calendar: calendar
-        )
-
-        return subtract(beforeAllocation, from: throughEnd)
-    }
-
-    private static func storedBreakdown(for shift: ShiftRecord) -> EarningsBreakdown {
-        EarningsBreakdown(
-            totalHours: shift.totalHours,
-            grossEarnings: shift.grossEarnings,
-            baseEarnings: shift.baseEarnings,
-            nightPremiumEarnings: shift.nightPremiumEarnings,
-            overtimePremiumEarnings: shift.overtimePremiumEarnings,
-            regularHours: shift.regularHours,
-            nightHours: shift.nightHours,
-            overtimeHours: shift.overtimeHours,
-            effectiveRate: shift.effectiveRateAtClockOut
-        )
-    }
-
-    private static func proratedBreakdown(_ breakdown: EarningsBreakdown, fraction: Double) -> EarningsBreakdown {
-        EarningsBreakdown(
-            totalHours: breakdown.totalHours * fraction,
-            grossEarnings: breakdown.grossEarnings * fraction,
-            baseEarnings: breakdown.baseEarnings * fraction,
-            nightPremiumEarnings: breakdown.nightPremiumEarnings * fraction,
-            overtimePremiumEarnings: breakdown.overtimePremiumEarnings * fraction,
-            regularHours: breakdown.regularHours * fraction,
-            nightHours: breakdown.nightHours * fraction,
-            overtimeHours: breakdown.overtimeHours * fraction,
-            effectiveRate: breakdown.effectiveRate
-        )
-    }
-
-    private static func subtract(_ subtrahend: EarningsBreakdown, from minuend: EarningsBreakdown) -> EarningsBreakdown {
-        let totalHours = max(0, minuend.totalHours - subtrahend.totalHours)
-        let grossEarnings = max(0, minuend.grossEarnings - subtrahend.grossEarnings)
-        return EarningsBreakdown(
-            totalHours: totalHours,
-            grossEarnings: grossEarnings,
-            baseEarnings: max(0, minuend.baseEarnings - subtrahend.baseEarnings),
-            nightPremiumEarnings: max(0, minuend.nightPremiumEarnings - subtrahend.nightPremiumEarnings),
-            overtimePremiumEarnings: max(0, minuend.overtimePremiumEarnings - subtrahend.overtimePremiumEarnings),
-            regularHours: max(0, minuend.regularHours - subtrahend.regularHours),
-            nightHours: max(0, minuend.nightHours - subtrahend.nightHours),
-            overtimeHours: max(0, minuend.overtimeHours - subtrahend.overtimeHours),
-            effectiveRate: totalHours > 0 ? grossEarnings / totalHours : 0
         )
     }
 
