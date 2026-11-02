@@ -97,40 +97,25 @@ struct HistoryView: View {
             .contains { $0.localizedStandardContains(query) }
     }
 
+    private var completed: [ShiftRecord] {
+        scope == .scheduled ? [] : shifts.filter { matches(job: $0.job, note: $0.note, date: $0.startDate) }
+    }
+
+    private var planned: [ScheduledShift] {
+        scope == .completed ? [] : scheduledShifts.filter { matches(job: $0.job, note: $0.note, date: $0.startDate) }
+    }
+
+    private var grouped: [Date: [ShiftRecord]] {
+        Dictionary(grouping: completed) { Calendar.current.dateInterval(of: .month, for: $0.startDate)?.start ?? $0.startDate }
+    }
+
     var body: some View {
-        let completed = scope == .scheduled ? [] : shifts.filter { matches(job: $0.job, note: $0.note, date: $0.startDate) }
-        let planned = scope == .completed ? [] : scheduledShifts.filter { matches(job: $0.job, note: $0.note, date: $0.startDate) }
-        let grouped = Dictionary(grouping: completed) { Calendar.current.dateInterval(of: .month, for: $0.startDate)?.start ?? $0.startDate }
-        return ZStack {
+        ZStack {
             MoneyBackground(mode: .gross)
             List {
                 BrandHeader(eyebrow: salaryPlans.isEmpty ? "Shift history" : "Earnings history", subtitle: salaryPlans.isEmpty ? "Completed work and upcoming shifts, all in one place." : "Salary paychecks, work hours, and hourly shifts.", mode: .gross, compact: true)
                     .historyListRow(top: 12, bottom: 12)
-                VStack(alignment: .leading, spacing: 12) {
-                    if jobs.contains(where: { $0.compensationKind == .hourly }) || !shifts.isEmpty || !scheduledShifts.isEmpty {
-                    Picker("Show shifts", selection: $scope) {
-                        ForEach(HistoryScope.allCases) { Text($0.rawValue).tag($0) }
-                    }
-                    .pickerStyle(.segmented)
-                    }
-                    if jobs.count > 1 {
-                        Menu {
-                            Picker("Filter by job", selection: $selectedJobID) {
-                                Text("All jobs").tag(Optional<UUID>.none)
-                                ForEach(jobs) { job in
-                                    Text(job.displayName + (job.isArchived ? " · Archived" : "")).tag(Optional(job.id))
-                                }
-                            }
-                        } label: {
-                            Label(filterName, systemImage: "line.3.horizontal.decrease")
-                                .font(TypeStyle.callout).lineLimit(2)
-                                .frame(minHeight: 44, alignment: .leading)
-                        }
-                        .accessibilityLabel("Filter by job: \(filterName)")
-                    }
-                }
-                .tint(theme.grossAccent)
-                .historyListRow(bottom: 12)
+                historyFilters
 
                 if hasSalaryHistory {
                     Section {
@@ -149,36 +134,14 @@ struct HistoryView: View {
                 if !planned.isEmpty {
                     Section {
                         ForEach(planned) { shift in
-                            Button { destination = HistoryEditorDestination(kind: .editScheduledShift(shift)) } label: {
-                                ScheduledShiftCardView(shift: shift)
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityHint("Edit this scheduled shift")
-                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                                Button("Delete", role: .destructive) { pendingDeletion = .scheduled(shift) }
-                            }
-                            .historyListRow(bottom: 10)
+                            scheduledShiftRow(shift)
                         }
                     } header: { Text("Scheduled · \(planned.count)").textCase(nil) }
                 }
                 ForEach(grouped.keys.sorted(by: >), id: \.self) { month in
                     Section {
                         ForEach(grouped[month] ?? []) { shift in
-                            Button { destination = HistoryEditorDestination(kind: .editShift(shift)) } label: {
-                                ShiftCardView(shift: shift, takeHomeEstimate: takeHomeEstimate(for: shift))
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityHint("Edit shift timing and notes")
-                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                                Button("Delete", role: .destructive) { pendingDeletion = .completed(shift) }
-                            }
-                            .contextMenu {
-                                Button("Edit shift", systemImage: "pencil") { destination = HistoryEditorDestination(kind: .editShift(shift)) }
-                                Button("Duplicate shift", systemImage: "doc.on.doc") { destination = HistoryEditorDestination(kind: .newShift(ShiftEditorSeed.duplicate(from: shift))) }
-                                Button("Schedule again", systemImage: "calendar.badge.plus") { destination = HistoryEditorDestination(kind: .newScheduledShift(ShiftEditorSeed.scheduledCopy(from: shift))) }
-                                Button("Delete shift", systemImage: "trash", role: .destructive) { pendingDeletion = .completed(shift) }
-                            }
-                            .historyListRow(bottom: 10)
+                            completedShiftRow(shift)
                         }
                     } header: { Text(month.formatted(.dateTime.month(.wide).year())).textCase(nil) }
                 }
@@ -227,6 +190,64 @@ struct HistoryView: View {
         .alert("Unable to Delete Entry", isPresented: Binding(get: { deleteErrorText != nil }, set: { if !$0 { deleteErrorText = nil } })) {
             Button("OK", role: .cancel) { deleteErrorText = nil }
         } message: { Text(deleteErrorText ?? "") }
+    }
+
+    private var historyFilters: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if jobs.contains(where: { $0.compensationKind == .hourly }) || !shifts.isEmpty || !scheduledShifts.isEmpty {
+                Picker("Show shifts", selection: $scope) {
+                    ForEach(HistoryScope.allCases) { Text($0.rawValue).tag($0) }
+                }
+                .pickerStyle(.segmented)
+            }
+            if jobs.count > 1 {
+                Menu {
+                    Picker("Filter by job", selection: $selectedJobID) {
+                        Text("All jobs").tag(Optional<UUID>.none)
+                        ForEach(jobs) { job in
+                            Text(job.displayName + (job.isArchived ? " · Archived" : "")).tag(Optional(job.id))
+                        }
+                    }
+                } label: {
+                    Label(filterName, systemImage: "line.3.horizontal.decrease")
+                        .font(TypeStyle.callout).lineLimit(2)
+                        .frame(minHeight: 44, alignment: .leading)
+                }
+                .accessibilityLabel("Filter by job: \(filterName)")
+            }
+        }
+        .tint(theme.grossAccent)
+        .historyListRow(bottom: 12)
+    }
+
+    private func scheduledShiftRow(_ shift: ScheduledShift) -> some View {
+        Button { destination = HistoryEditorDestination(kind: .editScheduledShift(shift)) } label: {
+            ScheduledShiftCardView(shift: shift)
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint("Edit this scheduled shift")
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            Button("Delete", role: .destructive) { pendingDeletion = .scheduled(shift) }
+        }
+        .historyListRow(bottom: 10)
+    }
+
+    private func completedShiftRow(_ shift: ShiftRecord) -> some View {
+        Button { destination = HistoryEditorDestination(kind: .editShift(shift)) } label: {
+            ShiftCardView(shift: shift, takeHomeEstimate: takeHomeEstimate(for: shift))
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint("Edit shift timing and notes")
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            Button("Delete", role: .destructive) { pendingDeletion = .completed(shift) }
+        }
+        .contextMenu {
+            Button("Edit shift", systemImage: "pencil") { destination = HistoryEditorDestination(kind: .editShift(shift)) }
+            Button("Duplicate shift", systemImage: "doc.on.doc") { destination = HistoryEditorDestination(kind: .newShift(ShiftEditorSeed.duplicate(from: shift))) }
+            Button("Schedule again", systemImage: "calendar.badge.plus") { destination = HistoryEditorDestination(kind: .newScheduledShift(ShiftEditorSeed.scheduledCopy(from: shift))) }
+            Button("Delete shift", systemImage: "trash", role: .destructive) { pendingDeletion = .completed(shift) }
+        }
+        .historyListRow(bottom: 10)
     }
 
     private var emptyState: some View {

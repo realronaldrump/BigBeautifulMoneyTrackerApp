@@ -10,6 +10,7 @@ on:
 jobs:
   build:
     runs-on: macos-latest
+    timeout-minutes: 25
 
     steps:
       - uses: actions/checkout@v4
@@ -20,6 +21,9 @@ jobs:
       - name: Generate Project
         run: xcodegen generate
 
+      - name: Run Shared Logic Tests
+        run: swift test
+
       - name: Build iOS Simulator App
         run: >
           xcodebuild
@@ -29,11 +33,32 @@ jobs:
           -destination 'generic/platform=iOS Simulator'
           build
 
-      - name: Run Logic Tests
+      - name: Select Test Simulator
+        run: |
+          python3 - <<'PY'
+          import json, os, re, subprocess
+          devices = json.loads(subprocess.check_output(['xcrun', 'simctl', 'list', 'devices', 'available', '--json']))['devices']
+          candidates = []
+          for runtime, entries in devices.items():
+              match = re.search(r'iOS-(\d+)-(\d+)', runtime)
+              if match and int(match[1]) >= 26:
+                  for device in entries:
+                      if device.get('isAvailable') and device['name'].startswith('iPhone'):
+                          candidates.append(((int(match[1]), int(match[2])), device))
+          if not candidates:
+              raise SystemExit('No available iPhone simulator with iOS 26 or later')
+          _, device = max(candidates, key=lambda candidate: (candidate[0], candidate[1]['name']))
+          with open(os.environ['GITHUB_ENV'], 'a') as output:
+              output.write('MONEY_TRACKER_TEST_SIMULATOR=' + device['udid'] + '\n')
+          print('Testing on ' + device['name'])
+          PY
+
+      - name: Run iOS Tests
         run: >
           xcodebuild
           -project BigBeautifulMoneyTracker.xcodeproj
           -scheme BigBeautifulMoneyTracker
           -sdk iphonesimulator
-          -destination 'generic/platform=iOS Simulator'
+          -destination "platform=iOS Simulator,id=${{ env.MONEY_TRACKER_TEST_SIMULATOR }}"
+          -parallel-testing-enabled NO
           test
