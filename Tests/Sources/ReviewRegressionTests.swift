@@ -366,13 +366,9 @@ final class ReviewRegressionTests: XCTestCase {
         let context = readOnly.mainContext
         XCTAssertEqual(try context.fetchCount(FetchDescriptor<OpenShiftState>()), 1, "Fixture must contain the saved open shift")
         XCTAssertThrowsError(try ShiftController.endAllShifts(in: context, at: date(4, 6, 16)))
-        // The app requires iOS 26. Its SwiftData version restores the same
-        // context's query results after rollback. The Mac test harness also
-        // runs on macOS 15, whose older SwiftData retains a stale deletion in
-        // that context; verify durable recovery with a fresh context there.
-        if #available(macOS 26, iOS 26, *) {
-            XCTAssertEqual(try context.fetch(FetchDescriptor<OpenShiftState>()).count, 1, "Fetch must recover the saved shift")
-        }
+        // A read-only context must be rejected before mutating its graph or
+        // invoking a save that can invalidate its query cache on some OS builds.
+        XCTAssertEqual(try context.fetch(FetchDescriptor<OpenShiftState>()).count, 1, "Fetch must retain the saved shift")
         let recovered = ModelContext(readOnly)
         XCTAssertEqual(try recovered.fetch(FetchDescriptor<OpenShiftState>()).count, 1, "The store must keep the saved shift")
         XCTAssertEqual(try recovered.fetch(FetchDescriptor<ShiftRecord>()).count, 0, "Failed saves must not create persisted history")

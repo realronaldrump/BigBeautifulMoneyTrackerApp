@@ -3,6 +3,7 @@ import SwiftData
 
 enum DataBootstrapper {
     static func seedIfNeeded(in context: ModelContext) throws {
+        try PersistenceService.requireWritable(context)
         if try first(AppPreferences.self, in: context) == nil {
             context.insert(AppPreferences())
         }

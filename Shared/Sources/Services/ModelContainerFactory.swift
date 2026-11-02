@@ -115,6 +115,7 @@ enum AppModelContainerFactory {
 enum StoreAccessError: LocalizedError {
     case openAppFirst
     case migrationFailed
+    case readOnly
 
     var errorDescription: String? {
         switch self {
@@ -122,6 +123,8 @@ enum StoreAccessError: LocalizedError {
             "Open Money Tracker to prepare your shared data."
         case .migrationFailed:
             "Your saved data could not be copied to shared storage. The original data is still on this device. Try opening the app again."
+        case .readOnly:
+            "This data store is read-only. Open Money Tracker to change your records."
         }
     }
 }

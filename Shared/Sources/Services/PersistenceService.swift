@@ -4,6 +4,14 @@ import Foundation
 enum PersistenceService {
     static let saveFailed = Notification.Name("MoneyTrackerSaveFailed")
 
+    /// Reject known read-only stores before changing their in-memory graph.
+    /// In particular, widget contexts must never enter a write transaction.
+    static func requireWritable(_ context: ModelContext) throws {
+        guard context.container.configurations.allSatisfy(\.allowsSave) else {
+            throw StoreAccessError.readOnly
+        }
+    }
+
     static func save(_ context: ModelContext) throws {
         do {
             try context.save()

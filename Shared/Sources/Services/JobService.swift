@@ -86,6 +86,7 @@ enum JobService {
         accent: JobAccentStyle? = nil,
         anchorDate: Date = .now
     ) throws -> JobProfile {
+        try PersistenceService.requireWritable(context)
         let existingJobs = try jobs(in: context)
         guard existingJobs.count < maxJobs else {
             throw JobServiceError.maxJobsReached
@@ -103,6 +104,7 @@ enum JobService {
     }
 
     static func archiveJob(_ job: JobProfile, in context: ModelContext) throws {
+        try PersistenceService.requireWritable(context)
         guard !job.isArchived else {
             return
         }

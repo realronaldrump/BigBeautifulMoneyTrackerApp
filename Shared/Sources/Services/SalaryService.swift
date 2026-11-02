@@ -249,6 +249,7 @@ enum SalaryService {
         _ plan: SalaryPlan, for job: JobProfile, in context: ModelContext,
         now: Date = .now, save: Bool = true
     ) throws {
+        try PersistenceService.requireWritable(context)
         try validate(plan)
         guard !job.isArchived else { throw SalaryServiceError.invalidDate }
         let existing = try context.fetch(FetchDescriptor<SalaryPlan>()).filter { $0.job?.id == job.id }
@@ -281,6 +282,7 @@ enum SalaryService {
     }
 
     static func switchToHourly(job: JobProfile, in context: ModelContext, at date: Date = .now) throws {
+        try PersistenceService.requireWritable(context)
         let plans = try context.fetch(FetchDescriptor<SalaryPlan>()).filter { $0.job?.id == job.id }
         guard !plans.contains(where: { $0.effectiveDate > date }) else { throw SalaryServiceError.backdatedChange }
         for plan in plans where (plan.endDate ?? .distantFuture) > date { plan.endDate = date }
@@ -290,6 +292,7 @@ enum SalaryService {
     }
 
     static func cancelUpcomingPlan(_ plan: SalaryPlan, in context: ModelContext, now: Date = .now) throws {
+        try PersistenceService.requireWritable(context)
         guard plan.effectiveDate > now, let job = plan.job else { throw SalaryServiceError.backdatedChange }
         let plans = try context.fetch(FetchDescriptor<SalaryPlan>()).filter { $0.job?.id == job.id }
         guard plans.max(by: { $0.effectiveDate < $1.effectiveDate })?.id == plan.id else {
@@ -309,6 +312,7 @@ enum SalaryService {
         takeHome: Double?, note: String, editing: SalaryPayment? = nil,
         in context: ModelContext, now: Date = .now
     ) throws {
+        try PersistenceService.requireWritable(context)
         guard interval.duration > 0, paidDate <= now,
             editing == nil || editing?.job?.id == job.id
         else { throw SalaryServiceError.invalidDate }
@@ -344,6 +348,7 @@ enum SalaryService {
         job: JobProfile, date: Date, hours: Double, note: String,
         editing: SalaryWorkLog? = nil, in context: ModelContext, now: Date = .now
     ) throws {
+        try PersistenceService.requireWritable(context)
         guard date <= now, editing == nil || editing?.job?.id == job.id else { throw SalaryServiceError.invalidDate }
         let plans = try context.fetch(FetchDescriptor<SalaryPlan>()).filter { $0.job?.id == job.id }
         let calendar = SalaryEngine.activePlan(in: plans, at: date)?.calendar ?? plans.last?.calendar ?? .current

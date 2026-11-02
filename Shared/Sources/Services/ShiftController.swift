@@ -416,6 +416,7 @@ enum ShiftController {
     }
 
     static func deleteShift(_ shift: ShiftRecord, in context: ModelContext) throws {
+        try PersistenceService.requireWritable(context)
         let job = shift.job
         let start = shift.startDate
         let end = shift.endDate
@@ -463,6 +464,7 @@ enum ShiftController {
     }
 
     static func deleteScheduledShift(_ shift: ScheduledShift, in context: ModelContext) throws {
+        try PersistenceService.requireWritable(context)
         context.delete(shift)
         try PersistenceService.save(context)
     }
@@ -474,6 +476,7 @@ enum ShiftController {
         scheduledEndDate: Date?,
         reminderOffsets: [Int]
     ) throws {
+        try PersistenceService.requireWritable(context)
         let targetOpenShift: OpenShiftState
         if let openShift {
             targetOpenShift = openShift
