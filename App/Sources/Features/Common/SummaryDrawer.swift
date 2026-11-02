@@ -36,10 +36,19 @@ struct SummaryDrawer: View {
                 MetricTile(title: "Pay period", value: payPeriodValue, accent: theme.accent(for: mode))
                 MetricTile(title: "All time", value: display(snapshot.allTimeAmount(for: mode, compensationMode: compensationMode)), accent: theme.accent(for: mode))
                 if isExpanded {
-                    MetricTile(title: "Hours this period", value: payPeriodMetric(snapshot.payPeriodHours.formatted(.number.precision(.fractionLength(1))) + " hrs"), accent: theme.accent(for: mode))
+                    if !snapshot.salaryJobs.isEmpty {
+                        MetricTile(title: "Salary work hours", value: snapshot.salaryJobs.reduce(0) { $0 + $1.loggedHours }.formatted(.number.precision(.fractionLength(1))) + " hrs logged", accent: theme.accent(for: mode))
+                    }
+                    if snapshot.salaryJobs.isEmpty || snapshot.payPeriodHours > 0 {
+                        MetricTile(title: "Hourly shift hours", value: payPeriodMetric(snapshot.payPeriodHours.formatted(.number.precision(.fractionLength(1))) + " hrs"), accent: theme.accent(for: mode))
+                    }
                     MetricTile(title: "Projected paycheck", value: projectedValue, accent: theme.accent(for: mode))
+                    if snapshot.salaryJobs.isEmpty || snapshot.payPeriodNightPremium > 0 {
                     MetricTile(title: "Night premium · gross", value: payPeriodMetric(display(snapshot.payPeriodNightPremium)), accent: theme.accent(for: mode))
-                    MetricTile(title: "Lifetime hours", value: snapshot.allTimeHours.formatted(.number.precision(.fractionLength(1))) + " hrs", accent: theme.accent(for: mode))
+                    }
+                    if snapshot.salaryJobs.isEmpty || snapshot.allTimeHours > 0 {
+                        MetricTile(title: "Lifetime hourly hours", value: snapshot.allTimeHours.formatted(.number.precision(.fractionLength(1))) + " hrs", accent: theme.accent(for: mode))
+                    }
                 }
             }
             if isExpanded {

@@ -96,7 +96,7 @@ private struct SettingsContent: View {
 
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text(job.displayName)
-                                    Text("Rates, overtime, payday, and templates")
+                                    Text(job.compensationKind == .salary ? "Salary, automatic accrual, and paychecks" : "Rates, overtime, payday, and templates")
                                         .font(.footnote)
                                         .foregroundStyle(theme.secondaryText)
                                 }
@@ -135,7 +135,7 @@ private struct SettingsContent: View {
                 } header: {
                     settingsLabel("Jobs", icon: "briefcase.fill", color: Color(red: 0.36, green: 0.53, blue: 0.96))
                 } footer: {
-                    Text("Each job keeps its own pay history, shift rules, and templates.")
+                    Text("Each job keeps its own pay history and settings.")
                 }
 
                 Section {
@@ -769,33 +769,38 @@ private struct JobSettingsForm: View {
                 settingsLabel("Job Identity", icon: "person.crop.square.fill", color: job.accent.color)
             }
 
-            Section {
-                ForEach(payRates) { rate in
-                    Button {
-                        editingRate = rate
-                    } label: {
-                        AppValueRow(title: "From \(rate.effectiveDate.formatted(date: .abbreviated, time: .omitted))", value: rate.hourlyRate.formatted(.currency(code: "USD")) + " / hr", accent: theme.grossAccent)
+            SalarySettingsSection(job: job)
+
+            if job.compensationKind == .hourly {
+                Section {
+                    ForEach(payRates) { rate in
+                        Button {
+                            editingRate = rate
+                        } label: {
+                            AppValueRow(title: "From \(rate.effectiveDate.formatted(date: .abbreviated, time: .omitted))", value: rate.hourlyRate.formatted(.currency(code: "USD")) + " / hr", accent: theme.grossAccent)
+                        }
                     }
+
+                    Button(payRates.isEmpty ? "Add hourly rate" : "Add a pay change") {
+                        creatingRate = true
+                    }
+                } header: {
+                    settingsLabel("Hourly Pay", icon: "banknote.fill", color: theme.grossAccent)
+                } footer: {
+                    if payRates.isEmpty { Text("Add an hourly rate before you start tracking this job.") }
                 }
 
-                Button(payRates.isEmpty ? "Add hourly rate" : "Add a pay change") {
-                    creatingRate = true
-                }
-            } header: {
-                settingsLabel("Hourly Pay", icon: "banknote.fill", color: theme.grossAccent)
-            } footer: {
-                if payRates.isEmpty { Text("Add an hourly rate before you start tracking this job.") }
-            }
-
-            Section {
-                Picker("My paycheck arrives", selection: $paySchedule.frequencyRawValue) {
-                    ForEach(PayFrequency.allCases) { frequency in
-                        Text(frequency.title).tag(frequency.rawValue)
+                Section {
+                    Picker("My paycheck arrives", selection: $paySchedule.frequencyRawValue) {
+                        ForEach(PayFrequency.allCases) { frequency in
+                            Text(frequency.title).tag(frequency.rawValue)
+                        }
                     }
+                    DatePicker("This pay period started on", selection: $paySchedule.anchorDate, displayedComponents: .date)
+                } header: {
+                    settingsLabel("Pay Schedule", icon: "calendar.badge.clock", color: Color(red: 0.36, green: 0.53, blue: 0.96))
                 }
-                DatePicker("This pay period started on", selection: $paySchedule.anchorDate, displayedComponents: .date)
-            } header: {
-                settingsLabel("Pay Schedule", icon: "calendar.badge.clock", color: Color(red: 0.36, green: 0.53, blue: 0.96))
+
             }
 
             Section {
@@ -828,131 +833,134 @@ private struct JobSettingsForm: View {
                 Text("Add housing stipends, reimbursements, or other recurring amounts here. To reflect changes over time, add a new dated item instead of rewriting an old one.")
             }
 
-            Section {
-                Toggle("I get extra pay for night hours", isOn: $nightRule.isEnabled)
-                if nightRule.isEnabled {
-                    DatePicker("Night bonus starts", selection: nightBonusStartBinding, displayedComponents: .hourAndMinute)
-                    DatePicker("Night bonus ends", selection: nightBonusEndBinding, displayedComponents: .hourAndMinute)
-                    TextField("Extra pay percent", value: Binding(get: { nightRule.percentIncrease }, set: { if $0.isFinite && $0 >= 0 { nightRule.percentIncrease = $0 } }), format: .percent.precision(.fractionLength(0...1)))
-                        .keyboardType(.decimalPad)
-                }
-            } header: {
-                settingsLabel("Night Shift Bonus", icon: "moon.stars.fill", color: Color(red: 0.51, green: 0.43, blue: 0.95))
-            }
-
-            Section {
-                Toggle("Overtime Tracking", isOn: $overtimeRule.isEnabled.animation(.easeInOut(duration: 0.25)))
-            } header: {
-                settingsLabel("Overtime", icon: "bolt.fill", color: Color(red: 0.98, green: 0.67, blue: 0.28))
-            } footer: {
-                Text("When enabled, hours beyond your thresholds earn a multiplied rate.")
-            }
-
-            if overtimeRule.isEnabled {
+            if job.compensationKind == .hourly {
                 Section {
-                    Toggle("Daily overtime", isOn: Binding(
-                        get: { overtimeRule.dailyThresholdHours != nil },
-                        set: { overtimeRule.dailyThresholdHours = $0 ? 8 : nil }
-                    ))
-                    if overtimeRule.dailyThresholdHours != nil {
-                        HStack {
-                            Text("Threshold")
-                            Spacer()
-                            TextField("hrs", value: Binding(
-                                get: { overtimeRule.dailyThresholdHours ?? 8 },
-                                set: { if $0.isFinite && $0 > 0 { overtimeRule.dailyThresholdHours = $0 } }
-                            ), format: .number.precision(.fractionLength(1)))
-                                .keyboardType(.decimalPad)
-                                .multilineTextAlignment(.trailing)
-                                .frame(width: 72)
-                            Text("hrs")
-                                .foregroundStyle(.secondary)
-                        }
-                        HStack {
-                            Text("Rate Multiplier")
-                            Spacer()
-                            Text("×")
-                                .foregroundStyle(.secondary)
-                            TextField("×", value: Binding(get: { overtimeRule.dailyMultiplier }, set: { if $0.isFinite && $0 >= 1 { overtimeRule.dailyMultiplier = $0 } }), format: .number.precision(.fractionLength(2)))
-                                .keyboardType(.decimalPad)
-                                .multilineTextAlignment(.trailing)
-                                .frame(width: 60)
-                        }
+                    Toggle("I get extra pay for night hours", isOn: $nightRule.isEnabled)
+                    if nightRule.isEnabled {
+                        DatePicker("Night bonus starts", selection: nightBonusStartBinding, displayedComponents: .hourAndMinute)
+                        DatePicker("Night bonus ends", selection: nightBonusEndBinding, displayedComponents: .hourAndMinute)
+                        TextField("Extra pay percent", value: Binding(get: { nightRule.percentIncrease }, set: { if $0.isFinite && $0 >= 0 { nightRule.percentIncrease = $0 } }), format: .percent.precision(.fractionLength(0...1)))
+                            .keyboardType(.decimalPad)
                     }
                 } header: {
-                    settingsLabel("Daily Overtime", icon: "sun.max.fill", color: Color(red: 0.98, green: 0.73, blue: 0.25))
-                } footer: {
-                    Text(overtimeRule.dailyThresholdHours == nil ? "Daily overtime is off." : "Hours beyond \(formattedThreshold(overtimeRule.dailyThresholdHours ?? 8)) in a calendar day are paid at ×\(formattedMultiplier(overtimeRule.dailyMultiplier)).")
+                    settingsLabel("Night Shift Bonus", icon: "moon.stars.fill", color: Color(red: 0.51, green: 0.43, blue: 0.95))
                 }
 
                 Section {
-                    Toggle("Weekly overtime", isOn: Binding(
-                        get: { overtimeRule.weeklyThresholdHours != nil },
-                        set: { overtimeRule.weeklyThresholdHours = $0 ? 40 : nil }
-                    ))
-                    if overtimeRule.weeklyThresholdHours != nil {
-                        Picker("Workweek starts", selection: Binding(
-                            get: { overtimeRule.workweekStartRawValue ?? Calendar.current.firstWeekday },
-                            set: { overtimeRule.workweekStartRawValue = $0 }
-                        )) {
-                            ForEach(ScheduleWeekday.allCases) { weekday in
-                                Text(weekday.title).tag(weekday.rawValue)
+                    Toggle("Overtime Tracking", isOn: $overtimeRule.isEnabled.animation(.easeInOut(duration: 0.25)))
+                } header: {
+                    settingsLabel("Overtime", icon: "bolt.fill", color: Color(red: 0.98, green: 0.67, blue: 0.28))
+                } footer: {
+                    Text("When enabled, hours beyond your thresholds earn a multiplied rate.")
+                }
+
+                if overtimeRule.isEnabled {
+                    Section {
+                        Toggle("Daily overtime", isOn: Binding(
+                            get: { overtimeRule.dailyThresholdHours != nil },
+                            set: { overtimeRule.dailyThresholdHours = $0 ? 8 : nil }
+                        ))
+                        if overtimeRule.dailyThresholdHours != nil {
+                            HStack {
+                                Text("Threshold")
+                                Spacer()
+                                TextField("hrs", value: Binding(
+                                    get: { overtimeRule.dailyThresholdHours ?? 8 },
+                                    set: { if $0.isFinite && $0 > 0 { overtimeRule.dailyThresholdHours = $0 } }
+                                ), format: .number.precision(.fractionLength(1)))
+                                    .keyboardType(.decimalPad)
+                                    .multilineTextAlignment(.trailing)
+                                    .frame(width: 72)
+                                Text("hrs")
+                                    .foregroundStyle(.secondary)
+                            }
+                            HStack {
+                                Text("Rate Multiplier")
+                                Spacer()
+                                Text("×")
+                                    .foregroundStyle(.secondary)
+                                TextField("×", value: Binding(get: { overtimeRule.dailyMultiplier }, set: { if $0.isFinite && $0 >= 1 { overtimeRule.dailyMultiplier = $0 } }), format: .number.precision(.fractionLength(2)))
+                                    .keyboardType(.decimalPad)
+                                    .multilineTextAlignment(.trailing)
+                                    .frame(width: 60)
                             }
                         }
-                        HStack {
-                            Text("Threshold")
-                            Spacer()
-                            TextField("hrs", value: Binding(
-                                get: { overtimeRule.weeklyThresholdHours ?? 40 },
-                                set: { if $0.isFinite && $0 > 0 { overtimeRule.weeklyThresholdHours = $0 } }
-                            ), format: .number.precision(.fractionLength(1)))
-                                .keyboardType(.decimalPad)
-                                .multilineTextAlignment(.trailing)
-                                .frame(width: 72)
-                            Text("hrs")
-                                .foregroundStyle(.secondary)
-                        }
-                        HStack {
-                            Text("Rate Multiplier")
-                            Spacer()
-                            Text("×")
-                                .foregroundStyle(.secondary)
-                            TextField("×", value: Binding(get: { overtimeRule.weeklyMultiplier }, set: { if $0.isFinite && $0 >= 1 { overtimeRule.weeklyMultiplier = $0 } }), format: .number.precision(.fractionLength(2)))
-                                .keyboardType(.decimalPad)
-                                .multilineTextAlignment(.trailing)
-                                .frame(width: 60)
-                        }
+                    } header: {
+                        settingsLabel("Daily Overtime", icon: "sun.max.fill", color: Color(red: 0.98, green: 0.73, blue: 0.25))
+                    } footer: {
+                        Text(overtimeRule.dailyThresholdHours == nil ? "Daily overtime is off." : "Hours beyond \(formattedThreshold(overtimeRule.dailyThresholdHours ?? 8)) in a calendar day are paid at ×\(formattedMultiplier(overtimeRule.dailyMultiplier)).")
                     }
-                } header: {
-                    settingsLabel("Weekly Overtime", icon: "calendar", color: Color(red: 0.32, green: 0.62, blue: 0.98))
-                } footer: {
-                    Text(overtimeRule.weeklyThresholdHours == nil ? "Weekly overtime is off." : "Hours beyond \(formattedThreshold(overtimeRule.weeklyThresholdHours ?? 40)) in a work week are paid at ×\(formattedMultiplier(overtimeRule.weeklyMultiplier)).")
+
+                    Section {
+                        Toggle("Weekly overtime", isOn: Binding(
+                            get: { overtimeRule.weeklyThresholdHours != nil },
+                            set: { overtimeRule.weeklyThresholdHours = $0 ? 40 : nil }
+                        ))
+                        if overtimeRule.weeklyThresholdHours != nil {
+                            Picker("Workweek starts", selection: Binding(
+                                get: { overtimeRule.workweekStartRawValue ?? Calendar.current.firstWeekday },
+                                set: { overtimeRule.workweekStartRawValue = $0 }
+                            )) {
+                                ForEach(ScheduleWeekday.allCases) { weekday in
+                                    Text(weekday.title).tag(weekday.rawValue)
+                                }
+                            }
+                            HStack {
+                                Text("Threshold")
+                                Spacer()
+                                TextField("hrs", value: Binding(
+                                    get: { overtimeRule.weeklyThresholdHours ?? 40 },
+                                    set: { if $0.isFinite && $0 > 0 { overtimeRule.weeklyThresholdHours = $0 } }
+                                ), format: .number.precision(.fractionLength(1)))
+                                    .keyboardType(.decimalPad)
+                                    .multilineTextAlignment(.trailing)
+                                    .frame(width: 72)
+                                Text("hrs")
+                                    .foregroundStyle(.secondary)
+                            }
+                            HStack {
+                                Text("Rate Multiplier")
+                                Spacer()
+                                Text("×")
+                                    .foregroundStyle(.secondary)
+                                TextField("×", value: Binding(get: { overtimeRule.weeklyMultiplier }, set: { if $0.isFinite && $0 >= 1 { overtimeRule.weeklyMultiplier = $0 } }), format: .number.precision(.fractionLength(2)))
+                                    .keyboardType(.decimalPad)
+                                    .multilineTextAlignment(.trailing)
+                                    .frame(width: 60)
+                            }
+                        }
+                    } header: {
+                        settingsLabel("Weekly Overtime", icon: "calendar", color: Color(red: 0.32, green: 0.62, blue: 0.98))
+                    } footer: {
+                        Text(overtimeRule.weeklyThresholdHours == nil ? "Weekly overtime is off." : "Hours beyond \(formattedThreshold(overtimeRule.weeklyThresholdHours ?? 40)) in a work week are paid at ×\(formattedMultiplier(overtimeRule.weeklyMultiplier)).")
+                    }
+
+                    Section {
+                        Picker(selection: $overtimeRule.precedenceRawValue) {
+                            Label("Highest Rate Wins", systemImage: "arrow.up.to.line")
+                                .tag(OvertimePrecedence.highestRateWins.rawValue)
+                            Label("Apply Daily First", systemImage: "sun.max")
+                                .tag(OvertimePrecedence.dailyFirst.rawValue)
+                            Label("Apply Weekly First", systemImage: "calendar")
+                                .tag(OvertimePrecedence.weeklyFirst.rawValue)
+                        } label: {
+                            Text("When Both Apply")
+                        }
+                    } header: {
+                        settingsLabel("Conflict Resolution", icon: "arrow.triangle.branch", color: theme.roseAccent)
+                    } footer: {
+                        Text(precedenceExplanation)
+                    }
                 }
 
                 Section {
-                    Picker(selection: $overtimeRule.precedenceRawValue) {
-                        Label("Highest Rate Wins", systemImage: "arrow.up.to.line")
-                            .tag(OvertimePrecedence.highestRateWins.rawValue)
-                        Label("Apply Daily First", systemImage: "sun.max")
-                            .tag(OvertimePrecedence.dailyFirst.rawValue)
-                        Label("Apply Weekly First", systemImage: "calendar")
-                            .tag(OvertimePrecedence.weeklyFirst.rawValue)
-                    } label: {
-                        Text("When Both Apply")
+                    NavigationLink("Manage templates for \(job.displayName)") {
+                        TemplatesView(selectedJobID: job.id)
                     }
                 } header: {
-                    settingsLabel("Conflict Resolution", icon: "arrow.triangle.branch", color: theme.roseAccent)
-                } footer: {
-                    Text(precedenceExplanation)
+                    settingsLabel("Templates", icon: "calendar.badge.plus", color: Color(red: 0.30, green: 0.72, blue: 0.68))
                 }
-            }
 
-            Section {
-                NavigationLink("Manage templates for \(job.displayName)") {
-                    TemplatesView(selectedJobID: job.id)
-                }
-            } header: {
-                settingsLabel("Templates", icon: "calendar.badge.plus", color: Color(red: 0.30, green: 0.72, blue: 0.68))
             }
 
             Section {
@@ -965,7 +973,7 @@ private struct JobSettingsForm: View {
                         VStack(alignment: .leading, spacing: 4) {
                             Text("Archive this job")
                                 .font(.system(.body, design: .rounded, weight: .semibold))
-                            Text("Past shifts stay in History")
+                            Text("Past earnings stay in History")
                                 .font(.footnote)
                                 .foregroundStyle(theme.secondaryText)
                         }
@@ -1104,7 +1112,7 @@ private struct JobEditorView: View {
             Section {
                 BrandHeader(
                     eyebrow: "New Job",
-                    subtitle: "Create another tracked job. You can add its rates and rules right after this.",
+                    subtitle: "Create another job, then choose hourly or salary pay in its settings.",
                     mode: .gross,
                     compact: true
                 )
@@ -1216,7 +1224,7 @@ private struct SupplementEditorView: View {
             Section {
                 BrandHeader(
                     eyebrow: editingSupplement == nil ? "Add Supplemental Pay" : "Edit Supplemental Pay",
-                    subtitle: "Keep stipends and reimbursements separate from hourly shift earnings for \(job.displayName).",
+                    subtitle: "Keep stipends and reimbursements separate from base earnings for \(job.displayName).",
                     mode: .takeHome,
                     compact: true
                 )

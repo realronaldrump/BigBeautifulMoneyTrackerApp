@@ -10,6 +10,8 @@ struct OnboardingView: View {
     @Query(sort: \JobProfile.sortOrder) private var jobs: [JobProfile]
     @Query private var payRates: [PayRateSchedule]
 
+    @State private var compensationKind: CompensationKind = .hourly
+    @State private var salaryDraft = SalarySetupDraft()
     @State private var hourlyRateText = ""
     @State private var payFrequency: PayFrequency = .biweekly
     @State private var anchorDate = Calendar.current.startOfDay(for: .now)
@@ -21,37 +23,44 @@ struct OnboardingView: View {
             MoneyBackground(mode: .gross)
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
-                    BrandHeader(eyebrow: "Make every hour count", subtitle: "Track your shifts and see what you earn, as you earn it.", mode: .gross)
+                    BrandHeader(eyebrow: "See what you earn", subtitle: "Watch your earnings grow with hourly shifts or automatic salary tracking.", mode: .gross)
 
                     VStack(alignment: .leading, spacing: 18) {
                         Text("Set up your pay").font(TypeStyle.title2).foregroundStyle(.white)
                             .accessibilityAddTraits(.isHeader)
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Hourly rate").font(TypeStyle.callout).foregroundStyle(theme.secondaryText)
-                            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                                Text("$").foregroundStyle(theme.secondaryText)
-                                TextField("0.00", text: $hourlyRateText)
-                                    .keyboardType(.decimalPad)
-                                    .focused($rateIsFocused)
-                                    .accessibilityLabel("Hourly rate in dollars")
-                                Text("/ hour").font(TypeStyle.callout).foregroundStyle(theme.secondaryText)
+                        Picker("How are you paid?", selection: $compensationKind) {
+                            ForEach(CompensationKind.allCases) { Text($0.title).tag($0) }
+                        }.pickerStyle(.segmented)
+                        if compensationKind == .salary {
+                            SalarySetupFields(draft: $salaryDraft)
+                        } else {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Hourly rate").font(TypeStyle.callout).foregroundStyle(theme.secondaryText)
+                                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                    Text("$").foregroundStyle(theme.secondaryText)
+                                    TextField("0.00", text: $hourlyRateText)
+                                        .keyboardType(.decimalPad)
+                                        .focused($rateIsFocused)
+                                        .accessibilityLabel("Hourly rate in dollars")
+                                    Text("/ hour").font(TypeStyle.callout).foregroundStyle(theme.secondaryText)
+                                }
+                                .font(.system(.title, design: .rounded, weight: .bold))
+                                .padding(16)
+                                .background(theme.secondaryPanel, in: RoundedRectangle(cornerRadius: 16))
+                                if !hourlyRateText.isEmpty && !canBeginTracking {
+                                    Text("Enter a valid amount greater than zero.")
+                                        .font(TypeStyle.caption).foregroundStyle(theme.roseAccent)
+                                }
                             }
-                            .font(.system(.title, design: .rounded, weight: .bold))
-                            .padding(16)
-                            .background(theme.secondaryPanel, in: RoundedRectangle(cornerRadius: 16))
-                            if !hourlyRateText.isEmpty && !canBeginTracking {
-                                Text("Enter a valid amount greater than zero.")
-                                    .font(TypeStyle.caption).foregroundStyle(theme.roseAccent)
+                            Picker("Pay frequency", selection: $payFrequency) {
+                                ForEach(PayFrequency.allCases) { frequency in Text(frequency.title).tag(frequency) }
                             }
+                            DatePicker("Pay period began", selection: $anchorDate, displayedComponents: .date)
+                                .datePickerStyle(.compact)
+                            Text("Choose the first day of your current pay cycle. You can adjust it later in Settings.")
+                                .font(TypeStyle.caption).foregroundStyle(theme.secondaryText)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
-                        Picker("Pay frequency", selection: $payFrequency) {
-                            ForEach(PayFrequency.allCases) { frequency in Text(frequency.title).tag(frequency) }
-                        }
-                        DatePicker("Pay period began", selection: $anchorDate, displayedComponents: .date)
-                            .datePickerStyle(.compact)
-                        Text("Choose the first day of your current pay cycle. You can adjust it later in Settings.")
-                            .font(TypeStyle.caption).foregroundStyle(theme.secondaryText)
-                            .fixedSize(horizontal: false, vertical: true)
                     }
                     .padding(20)
                     .glassCard(accent: theme.grossAccent, hasShadow: false)
@@ -81,8 +90,8 @@ struct OnboardingView: View {
                 } label: { Label("Begin tracking", systemImage: "arrow.right") }
                 .buttonStyle(AppActionButtonStyle(accent: theme.grossAccent))
                 .disabled(!canBeginTracking)
-                if hourlyRateText.isEmpty {
-                    Text("Enter your hourly rate to begin.").font(TypeStyle.caption).foregroundStyle(theme.secondaryText)
+                if !canBeginTracking {
+                    Text(compensationKind == .salary ? "Enter your salary and pay cycle to begin." : "Enter your hourly rate to begin.").font(TypeStyle.caption).foregroundStyle(theme.secondaryText)
                 }
             }
             .padding(.horizontal, 20).padding(.vertical, 10)
@@ -93,27 +102,17 @@ struct OnboardingView: View {
     }
 
     private func completeOnboarding() {
-        guard let hourlyRate = parsedHourlyRate, hourlyRate > 0 else {
-            errorText = "Enter your hourly pay before continuing."
+        guard canBeginTracking else {
+            errorText = "Enter valid pay details before continuing."
             return
         }
 
         do {
             try DataBootstrapper.seedIfNeeded(in: modelContext)
 
-            let hadPreferences = preferences.first != nil
-            let hadTaxProfile = taxProfiles.first != nil
-            let existingJobs = jobs.filter { !$0.isArchived }
-
-            let preferences = preferences.first ?? AppPreferences()
-            let taxProfile = taxProfiles.first ?? TaxProfile()
-
-            if !hadPreferences {
-                modelContext.insert(preferences)
-            }
-            if !hadTaxProfile {
-                modelContext.insert(taxProfile)
-            }
+            let existingJobs = try JobService.jobs(in: modelContext)
+            guard let preferences = try DataBootstrapper.first(AppPreferences.self, in: modelContext),
+                  let taxProfile = try DataBootstrapper.first(TaxProfile.self, in: modelContext) else { return }
 
             let job: JobProfile
             if let existingJob = existingJobs.first {
@@ -128,7 +127,6 @@ struct OnboardingView: View {
                 modelContext.insert(paySchedule)
             }
 
-            preferences.onboardingCompleted = true
             preferences.selectedDisplayMode = .gross
             preferences.selectedHomeJobIdentifier = job.id
 
@@ -138,22 +136,30 @@ struct OnboardingView: View {
             taxProfile.annualRetirementContribution = 0
             taxProfile.expectedWeeklyHours = SharedConstants.fallbackExpectedWeeklyHours
 
-            paySchedule.frequency = payFrequency
-            paySchedule.anchorDate = anchorDate
-
-            if let existingRate = payRates
-                .filter({ $0.job?.id == job.id })
-                .sorted(by: { $0.effectiveDate < $1.effectiveDate })
-                .last {
-                existingRate.hourlyRate = hourlyRate
-                existingRate.effectiveDate = anchorDate
+            if compensationKind == .salary {
+                paySchedule.frequency = salaryDraft.frequency
+                paySchedule.anchorDate = salaryDraft.anchorDate
+                try SalaryService.savePlan(salaryDraft.makePlan(), for: job, in: modelContext, save: false)
             } else {
-                modelContext.insert(PayRateSchedule(job: job, effectiveDate: anchorDate, hourlyRate: hourlyRate))
+                paySchedule.frequency = payFrequency
+                paySchedule.anchorDate = anchorDate
+
+                if let existingRate = payRates
+                    .filter({ $0.job?.id == job.id })
+                    .sorted(by: { $0.effectiveDate < $1.effectiveDate })
+                    .last {
+                    existingRate.hourlyRate = parsedHourlyRate ?? 0
+                    existingRate.effectiveDate = anchorDate
+                } else {
+                    modelContext.insert(PayRateSchedule(job: job, effectiveDate: anchorDate, hourlyRate: parsedHourlyRate ?? 0))
+                }
             }
 
+            preferences.onboardingCompleted = true
             try PersistenceService.save(modelContext)
             HapticManager.shared.fire(.success, enabled: preferences.hapticsEnabled)
         } catch {
+            modelContext.rollback()
             errorText = error.localizedDescription
         }
     }
@@ -163,6 +169,7 @@ struct OnboardingView: View {
     }
 
     private var canBeginTracking: Bool {
+        if compensationKind == .salary { return salaryDraft.isValid }
         guard let parsedHourlyRate else {
             return false
         }

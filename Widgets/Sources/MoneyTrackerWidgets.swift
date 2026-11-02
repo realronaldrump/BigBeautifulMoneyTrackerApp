@@ -34,9 +34,9 @@ struct MoneyTrackerWidgetProvider: TimelineProvider {
         let now = Date.now
         // Read one shared container for the entire timeline. Snapshot dates never
         // reconcile future schedules or write projected earnings to history.
-        let dates = (0..<4).map { now.addingTimeInterval(Double($0) * 15 * 60) }
+        let dates = (0..<16).map { now.addingTimeInterval(Double($0) * 5 * 60) }
         let entries = loadEntries(dates: dates)
-        completion(Timeline(entries: entries, policy: .after(now.addingTimeInterval(15 * 60))))
+        completion(Timeline(entries: entries, policy: .atEnd))
     }
 
     private func loadEntries(dates: [Date]) -> [MoneyTrackerWidgetEntry] {
@@ -114,7 +114,7 @@ struct MoneyTrackerWidgetView: View {
     }
 
     private var amountLabel: String {
-        let period = entry.isShiftActive ? "This shift" : (entry.snapshot.payPeriodAggregation == .unified ? "Pay period" : "All time")
+        let period = entry.isShiftActive ? "This shift" : (entry.snapshot.payPeriodAggregation == .unified ? (entry.snapshot.salaryJobs.isEmpty ? "Pay period" : "Accrued pay period") : "All time")
         return period + " · " + (entry.mode == .gross ? "gross" : "est. take-home")
     }
 
@@ -183,6 +183,8 @@ struct MoneyTrackerWidgetView: View {
             VStack(alignment: .trailing, spacing: 12) {
                 if entry.isShiftActive {
                     stat("Pay period", payPeriodText)
+                } else if let salary = entry.snapshot.salaryJobs.first, entry.snapshot.salaryJobs.count == 1 {
+                    stat("Expected payday", salary.payday.formatted(date: .abbreviated, time: .omitted))
                 } else {
                     stat("Period hours", entry.snapshot.payPeriodAggregation == .unified ? entry.snapshot.payPeriodHours.formatted(.number.precision(.fractionLength(1))) + " hrs" : "Varies by job")
                 }
@@ -212,6 +214,7 @@ struct MoneyTrackerWidgetView: View {
     private var statusText: String {
         if let statusMessage = entry.statusMessage { return statusMessage }
         guard entry.isShiftActive else {
+            if !entry.snapshot.salaryJobs.isEmpty { return "Automatic salary · estimate" }
             return "Off shift"
         }
 

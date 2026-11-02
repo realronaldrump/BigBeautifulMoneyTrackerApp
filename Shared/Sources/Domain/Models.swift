@@ -11,6 +11,13 @@ final class JobProfile {
     var createdAt: Date
     var updatedAt: Date
     var archivedAt: Date?
+    // Optional so existing stores continue to open as hourly jobs.
+    var compensationKindRawValue: String?
+
+    var compensationKind: CompensationKind {
+        get { CompensationKind(rawValue: compensationKindRawValue ?? "") ?? .hourly }
+        set { compensationKindRawValue = newValue.rawValue }
+    }
 
     init(
         id: UUID = UUID(),

@@ -23,6 +23,10 @@ extension PayPeriodSummary {
     }
 
     var displayHourlyRate: Double? {
+        if salaryExpectedGross > 0 {
+            guard salaryLoggedHours > 0 else { return nil }
+            return (hasSupplementalCompensation ? effectiveGross : grossEarnings) / (totalHours + salaryLoggedHours)
+        }
         if hasSupplementalCompensation {
             return effectiveSupplementalHourlyRate
         }
@@ -88,6 +92,9 @@ extension PayPeriodSummary {
     }
 
     var displaySummaryContext: String {
+        if salaryExpectedGross > 0 && shiftCount == 0 {
+            return "Salary accrued · visualization estimate"
+        }
         if isSupplementOnly {
             return "\(supplementContextLabel) • no shifts"
         }

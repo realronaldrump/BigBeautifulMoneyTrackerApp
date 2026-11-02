@@ -125,6 +125,10 @@ enum JobService {
             context.delete(template)
         }
 
+        for plan in try context.fetch(FetchDescriptor<SalaryPlan>()) where plan.job?.id == job.id && (plan.endDate ?? .distantFuture) > Date.now {
+            plan.endDate = max(plan.effectiveDate, Date.now)
+        }
+
         job.isArchived = true
         job.updatedAt = .now
         job.archivedAt = job.updatedAt
@@ -158,14 +162,15 @@ enum JobService {
         overtimeRules: [OvertimeRuleSet],
         paySchedules: [PaySchedule],
         supplements: [JobSupplement] = [],
-        templates: [ScheduleTemplate]
+        templates: [ScheduleTemplate],
+        payScheduleOverride: PaySchedule? = nil
     ) -> JobConfiguration {
         let jobPayRates = payRates
             .filter { $0.job?.id == job.id }
             .sorted { $0.effectiveDate < $1.effectiveDate }
         let nightRule = nightRules.first(where: { $0.job?.id == job.id }) ?? NightDifferentialRule(job: job)
         let overtimeRule = overtimeRules.first(where: { $0.job?.id == job.id })
-        let paySchedule = paySchedules.first(where: { $0.job?.id == job.id }) ?? PaySchedule(job: job)
+        let paySchedule = payScheduleOverride ?? paySchedules.first(where: { $0.job?.id == job.id }) ?? PaySchedule(job: job)
         let jobSupplements = supplements
             .filter { $0.job?.id == job.id }
             .sorted {

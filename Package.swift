@@ -14,7 +14,8 @@ let package = Package(
         .testTarget(
             name: "MoneyTrackerCoreTests",
             dependencies: ["MoneyTrackerCore"],
-            path: "Tests/Sources"
+            path: "Tests/Sources",
+            resources: [.copy("Fixtures")]
         )
     ]
 )

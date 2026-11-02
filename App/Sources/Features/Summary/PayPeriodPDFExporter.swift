@@ -30,7 +30,14 @@ enum PayPeriodPDFExporter {
                 palette: palette
             )
 
-            let snapshotMetrics: [(String, String, UIColor)] = summary.isSupplementOnly
+            let snapshotMetrics: [(String, String, UIColor)] = summary.salaryExpectedGross > 0 && summary.shiftCount == 0
+                ? [
+                    ("Salary accrued", summary.salaryGross.pdfCurrency, palette.grossAccent),
+                    ("Est. take-home", summary.estimatedTakeHome.pdfCurrency, palette.takeHomeAccent),
+                    ("Full period salary", summary.salaryExpectedGross.pdfCurrency, palette.accent),
+                    ("Optional logged hours", summary.salaryLoggedHours.pdfHours, palette.complementaryAccent),
+                ]
+                : summary.isSupplementOnly
                 ? [
                     (summary.displayMetricTitle(for: .gross), summary.displayGrossAmount.pdfCurrency, palette.grossAccent),
                     (summary.displayMetricTitle(for: .takeHome), summary.displayTakeHomeAmount.pdfCurrency, palette.takeHomeAccent),
@@ -51,18 +58,24 @@ enum PayPeriodPDFExporter {
             canvas.beginPage(compact: false)
             canvas.drawMetricGrid(snapshotMetrics)
 
-            canvas.drawKeyValueSection(
-                title: "Breakdown",
-                subtitle: "Where this pay-period estimate comes from.",
-                rows: [
-                    ("Base Earnings", summary.baseEarnings.pdfCurrency),
-                    ("Night Premium", summary.nightPremiumEarnings.pdfCurrency),
-                    ("Overtime Premium", summary.overtimePremiumEarnings.pdfCurrency),
-                    ("Regular Hours", summary.regularHours.pdfHours),
-                    ("Night Hours", summary.nightHours.pdfHours),
-                    ("Overtime Hours", summary.overtimeHours.pdfHours)
-                ]
-            )
+            if summary.salaryExpectedGross > 0 {
+                canvas.drawKeyValueSection(title: "Salary Visualization", subtitle: "Accrued estimate; received paychecks are recorded separately.",
+                    rows: [("Salary accrued", summary.salaryGross.pdfCurrency), ("Full period salary", summary.salaryExpectedGross.pdfCurrency)])
+            }
+            if summary.shiftCount > 0 || summary.salaryExpectedGross == 0 {
+                canvas.drawKeyValueSection(
+                    title: "Breakdown",
+                    subtitle: "Where this pay-period estimate comes from.",
+                    rows: [
+                        ("Base Earnings", summary.baseEarnings.pdfCurrency),
+                        ("Night Premium", summary.nightPremiumEarnings.pdfCurrency),
+                        ("Overtime Premium", summary.overtimePremiumEarnings.pdfCurrency),
+                        ("Regular Hours", summary.regularHours.pdfHours),
+                        ("Night Hours", summary.nightHours.pdfHours),
+                        ("Overtime Hours", summary.overtimeHours.pdfHours)
+                    ]
+                )
+            }
 
             if summary.supplementalTotal > 0.000_001 || !summary.supplementAllocations.isEmpty {
                 let supplementalRows = summary.supplementAllocations.isEmpty
@@ -104,14 +117,15 @@ enum PayPeriodPDFExporter {
                 rows: [
                     ("Pay Frequency", summary.frequency.title),
                     ("Status", summary.status.title),
-                    ("Average Shift Gross", summary.averageShiftGross.pdfCurrency),
+                    (summary.salaryExpectedGross > 0 && summary.shiftCount == 0 ? "Logged Work Hours" : "Average Shift Gross",
+                     summary.salaryExpectedGross > 0 && summary.shiftCount == 0 ? summary.salaryLoggedHours.pdfHours : summary.averageShiftGross.pdfCurrency),
                     ("Annualized Gross", summary.annualizedGrossIncome.pdfCurrency),
                     ("YTD Gross Before Period", summary.yearToDateGrossBeforePeriod.pdfCurrency)
                 ]
             )
 
-            canvas.drawShiftSection(summary.shifts)
-            canvas.drawDisclaimer("This PDF is generated from personal shift tracking data and estimated tax settings. It is not an employer-issued pay stub.")
+            if summary.salaryExpectedGross == 0 || !summary.shifts.isEmpty { canvas.drawShiftSection(summary.shifts) }
+            canvas.drawDisclaimer("This PDF is generated from personal earnings tracking and estimated tax settings. Salary accrual is a visualization estimate. It is not an employer-issued pay stub.")
         }
 
         return url

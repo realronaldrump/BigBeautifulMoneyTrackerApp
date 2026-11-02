@@ -77,6 +77,7 @@ struct HistoryView: View {
     @Query private var taxProfiles: [TaxProfile]
     @Query private var payRates: [PayRateSchedule]
     @Query private var templates: [ScheduleTemplate]
+    @Query private var salaryPlans: [SalaryPlan]
     @State private var destination: HistoryEditorDestination?
     @State private var pendingDeletion: HistoryDeletion?
     @State private var deleteErrorText: String?
@@ -86,6 +87,7 @@ struct HistoryView: View {
 
     private var hasFilters: Bool { !searchText.isEmpty || selectedJobID != nil || scope != .all }
     private var filterName: String { jobs.first { $0.id == selectedJobID }?.displayName ?? "All jobs" }
+    private var hasSalaryHistory: Bool { salaryPlans.contains { selectedJobID == nil || $0.job?.id == selectedJobID } }
 
     private func matches(job: JobProfile?, note: String, date: Date) -> Bool {
         guard selectedJobID == nil || selectedJobID == job?.id else { return false }
@@ -102,13 +104,15 @@ struct HistoryView: View {
         return ZStack {
             MoneyBackground(mode: .gross)
             List {
-                BrandHeader(eyebrow: "Shift history", subtitle: "Completed work and upcoming shifts, all in one place.", mode: .gross, compact: true)
+                BrandHeader(eyebrow: salaryPlans.isEmpty ? "Shift history" : "Earnings history", subtitle: salaryPlans.isEmpty ? "Completed work and upcoming shifts, all in one place." : "Salary paychecks, work hours, and hourly shifts.", mode: .gross, compact: true)
                     .historyListRow(top: 12, bottom: 12)
                 VStack(alignment: .leading, spacing: 12) {
+                    if jobs.contains(where: { $0.compensationKind == .hourly }) || !shifts.isEmpty || !scheduledShifts.isEmpty {
                     Picker("Show shifts", selection: $scope) {
                         ForEach(HistoryScope.allCases) { Text($0.rawValue).tag($0) }
                     }
                     .pickerStyle(.segmented)
+                    }
                     if jobs.count > 1 {
                         Menu {
                             Picker("Filter by job", selection: $selectedJobID) {
@@ -128,7 +132,18 @@ struct HistoryView: View {
                 .tint(theme.grossAccent)
                 .historyListRow(bottom: 12)
 
-                if completed.isEmpty && planned.isEmpty {
+                if hasSalaryHistory {
+                    Section {
+                        NavigationLink {
+                            SalaryHistoryView(jobIdentifier: selectedJobID)
+                        } label: {
+                            Label("Salary, paychecks & work hours", systemImage: "banknote.fill")
+                                .font(TypeStyle.callout).padding(.vertical, 8)
+                        }
+                        .historyListRow(bottom: 12)
+                    }
+                }
+                if completed.isEmpty && planned.isEmpty && !hasSalaryHistory {
                     emptyState.historyListRow(top: 12, bottom: 20)
                 }
                 if !planned.isEmpty {
@@ -178,8 +193,11 @@ struct HistoryView: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
+                    if jobs.contains(where: { !$0.isArchived && $0.compensationKind == .hourly }) {
                     Button("Log completed shift", systemImage: "plus") { destination = HistoryEditorDestination(kind: .newShift(nil)) }
                     Button("Schedule future shift", systemImage: "calendar.badge.plus") { destination = HistoryEditorDestination(kind: .newScheduledShift(nil)) }
+                    }
+                    if !salaryPlans.isEmpty { NavigationLink("Salary history", destination: SalaryHistoryView(jobIdentifier: selectedJobID)) }
                 } label: { Image(systemName: "plus") }
                 .accessibilityLabel("Add a completed or scheduled shift")
             }
@@ -188,9 +206,9 @@ struct HistoryView: View {
             NavigationStack {
                 switch destination.kind {
                 case .editShift(let shift): ShiftEditorView(editingShift: shift, availableJobs: jobs.filter { !$0.isArchived || $0.id == shift.job?.id })
-                case .newShift(let seed): ShiftEditorView(editingShift: nil, seed: seed, availableJobs: jobs.filter { !$0.isArchived })
+                case .newShift(let seed): ShiftEditorView(editingShift: nil, seed: seed, availableJobs: jobs.filter { !$0.isArchived && $0.compensationKind == .hourly })
                 case .editScheduledShift(let shift): ScheduledShiftEditorView(editingShift: shift, availableJobs: jobs.filter { !$0.isArchived })
-                case .newScheduledShift(let seed): ScheduledShiftEditorView(editingShift: nil, seed: seed, availableJobs: jobs.filter { !$0.isArchived })
+                case .newScheduledShift(let seed): ScheduledShiftEditorView(editingShift: nil, seed: seed, availableJobs: jobs.filter { !$0.isArchived && $0.compensationKind == .hourly })
                 }
             }
         }

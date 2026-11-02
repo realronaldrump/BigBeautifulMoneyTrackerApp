@@ -17,7 +17,7 @@ struct TemplatesView: View {
     }
 
     private var activeJobs: [JobProfile] {
-        jobs.filter { !$0.isArchived }
+        jobs.filter { !$0.isArchived && $0.compensationKind == .hourly }
     }
 
     private var displayedTemplates: [ScheduleTemplate] {

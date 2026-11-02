@@ -6,6 +6,7 @@ Local-first iPhone earnings tracker built with SwiftUI, SwiftData, WidgetKit, Ac
 
 - SwiftUI app with onboarding, concurrent jobs, live shift tracking, history editing, schedules, templates, summaries, and PDF exports.
 - Earnings support dated rates, night premiums, daily and weekly overtime, and a configurable workweek start.
+- Salary mode supports annual or per-paycheck amounts, automatic continuous or workday accrual, dated salary changes, received paychecks, and optional work hours. See [salary mode](docs/salary-mode.md).
 - Newly saved shifts retain priced earning segments so later settings changes do not move their earnings between periods.
 - Take-home estimates use 2026 federal, Colorado, and FICA rules, with insurance, retirement, and paycheck adjustments.
 - SwiftData stays local. The app and widgets share an App Group store; existing app data is copied with SQLite's online backup before switching stores.

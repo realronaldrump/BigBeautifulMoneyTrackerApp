@@ -311,6 +311,12 @@ struct PayPeriodDetailView: View {
     }
 
     private var metricTileItems: [(String, String, Color)] {
+        if summary.salaryExpectedGross > 0 && summary.shiftCount == 0 {
+            return [("Salary accrued", summary.salaryGross.asCurrency, accent),
+                ("Est. take-home", summary.estimatedTakeHome.asCurrency, theme.takeHomeAccent),
+                ("Full period salary", summary.salaryExpectedGross.asCurrency, accent),
+                ("Optional logged hours", summary.salaryLoggedHours.asHours, accent)]
+        }
         if summary.isSupplementOnly {
             return [
                 (summary.displayMetricTitle(for: .gross), summary.displayGrossAmount.asCurrency, theme.grossAccent),
@@ -494,19 +500,30 @@ struct PayPeriodDetailView: View {
                 .foregroundStyle(.white)
                 .padding(.bottom, 12)
 
-            PayPeriodDetailRow(label: "Base Earnings", value: summary.baseEarnings.asCurrency)
-            PayPeriodDivider()
-            PayPeriodDetailRow(label: "Night Premium", value: summary.nightPremiumEarnings.asCurrency)
-            PayPeriodDivider()
-            PayPeriodDetailRow(label: "Overtime Premium", value: summary.overtimePremiumEarnings.asCurrency)
-            PayPeriodDivider()
-            PayPeriodDetailRow(label: "Day Hours", value: summary.regularHours.asHours)
-            PayPeriodDivider()
-            PayPeriodDetailRow(label: "Night Hours", value: summary.nightHours.asHours)
-            PayPeriodDivider()
-            PayPeriodDetailRow(label: "Overtime Hours", value: summary.overtimeHours.asHours)
-            Text("Overtime hours are included in day or night hours.")
-                .font(TypeStyle.caption).foregroundStyle(theme.secondaryText).padding(.top, 10)
+            if summary.salaryExpectedGross > 0 {
+                PayPeriodDetailRow(label: "Salary Accrued", value: summary.salaryGross.asCurrency)
+                Text("Visualization estimate. Received paychecks are recorded separately in salary history.")
+                    .font(TypeStyle.caption).foregroundStyle(theme.secondaryText).padding(.vertical, 10)
+                if let jobIdentifier = summary.jobIdentifier {
+                    NavigationLink("Paychecks and salary history") { SalaryHistoryView(jobIdentifier: jobIdentifier) }
+                        .frame(minHeight: 44)
+                }
+            }
+            if summary.shiftCount > 0 || summary.salaryExpectedGross == 0 {
+                PayPeriodDetailRow(label: "Base Earnings", value: summary.baseEarnings.asCurrency)
+                PayPeriodDivider()
+                PayPeriodDetailRow(label: "Night Premium", value: summary.nightPremiumEarnings.asCurrency)
+                PayPeriodDivider()
+                PayPeriodDetailRow(label: "Overtime Premium", value: summary.overtimePremiumEarnings.asCurrency)
+                PayPeriodDivider()
+                PayPeriodDetailRow(label: "Day Hours", value: summary.regularHours.asHours)
+                PayPeriodDivider()
+                PayPeriodDetailRow(label: "Night Hours", value: summary.nightHours.asHours)
+                PayPeriodDivider()
+                PayPeriodDetailRow(label: "Overtime Hours", value: summary.overtimeHours.asHours)
+                Text("Overtime hours are included in day or night hours.")
+                    .font(TypeStyle.caption).foregroundStyle(theme.secondaryText).padding(.top, 10)
+            }
         }
         .padding(Spacing.lg)
         .glassCard(cornerRadius: CornerRadius.cardLarge, accent: accent)
@@ -738,7 +755,7 @@ private extension PayPeriodShiftSummary {
     }
 }
 
-private extension DateInterval {
+extension DateInterval {
     var displayRange: String {
         let endDisplayDate = Calendar.current.date(byAdding: .day, value: -1, to: end) ?? end
         return "\(start.formatted(date: .abbreviated, time: .omitted)) - \(endDisplayDate.formatted(date: .abbreviated, time: .omitted))"

@@ -16,6 +16,9 @@ enum AppModelContainerFactory {
         ScheduleTemplate.self,
         ScheduledShift.self,
         AppPreferences.self,
+        SalaryPlan.self,
+        SalaryPayment.self,
+        SalaryWorkLog.self,
     ])
 
     static func makeSharedContainer(forWidget: Bool = false) throws -> ModelContainer {

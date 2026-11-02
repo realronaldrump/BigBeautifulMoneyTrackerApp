@@ -15,6 +15,8 @@ struct SummaryView: View {
     @Query private var nightRules: [NightDifferentialRule]
     @Query private var overtimeRules: [OvertimeRuleSet]
     @Query private var supplements: [JobSupplement]
+    @Query private var salaryPlans: [SalaryPlan]
+    @Query private var salaryWorkLogs: [SalaryWorkLog]
     @Query private var templates: [ScheduleTemplate]
     @Query(sort: \ShiftRecord.startDate, order: .reverse) private var shifts: [ShiftRecord]
 
@@ -38,7 +40,8 @@ struct SummaryView: View {
             overtimeRules: overtimeRules,
             supplements: supplements,
             templates: templates,
-            taxProfile: taxProfiles.first ?? TaxProfile()
+            taxProfile: taxProfiles.first ?? TaxProfile(),
+            salaryPlans: salaryPlans, salaryWorkLogs: salaryWorkLogs
         )
     }
 
@@ -78,7 +81,7 @@ struct SummaryView: View {
                     )
 
                     // MARK: - Earnings chart
-                    if !shifts.isEmpty {
+                    if !shifts.isEmpty || !salaryPlans.isEmpty {
                         EarningsChart(
                             shifts: shifts,
                             mode: mode,
@@ -87,7 +90,8 @@ struct SummaryView: View {
                             payRates: payRates,
                             templates: templates,
                             nightRules: nightRules,
-                            overtimeRules: overtimeRules
+                            overtimeRules: overtimeRules,
+                            salaryPlans: salaryPlans, jobs: jobs
                         )
                     }
 
@@ -129,6 +133,8 @@ private struct EarningsChart: View {
     let templates: [ScheduleTemplate]
     let nightRules: [NightDifferentialRule]
     let overtimeRules: [OvertimeRuleSet]
+    var salaryPlans: [SalaryPlan] = []
+    var jobs: [JobProfile] = []
 
     private struct WeekBucket: Identifiable {
         let id: Date
@@ -169,6 +175,21 @@ private struct EarningsChart: View {
             }
         }
 
+        for job in jobs {
+            let plans = salaryPlans.filter { $0.job?.id == job.id }
+            guard !plans.isEmpty else { continue }
+            let cutoff = job.isArchived ? min(now, job.archivedAt ?? job.updatedAt) : now
+            let plan = SalaryEngine.activePlan(in: plans, at: cutoff.addingTimeInterval(-0.001)) ?? plans.max { $0.effectiveDate < $1.effectiveDate }!
+            let estimate = TaxEstimator.estimate(currentGross: 0, annualizedGrossIncome: plan.annualGross,
+                annualExtraWithholding: TaxEstimator.annualExtraWithholding(payFrequency: plan.frequency, taxProfile: taxProfile ?? TaxProfile()),
+                taxProfile: taxProfile ?? TaxProfile(), payFrequency: plan.frequency)
+            for start in Array(buckets.keys) {
+                guard let interval = calendar.dateInterval(of: .weekOfYear, for: start) else { continue }
+                let gross = SalaryEngine.gross(for: plans, within: interval, through: cutoff)
+                buckets[start]?.gross += gross
+                buckets[start]?.takeHome += TaxEstimator.estimatedTakeHome(for: gross, estimate: estimate)
+            }
+        }
         return buckets.values.sorted { $0.id < $1.id }
     }
 
@@ -337,18 +358,27 @@ private struct SummaryJobCard: View {
                     )
                 }
 
-                // Averages & Records
-                collapsibleSection(
-                    title: "Averages & Records",
-                    icon: "trophy.fill",
-                    rows: [
-                        ("Avg Shift Gross", rollup.averageShiftGross.asCurrency),
-                        ("Avg Shift Hours", rollup.averageShiftHours.asHours),
-                        ("Best Shift", rollup.highestShiftGross.asCurrency),
-                        ("Blended Rate", rollup.currentBlendedRate.asCurrency + "/hr"),
-                    ],
-                    isLast: true
-                )
+                // Averages apply to tracked hourly shifts.
+                if rollup.completedShiftCount > 0 || rollup.salaryJobCount == 0 {
+                    collapsibleSection(
+                        title: "Averages & Records",
+                        icon: "trophy.fill",
+                        rows: [
+                            ("Avg Shift Gross", rollup.averageShiftGross.asCurrency),
+                            ("Avg Shift Hours", rollup.averageShiftHours.asHours),
+                            ("Best Shift", rollup.highestShiftGross.asCurrency),
+                            ("Blended Rate", rollup.currentBlendedRate.asCurrency + "/hr"),
+                        ],
+                        isLast: true
+                    )
+                } else {
+                    collapsibleSection(title: "Salary", icon: "banknote.fill", rows: [
+                        ("Accrued this period", rollup.salaryGross.asCurrency),
+                        ("All-time salary", rollup.salaryAllTimeGross.asCurrency),
+                        ("Optional logged hours", rollup.salaryLoggedHours.asHours),
+                        ("Basis", "Automatic visualization estimate")
+                    ], isLast: true)
+                }
             }
         }
         .glassCard(cornerRadius: CornerRadius.cardLarge, accent: accent)
@@ -364,7 +394,7 @@ private struct SummaryJobCard: View {
                     Text(title).font(TypeStyle.title2).foregroundStyle(.white)
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityAddTraits(.isHeader)
-                    Text("\(rollup.completedShiftCount) completed · \(rollup.scheduledShiftCount) scheduled" + (rollup.activeShiftCount > 0 ? " · \(rollup.activeShiftCount) active" : ""))
+                    Text(rollup.salaryJobCount > 0 && rollup.completedShiftCount == 0 && rollup.activeShiftCount == 0 ? "Automatic salary · visualization estimate" : "\(rollup.completedShiftCount) completed · \(rollup.scheduledShiftCount) scheduled" + (rollup.activeShiftCount > 0 ? " · \(rollup.activeShiftCount) active" : ""))
                         .font(TypeStyle.caption).foregroundStyle(theme.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -391,6 +421,12 @@ private struct SummaryJobCard: View {
             return [("Status", "Varies by job")]
         }
 
+        if rollup.salaryJobCount > 0 {
+            return [("Gross accrued", rollup.payPeriodGross.asCurrency),
+                ("Est. take-home", rollup.payPeriodTakeHome.asCurrency),
+                ("Salary portion", rollup.salaryGross.asCurrency),
+                ("Optional salary hours", rollup.salaryLoggedHours.asHours)]
+        }
         return [
             ("Gross", rollup.payPeriodGross.asCurrency),
             ("Est. take-home", rollup.payPeriodTakeHome.asCurrency),

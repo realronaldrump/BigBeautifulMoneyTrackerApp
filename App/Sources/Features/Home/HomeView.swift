@@ -79,7 +79,7 @@ private struct HomeDashboardView: View {
     let onOpenHistory: () -> Void
 
     var body: some View {
-        TimelineView(.periodic(from: .now, by: openShifts.isEmpty ? 60 : 1)) { context in
+        TimelineView(.periodic(from: .now, by: openShifts.isEmpty && !jobs.contains(where: { $0.compensationKind == .salary }) ? 60 : 1)) { context in
             if let snapshot = try? ShiftController.dashboardSnapshot(in: modelContext, at: context.date) {
             HomeDashboardSceneView(
                 preferences: preferences,
@@ -154,8 +154,10 @@ private struct HomeDashboardSceneView: View {
         return snapshot.activeJobs.count > 1 ? "\(basisLabel) blended" : basisLabel
     }
 
+    private var hourlyJobs: [JobProfile] { jobs.filter { $0.compensationKind == .hourly } }
+
     private var inactiveJobs: [JobProfile] {
-        jobs.filter { job in
+        hourlyJobs.filter { job in
             snapshot.activeJobs.contains(where: { $0.id == job.id }) == false
         }
     }
@@ -185,7 +187,12 @@ private struct HomeDashboardSceneView: View {
                 VStack(spacing: 24) {
                     modeToggle
 
-                    if snapshot.activeJobs.isEmpty {
+                    ForEach(snapshot.salaryJobs) { salary in
+                        SalaryDashboardCard(snapshot: salary, mode: preferences.selectedDisplayMode)
+                    }
+                    if snapshot.activeJobs.isEmpty && hourlyJobs.isEmpty {
+                        SummaryDrawer(snapshot: snapshot, mode: preferences.selectedDisplayMode, compensationMode: selectedCompensationMode)
+                    } else if snapshot.activeJobs.isEmpty {
                         restingContent
                     } else {
                         activeShiftContent
@@ -203,10 +210,12 @@ private struct HomeDashboardSceneView: View {
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            primaryAction
-                .padding(.horizontal, 20)
-                .padding(.vertical, 8)
-                .background(theme.trueBlack.opacity(0.96))
+            if !hourlyJobs.isEmpty || !snapshot.activeJobs.isEmpty {
+                primaryAction
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 8)
+                    .background(theme.trueBlack.opacity(0.96))
+            }
         }
         .overlay(alignment: .bottom) {
             if let errorText {
@@ -230,7 +239,7 @@ private struct HomeDashboardSceneView: View {
                 .padding(.bottom, 16)
             }
         }
-        .task(id: jobs.map(\.id)) {
+        .task(id: hourlyJobs.map(\.id)) {
             syncSelectedJobs()
         }
         .task(id: snapshot.currentGross.rounded(.down)) {
@@ -325,14 +334,14 @@ private struct HomeDashboardSceneView: View {
                     .multilineTextAlignment(.center)
             }
 
-            if jobs.count > 1 {
+            if hourlyJobs.count > 1 {
                 jobSelectionCard(
                     title: "Ready To Start",
                     subtitle: "You can start one job or several at the same time."
                 )
             }
 
-            if jobs.count == 1, let job = jobs.first {
+            if hourlyJobs.count == 1, let job = hourlyJobs.first {
                 HStack(spacing: 10) {
                     JobInitialBadge(name: job.displayName, accent: job.accent.color, size: 30)
                     Text(job.displayName).font(TypeStyle.title3).foregroundStyle(.white)
@@ -519,7 +528,7 @@ private struct HomeDashboardSceneView: View {
                 .foregroundStyle(theme.secondaryText)
 
             AdaptiveCardGrid(minimumWidth: 140, spacing: 10) {
-                ForEach(jobs) { job in
+                ForEach(hourlyJobs) { job in
                     let isSelected = selectedStartJobIdentifiers.contains(job.id)
                     Button {
                         toggleStartSelection(for: job)
@@ -599,11 +608,11 @@ private struct HomeDashboardSceneView: View {
     }
 
     private func syncSelectedJobs() {
-        let availableIdentifiers = Set(jobs.map(\.id))
+        let availableIdentifiers = Set(hourlyJobs.map(\.id))
         selectedStartJobIdentifiers = selectedStartJobIdentifiers.intersection(availableIdentifiers)
 
         if selectedStartJobIdentifiers.isEmpty,
-           let preferred = jobs.first(where: { $0.id == preferences.selectedHomeJobIdentifier }) ?? jobs.first {
+           let preferred = hourlyJobs.first(where: { $0.id == preferences.selectedHomeJobIdentifier }) ?? hourlyJobs.first {
             selectedStartJobIdentifiers = [preferred.id]
         }
     }

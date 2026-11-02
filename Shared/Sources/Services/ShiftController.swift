@@ -10,6 +10,7 @@ enum ShiftControllerError: LocalizedError {
     case futureStart
     case overlappingShift(jobName: String)
     case futureCompletedShift
+    case salariedJob
 
     var errorDescription: String? {
         switch self {
@@ -18,6 +19,8 @@ enum ShiftControllerError: LocalizedError {
                 return "Add an hourly rate for \(jobName) before tracking a shift."
             }
             return "Add an hourly rate before tracking a shift."
+        case .salariedJob:
+            return "Salary accrues automatically. Use Log Work Hours in salary history to track optional hours."
         case .noOpenShift:
             return "There isn’t an active shift to end."
         case .invalidShiftRange:
@@ -51,6 +54,8 @@ private struct SnapshotData {
     let overtimeRules: [OvertimeRuleSet]
     let paySchedules: [PaySchedule]
     let supplements: [JobSupplement]
+    let salaryPlans: [SalaryPlan]
+    let salaryWorkLogs: [SalaryWorkLog]
     let templates: [ScheduleTemplate]
     let taxProfile: TaxProfile
     let preferences: AppPreferences?
@@ -113,8 +118,11 @@ enum ShiftController {
         let templates = try context.fetch(FetchDescriptor<ScheduleTemplate>())
         let existingOpenShifts = try context.fetch(FetchDescriptor<OpenShiftState>())
         let completedShifts = try context.fetch(FetchDescriptor<ShiftRecord>())
+        let salaryPlans = try context.fetch(FetchDescriptor<SalaryPlan>())
 
         for job in selectedJobs {
+            guard job.compensationKind == .hourly else { throw ShiftControllerError.salariedJob }
+            try validateHourlyInterval(jobIdentifier: job.id, start: date, end: scheduledEndDate ?? .distantFuture, plans: salaryPlans)
             let configuration = JobService.configuration(
                 for: job,
                 payRates: payRates,
@@ -293,6 +301,8 @@ enum ShiftController {
         guard endDate > startDate else {
             throw ShiftControllerError.invalidShiftRange
         }
+        let salaryPlans = try context.fetch(FetchDescriptor<SalaryPlan>()).filter { $0.job?.id == job.id }
+        try validateHourlyInterval(jobIdentifier: job.id, start: startDate, end: endDate, plans: salaryPlans)
         let oldJob = shift?.job
         let oldStart = shift?.startDate
         let oldEnd = shift?.endDate
@@ -379,6 +389,9 @@ enum ShiftController {
             throw ShiftControllerError.invalidShiftRange
         }
 
+        guard job.compensationKind == .hourly else { throw ShiftControllerError.salariedJob }
+        try validateHourlyInterval(jobIdentifier: job.id, start: startDate, end: endDate,
+            plans: context.fetch(FetchDescriptor<SalaryPlan>()))
         let existing = try context.fetch(FetchDescriptor<ScheduledShift>())
         let completed = try context.fetch(FetchDescriptor<ShiftRecord>())
         guard !existing.contains(where: {
@@ -477,6 +490,8 @@ enum ShiftController {
         guard startDate <= .now else { throw ShiftControllerError.futureStart }
         let completed = try context.fetch(FetchDescriptor<ShiftRecord>())
         let end = scheduledEndDate ?? .distantFuture
+        try validateHourlyInterval(jobIdentifier: targetOpenShift.job?.id, start: startDate, end: end,
+            plans: context.fetch(FetchDescriptor<SalaryPlan>()))
         guard !completed.contains(where: {
             $0.job?.id == targetOpenShift.job?.id && $0.startDate < end && $0.endDate > startDate
         }) else {
@@ -537,7 +552,7 @@ enum ShiftController {
 
         // Preflight every due schedule so a later missing rate or conflict cannot
         // leave earlier schedules partly converted in the shared context.
-        let dueSchedules = scheduledShifts.filter { $0.startDate <= date && $0.job?.isArchived != true }
+        let dueSchedules = scheduledShifts.filter { $0.startDate <= date && $0.job?.isArchived != true && $0.job?.compensationKind != .salary }
         for scheduled in dueSchedules {
             guard scheduled.endDate > scheduled.startDate else { throw ShiftControllerError.invalidShiftRange }
             guard let job = scheduled.job ?? allJobs.first else { continue }
@@ -565,7 +580,7 @@ enum ShiftController {
 
             let job: JobProfile?
             if let scheduledJob = scheduledShift.job {
-                guard !scheduledJob.isArchived,
+                guard !scheduledJob.isArchived, scheduledJob.compensationKind == .hourly,
                       let activeJob = allJobs.first(where: { $0.id == scheduledJob.id }) else {
                     context.delete(scheduledShift)
                     discardedArchivedSchedules = true
@@ -686,7 +701,11 @@ enum ShiftController {
         let projectedGross = payPeriodAggregation == .unified
             ? jobSummaries.reduce(0) { $0 + $1.rollup.projectedGross }
             : 0
-        let combinedAllTimeGross = AggregationService.totalGross(for: snapshotData.completedShifts) + combinedCurrentGross
+        let salaryAllTimeGross = snapshotData.jobs.reduce(0.0) { total, job in
+            total + SalaryEngine.lifetimeGross(for: snapshotData.salaryPlans.filter { $0.job?.id == job.id },
+                through: job.isArchived ? min(date, job.archivedAt ?? job.updatedAt) : date)
+        }
+        let combinedAllTimeGross = AggregationService.totalGross(for: snapshotData.completedShifts) + combinedCurrentGross + salaryAllTimeGross
         let payPeriodSupplementTotals = payPeriodAggregation == .unified
             ? combinedSupplementTotals(jobSummaries.map(\.rollup.payPeriodEffective))
             : .zero
@@ -705,7 +724,7 @@ enum ShiftController {
             }
         }
         let combinedAllTimeHours = AggregationService.totalHours(for: snapshotData.completedShifts) + (combinedBreakdown?.totalHours ?? 0)
-        let combinedRollup = SummaryRollup(
+        var combinedRollup = SummaryRollup(
             activeShiftCount: snapshotData.openShifts.count,
             scheduledShiftCount: snapshotData.scheduledShifts.count,
             completedShiftCount: snapshotData.completedShifts.count,
@@ -761,14 +780,27 @@ enum ShiftController {
                 supplementTotals: allTimeSupplementTotals,
                 estimate: combinedEffectiveEstimate,
                 hours: combinedAllTimeHours
-            )
+            ),
+            salaryGross: jobSummaries.reduce(0) { $0 + $1.rollup.salaryGross },
+            salaryAllTimeGross: salaryAllTimeGross,
+            salaryJobCount: jobSummaries.reduce(0) { $0 + $1.rollup.salaryJobCount },
+            salaryLoggedHours: jobSummaries.reduce(0) { $0 + $1.rollup.salaryLoggedHours }
         )
+        if combinedRollup.salaryAllTimeGross > 0 {
+            combinedRollup.allTimeEffective.effectiveHourlyRate = nil
+        }
+        if combinedRollup.salaryGross > 0 {
+            let salaryHours = combinedRollup.salaryLoggedHours
+            let hasUnloggedSalary = jobSummaries.contains { $0.rollup.salaryGross > 0 && $0.rollup.salaryLoggedHours == 0 }
+            combinedRollup.payPeriodEffective.effectiveHourlyRate = hasUnloggedSalary ? nil :
+                combinedRollup.payPeriodEffective.effectiveGross / max(0.000_001, payPeriodHours + salaryHours)
+        }
 
         let projectedConfidenceLabel: String
         if payPeriodAggregation == .variesByJob {
             projectedConfidenceLabel = "Varies by job"
         } else if jobSummaries.contains(where: { $0.rollup.projectedGross > $0.rollup.payPeriodGross + 0.001 }) {
-            projectedConfidenceLabel = "Projected from job schedules"
+            projectedConfidenceLabel = jobSummaries.contains(where: { $0.salary != nil }) ? "Salary and scheduled earnings" : "Projected from job schedules"
         } else {
             projectedConfidenceLabel = "Earned so far"
         }
@@ -835,7 +867,8 @@ enum ShiftController {
             projectedPaycheckEffectiveGross: summary.combined.projectedEffective.effectiveGross,
             projectedPaycheckEffectiveTakeHome: summary.combined.projectedEffective.effectiveTakeHome,
             projectedConfidenceLabel: summary.projectedConfidenceLabel,
-            allTimeHours: summary.combined.allTimeHours
+            allTimeHours: summary.combined.allTimeHours,
+            salaryJobs: summary.jobs.compactMap(\.salary)
         )
     }
 
@@ -850,6 +883,8 @@ enum ShiftController {
             overtimeRules: try context.fetch(FetchDescriptor<OvertimeRuleSet>()),
             paySchedules: try context.fetch(FetchDescriptor<PaySchedule>()),
             supplements: try context.fetch(FetchDescriptor<JobSupplement>()),
+            salaryPlans: try context.fetch(FetchDescriptor<SalaryPlan>()),
+            salaryWorkLogs: try context.fetch(FetchDescriptor<SalaryWorkLog>()),
             templates: try context.fetch(FetchDescriptor<ScheduleTemplate>()).filter { $0.job?.isArchived != true },
             taxProfile: try DataBootstrapper.first(TaxProfile.self, in: context) ?? TaxProfile(),
             preferences: try DataBootstrapper.first(AppPreferences.self, in: context)
@@ -862,6 +897,9 @@ enum ShiftController {
         at date: Date,
         calendar: Calendar
     ) -> JobSummarySnapshot {
+        let jobPlans = snapshotData.salaryPlans.filter { $0.job?.id == job.id }
+        let salaryPlan = SalaryEngine.activePlan(in: jobPlans, at: date)
+            ?? jobPlans.filter { $0.effectiveDate > date }.min { $0.effectiveDate < $1.effectiveDate }
         let configuration = JobService.configuration(
             for: job,
             payRates: snapshotData.payRates,
@@ -869,7 +907,8 @@ enum ShiftController {
             overtimeRules: snapshotData.overtimeRules,
             paySchedules: snapshotData.paySchedules,
             supplements: snapshotData.supplements,
-            templates: snapshotData.templates
+            templates: snapshotData.templates,
+            payScheduleOverride: salaryPlan?.paySchedule
         )
 
         let completedShifts = snapshotData.completedShifts.filter { $0.job?.id == job.id }
@@ -894,8 +933,12 @@ enum ShiftController {
             }
         )
 
-        let payPeriodInterval = ProjectionEngine.payPeriodInterval(for: date, schedule: configuration.paySchedule, calendar: calendar)
-        let payPeriodWindow = DateInterval(start: payPeriodInterval.start, end: min(payPeriodInterval.end, date))
+        let salaryPlans = snapshotData.salaryPlans.filter { $0.job?.id == job.id }
+        let salarySnapshot = SalaryEngine.snapshot(job: job, plans: salaryPlans, workLogs: snapshotData.salaryWorkLogs,
+            taxProfile: snapshotData.taxProfile, at: date)
+        let salaryLifetimeGross = SalaryEngine.lifetimeGross(for: salaryPlans, through: date)
+        let payPeriodInterval = salarySnapshot?.interval ?? ProjectionEngine.payPeriodInterval(for: date, schedule: configuration.paySchedule, calendar: calendar)
+        let payPeriodWindow = DateInterval(start: payPeriodInterval.start, end: max(payPeriodInterval.start, min(payPeriodInterval.end, date)))
         let payPeriodSupplementTotals = SupplementAllocationService.totals(
             for: SupplementAllocationService.allocations(
                 for: configuration.supplements,
@@ -928,7 +971,7 @@ enum ShiftController {
         let yearInterval = calendar.dateInterval(of: .year, for: date)
         let ytdGrossCompleted = AggregationService.totalGross(for: completedShifts, in: yearInterval)
         let currentRate = currentBreakdown?.effectiveRate ?? EarningsEngine.payRate(at: date, payRates: configuration.payRates)
-        let annualizedGrossIncome = TaxEstimator.annualizedGrossIncome(
+        let annualizedGrossIncome = salarySnapshot?.annualGross ?? TaxEstimator.annualizedGrossIncome(
             currentGross: currentBreakdown?.grossEarnings ?? 0,
             yearToDateGrossExcludingCurrentShift: ytdGrossCompleted,
             currentHourlyRate: currentRate,
@@ -965,7 +1008,7 @@ enum ShiftController {
         )
 
         let takeHomeRate = 1 - taxEstimate.estimatedNetRate
-        let projection = ProjectionEngine.projectedPaycheck(
+        var projection = ProjectionEngine.projectedPaycheck(
             asOf: date,
             shifts: completedShifts,
             openShiftBreakdown: currentBreakdown,
@@ -976,9 +1019,18 @@ enum ShiftController {
             configuration: configuration,
             openShifts: openShifts,
             scheduledShifts: scheduledShifts,
-            calendar: calendar
+            calendar: salaryPlan?.calendar ?? calendar
         )
 
+        if salarySnapshot?.isUpcoming == true {
+            projection = (0, 0, 0, 0, "Salary begins on the effective date")
+        }
+        let salaryPeriodGross = SalaryEngine.gross(for: salaryPlans, within: payPeriodInterval, through: date)
+        let salaryExpectedGross = SalaryEngine.gross(for: salaryPlans, within: payPeriodInterval, through: payPeriodInterval.end)
+        projection.payPeriodGross += salaryPeriodGross
+        projection.projectedGross += salaryExpectedGross
+        projection.projectedTakeHome = TaxEstimator.estimatedTakeHome(for: projection.projectedGross, estimate: taxEstimate)
+        if salarySnapshot != nil { projection.confidenceLabel = "Fixed salary · visualization estimate" }
         let weeklyInterval = calendar.dateInterval(of: .weekOfYear, for: date)
         func allocatedCompleted(in interval: DateInterval) -> [EarningsBreakdown] {
             completedShifts.map {
@@ -995,8 +1047,9 @@ enum ShiftController {
         let weeklyGross = weeklyInterval.map { interval in
             allocatedCompleted(in: interval).reduce(0) { $0 + $1.grossEarnings }
                 + allocatedOpen(in: interval).reduce(0) { $0 + $1.grossEarnings }
+                + SalaryEngine.gross(for: salaryPlans, within: interval, through: date)
         } ?? 0
-        let allTimeGross = AggregationService.totalGross(for: completedShifts) + (currentBreakdown?.grossEarnings ?? 0)
+        let allTimeGross = AggregationService.totalGross(for: completedShifts) + (currentBreakdown?.grossEarnings ?? 0) + salaryLifetimeGross
         let allTimeHours = AggregationService.totalHours(for: completedShifts) + (currentBreakdown?.totalHours ?? 0)
         let activeSupplementTotals = proratedSupplementTotals(
             currentHours: currentBreakdown?.totalHours ?? 0,
@@ -1004,7 +1057,7 @@ enum ShiftController {
             supplementTotals: payPeriodSupplementTotals
         )
 
-        let rollup = SummaryRollup(
+        var rollup = SummaryRollup(
             activeShiftCount: openShifts.count,
             scheduledShiftCount: scheduledShifts.count,
             completedShiftCount: completedShifts.count,
@@ -1052,8 +1105,18 @@ enum ShiftController {
                 supplementTotals: allTimeSupplementTotals,
                 estimate: effectiveTaxEstimate,
                 hours: allTimeHours
-            )
+            ),
+            salaryGross: salaryPeriodGross,
+            salaryAllTimeGross: salaryLifetimeGross,
+            salaryJobCount: salarySnapshot == nil ? 0 : 1,
+            salaryLoggedHours: salarySnapshot?.loggedHours ?? 0
         )
+        if salaryLifetimeGross > 0 { rollup.allTimeEffective.effectiveHourlyRate = nil }
+        if salaryPeriodGross > 0 {
+            let hours = rollup.salaryLoggedHours
+            rollup.payPeriodEffective.effectiveHourlyRate = hours > 0 ?
+                rollup.payPeriodEffective.effectiveGross / (projection.payPeriodHours + hours) : nil
+        }
 
         return JobSummarySnapshot(
             id: job.id,
@@ -1065,7 +1128,8 @@ enum ShiftController {
             payPeriodInterval: payPeriodInterval,
             payScheduleFrequency: configuration.paySchedule.frequency,
             projectedConfidenceLabel: projection.confidenceLabel,
-            rollup: rollup
+            rollup: rollup,
+            salary: salarySnapshot
         )
     }
 
@@ -1200,6 +1264,12 @@ enum ShiftController {
                 ? combined.grossEarnings / combined.totalHours
                 : 0
         )
+    }
+
+    private static func validateHourlyInterval(jobIdentifier: UUID?, start: Date, end: Date, plans: [SalaryPlan]) throws {
+        guard !plans.contains(where: {
+            $0.job?.id == jobIdentifier && $0.effectiveDate < end && ($0.endDate ?? .distantFuture) > start
+        }) else { throw ShiftControllerError.salariedJob }
     }
 
     private static func preferredHomeJob(in context: ModelContext) throws -> JobProfile {

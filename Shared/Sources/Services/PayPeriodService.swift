@@ -70,6 +70,9 @@ struct PayPeriodSummary: Identifiable, Equatable {
     var yearToDateGrossBeforePeriod: Double
 
     var effectiveCompensation: EffectiveCompensationSnapshot
+    var salaryGross: Double = 0
+    var salaryExpectedGross: Double = 0
+    var salaryLoggedHours: Double = 0
 
     var supplementalTotal: Double {
         effectiveCompensation.supplementalTotal
@@ -145,7 +148,9 @@ enum PayPeriodService {
         templates: [ScheduleTemplate],
         taxProfile: TaxProfile,
         calendar: Calendar = .current,
-        archiveMonths: Int = defaultArchiveMonths
+        archiveMonths: Int = defaultArchiveMonths,
+        salaryPlans: [SalaryPlan] = [],
+        salaryWorkLogs: [SalaryWorkLog] = []
     ) -> PayPeriodArchiveSnapshot {
         let rangeStart = calendar.startOfDay(
             for: calendar.date(byAdding: .month, value: -archiveMonths, to: date) ?? date
@@ -169,24 +174,51 @@ enum PayPeriodService {
             )
             let jobCompletedShifts = completedShifts.filter { $0.job?.id == job.id }
             let jobOpenShifts = job.isArchived ? [] : openShifts.filter { $0.job?.id == job.id }
-            let periods = payPeriodIntervals(
+            let jobPlans = salaryPlans.filter { $0.job?.id == job.id }
+            let hourlyPeriods = payPeriodIntervals(
                 asOf: date,
                 schedule: configuration.paySchedule,
                 rangeStart: rangeStart,
                 calendar: calendar
             )
 
+            let salaryPeriods = SalaryEngine.periods(for: jobPlans, from: rangeStart, through: date)
+            // A job can change pay cycles when switching compensation type.
+            // Salary periods own their windows; trim overlapping hourly windows
+            // so shifts and supplements are never counted twice in the archive.
+            let remainingHourlyPeriods = hourlyPeriods.flatMap { hourly in
+                salaryPeriods.reduce([hourly]) { fragments, salary in
+                    fragments.flatMap { fragment -> [DateInterval] in
+                        guard fragment.start < salary.end, fragment.end > salary.start else { return [fragment] }
+                        var remainder: [DateInterval] = []
+                        if fragment.start < salary.start { remainder.append(DateInterval(start: fragment.start, end: salary.start)) }
+                        if fragment.end > salary.end { remainder.append(DateInterval(start: salary.end, end: fragment.end)) }
+                        return remainder
+                    }
+                }
+            }
+            let periods = Set(remainingHourlyPeriods + salaryPeriods).filter { $0.start <= date }.sorted { $0.start > $1.start }
             let summaries = periods.compactMap { interval -> PayPeriodSummary? in
-                summary(
+                let matchingPlans = jobPlans.filter {
+                    let probe = max(interval.start, $0.effectiveDate)
+                    return SalaryEngine.period(for: $0, at: probe) == interval
+                }
+                let plan = matchingPlans.max { $0.effectiveDate < $1.effectiveDate }
+                let resolvedConfiguration = JobService.configuration(for: job, payRates: payRates, nightRules: nightRules,
+                    overtimeRules: overtimeRules, paySchedules: paySchedules, supplements: supplements, templates: templates,
+                    payScheduleOverride: plan?.paySchedule)
+                return summary(
                     for: job,
-                    configuration: configuration,
+                    configuration: resolvedConfiguration,
                     interval: interval,
                     asOf: date,
                     completedShifts: jobCompletedShifts,
                     openShifts: jobOpenShifts,
                     taxProfile: taxProfile,
-                    calendar: calendar,
-                    forceIncludeCurrent: !job.isArchived
+                    calendar: plan?.calendar ?? calendar,
+                    forceIncludeCurrent: !job.isArchived && job.compensationKind == .hourly,
+                    salaryPlans: jobPlans,
+                    salaryWorkLogs: salaryWorkLogs.filter { $0.job?.id == job.id }
                 )
             }
 
@@ -257,7 +289,9 @@ enum PayPeriodService {
         openShifts: [OpenShiftState],
         taxProfile: TaxProfile,
         calendar: Calendar,
-        forceIncludeCurrent: Bool
+        forceIncludeCurrent: Bool,
+        salaryPlans: [SalaryPlan],
+        salaryWorkLogs: [SalaryWorkLog]
     ) -> PayPeriodSummary? {
         let isCurrent = date >= interval.start && date < interval.end
         let status: PayPeriodStatus = isCurrent ? .current : .closed
@@ -295,19 +329,29 @@ enum PayPeriodService {
             }
 
         let preTaxShifts = allocatedCompletedShifts + allocatedOpenShifts
+        let salaryCutoff = job.isArchived ? min(date, job.archivedAt ?? job.updatedAt) : date
+        let salaryGross = SalaryEngine.gross(for: salaryPlans, within: interval, through: salaryCutoff)
+        let salaryExpected = SalaryEngine.gross(for: salaryPlans, within: interval, through: interval.end)
+        let salaryHours = salaryWorkLogs.filter { $0.date >= interval.start && $0.date < interval.end && $0.date <= date }.reduce(0) { $0 + $1.hours }
         let totals = totals(for: preTaxShifts)
-        let shouldInclude = !preTaxShifts.isEmpty || !supplementAllocations.isEmpty || (forceIncludeCurrent && isCurrent)
+        let periodGross = totals.gross + salaryGross
+        let shouldInclude = salaryExpected > 0 || !preTaxShifts.isEmpty || !supplementAllocations.isEmpty || (forceIncludeCurrent && isCurrent)
         guard shouldInclude else {
             return nil
         }
 
-        let yearToDateGrossBeforePeriod = allocatedGrossBeforePeriod(
+        let salaryYearStart = calendar.dateInterval(of: .year, for: interval.start)?.start ?? interval.start
+        let salaryYTD = SalaryEngine.gross(for: salaryPlans,
+            within: DateInterval(start: salaryYearStart, end: interval.start), through: interval.start)
+        let yearToDateGrossBeforePeriod = salaryYTD + allocatedGrossBeforePeriod(
             shifts: completedShifts,
             configuration: configuration,
             interval: interval,
             calendar: calendar
         )
-        let annualizedGrossIncome = TaxEstimator.paycheckAnnualizedGross(
+        let periodSalaryPlan = salaryPlans.filter { $0.effectiveDate < interval.end && ($0.endDate ?? .distantFuture) > interval.start }
+            .max { $0.effectiveDate < $1.effectiveDate }
+        let annualizedGrossIncome = periodSalaryPlan?.annualGross ?? TaxEstimator.paycheckAnnualizedGross(
             periodGross: totals.gross,
             payFrequency: configuration.paySchedule.frequency
         )
@@ -341,7 +385,7 @@ enum PayPeriodService {
             resolved.estimatedTakeHome = TaxEstimator.estimatedTakeHome(for: shift.grossEarnings, estimate: taxEstimate)
             return resolved
         }
-        let takeHome = TaxEstimator.estimatedTakeHome(for: totals.gross, estimate: taxEstimate)
+        let takeHome = TaxEstimator.estimatedTakeHome(for: periodGross, estimate: taxEstimate)
 
         return PayPeriodSummary(
             id: summaryID(prefix: "job-\(job.id.uuidString)", interval: interval),
@@ -355,7 +399,7 @@ enum PayPeriodService {
             shifts: shifts,
             supplementAllocations: supplementAllocations,
             shiftCount: shifts.count,
-            grossEarnings: totals.gross,
+            grossEarnings: periodGross,
             estimatedTakeHome: takeHome,
             baseEarnings: totals.base,
             nightPremiumEarnings: totals.nightPremium,
@@ -371,11 +415,14 @@ enum PayPeriodService {
             annualizedTaxableSupplementIncome: annualizedTaxableSupplementIncome,
             yearToDateGrossBeforePeriod: yearToDateGrossBeforePeriod,
             effectiveCompensation: SupplementAllocationService.effectiveSnapshot(
-                regularGross: totals.gross,
+                regularGross: periodGross,
                 supplementTotals: supplementTotals,
                 estimate: effectiveEstimate,
                 hours: totals.hours
-            )
+            ),
+            salaryGross: salaryGross,
+            salaryExpectedGross: salaryExpected,
+            salaryLoggedHours: salaryHours
         )
     }
 
@@ -532,6 +579,7 @@ enum PayPeriodService {
                 return $0.allocatedStartDate > $1.allocatedStartDate
             }
         let totals = totals(for: shifts)
+        let combinedGross = summaries.reduce(0) { $0 + $1.grossEarnings }
         let annualizedGrossIncome = summaries.reduce(0) { $0 + $1.annualizedGrossIncome }
         let annualizedTaxableSupplementIncome = summaries.reduce(0) { $0 + $1.annualizedTaxableSupplementIncome }
         let taxEstimate = TaxEstimator.estimate(
@@ -582,8 +630,8 @@ enum PayPeriodService {
             shifts: resolvedShifts,
             supplementAllocations: supplementAllocations,
             shiftCount: resolvedShifts.count,
-            grossEarnings: totals.gross,
-            estimatedTakeHome: TaxEstimator.estimatedTakeHome(for: totals.gross, estimate: taxEstimate),
+            grossEarnings: combinedGross,
+            estimatedTakeHome: TaxEstimator.estimatedTakeHome(for: combinedGross, estimate: taxEstimate),
             baseEarnings: totals.base,
             nightPremiumEarnings: totals.nightPremium,
             overtimePremiumEarnings: totals.overtimePremium,
@@ -598,11 +646,14 @@ enum PayPeriodService {
             annualizedTaxableSupplementIncome: annualizedTaxableSupplementIncome,
             yearToDateGrossBeforePeriod: summaries.reduce(0) { $0 + $1.yearToDateGrossBeforePeriod },
             effectiveCompensation: SupplementAllocationService.effectiveSnapshot(
-                regularGross: totals.gross,
+                regularGross: combinedGross,
                 supplementTotals: supplementTotals,
                 estimate: effectiveEstimate,
                 hours: totals.hours
-            )
+            ),
+            salaryGross: summaries.reduce(0) { $0 + $1.salaryGross },
+            salaryExpectedGross: summaries.reduce(0) { $0 + $1.salaryExpectedGross },
+            salaryLoggedHours: summaries.reduce(0) { $0 + $1.salaryLoggedHours }
         )
     }
 

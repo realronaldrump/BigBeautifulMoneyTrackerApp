@@ -413,6 +413,10 @@ struct SummaryRollup: Equatable {
     var payPeriodEffective: EffectiveCompensationSnapshot
     var projectedEffective: EffectiveCompensationSnapshot
     var allTimeEffective: EffectiveCompensationSnapshot
+    var salaryGross: Double = 0
+    var salaryAllTimeGross: Double = 0
+    var salaryJobCount: Int = 0
+    var salaryLoggedHours: Double = 0
 }
 
 struct JobSummarySnapshot: Identifiable, Equatable {
@@ -426,6 +430,7 @@ struct JobSummarySnapshot: Identifiable, Equatable {
     var payScheduleFrequency: PayFrequency
     var projectedConfidenceLabel: String
     var rollup: SummaryRollup
+    var salary: SalaryDashboardSnapshot? = nil
 }
 
 struct SummarySnapshot: Equatable {
@@ -459,6 +464,7 @@ struct DashboardSnapshot: Equatable {
     var projectedPaycheckEffectiveTakeHome: Double
     var projectedConfidenceLabel: String
     var allTimeHours: Double
+    var salaryJobs: [SalaryDashboardSnapshot] = []
 }
 
 private let compensationRateEpsilon = 0.000_001

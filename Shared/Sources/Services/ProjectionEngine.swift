@@ -6,15 +6,24 @@ enum ProjectionEngine {
         schedule: PaySchedule,
         calendar: Calendar = .current
     ) -> DateInterval {
-        switch schedule.frequency {
+        payPeriodInterval(for: date, frequency: schedule.frequency, anchorDate: schedule.anchorDate, calendar: calendar)
+    }
+
+    static func payPeriodInterval(
+        for date: Date,
+        frequency: PayFrequency,
+        anchorDate: Date,
+        calendar: Calendar = .current
+    ) -> DateInterval {
+        switch frequency {
         case .weekly:
-            return repeatingInterval(for: date, anchor: schedule.anchorDate, everyDays: 7, calendar: calendar)
+            return repeatingInterval(for: date, anchor: anchorDate, everyDays: 7, calendar: calendar)
         case .biweekly:
-            return repeatingInterval(for: date, anchor: schedule.anchorDate, everyDays: 14, calendar: calendar)
+            return repeatingInterval(for: date, anchor: anchorDate, everyDays: 14, calendar: calendar)
         case .monthly:
-            return monthlyInterval(for: date, anchor: schedule.anchorDate, calendar: calendar)
+            return monthlyInterval(for: date, anchor: anchorDate, calendar: calendar)
         case .semiMonthly:
-            return semiMonthlyInterval(for: date, anchor: schedule.anchorDate, calendar: calendar)
+            return semiMonthlyInterval(for: date, anchor: anchorDate, calendar: calendar)
         }
     }
 
