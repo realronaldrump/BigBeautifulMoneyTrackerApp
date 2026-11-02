@@ -11,7 +11,6 @@ enum PersistenceService {
             // A failed save must not leave a shift visually ended or a new
             // record waiting for an unrelated autosave to commit it later.
             context.rollback()
-            context.processPendingChanges()
             throw error
         }
     }
