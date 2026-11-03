@@ -214,7 +214,6 @@ private struct HomeDashboardSceneView: View {
                 primaryAction
                     .padding(.horizontal, 20)
                     .padding(.vertical, 8)
-                    .background(theme.trueBlack.opacity(0.96))
             }
         }
         .overlay(alignment: .bottom) {
@@ -320,10 +319,8 @@ private struct HomeDashboardSceneView: View {
     }
 
     private var restingContent: some View {
-        VStack(spacing: 26) {
-            Spacer(minLength: 12)
-
-            VStack(spacing: 10) {
+        VStack(spacing: 20) {
+            VStack(spacing: 8) {
                 Text("Off shift.")
                     .font(TypeStyle.headline)
                     .foregroundStyle(Color.white)
@@ -425,6 +422,7 @@ private struct HomeDashboardSceneView: View {
         }
         .buttonStyle(AppActionButtonStyle(accent: isActive ? theme.roseAccent : theme.accent(for: preferences.selectedDisplayMode)))
         .disabled(!isActive && selectedStartJobIdentifiers.isEmpty)
+        .accessibilityIdentifier("home.shiftAction")
         .accessibilityHint(isActive ? "Save tracked work to History" : "Begin tracking earnings for the selected jobs")
     }
 

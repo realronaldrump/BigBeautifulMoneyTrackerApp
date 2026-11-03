@@ -16,6 +16,7 @@
 		21C9B704148FE89722FD3A2D /* MilestoneBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF049F2D4E3B430BEC531191 /* MilestoneBanner.swift */; };
 		2422F59220D7EED11ED6ABA6 /* ModelContainerFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6C94312478F761905736621 /* ModelContainerFactory.swift */; };
 		2633012326B30D97018C7EEA /* ReminderSchedule.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBCEA1F6E01B66313AA520CE /* ReminderSchedule.swift */; };
+		2A299C6AAD35740F6BF0C614 /* UITestScenario.swift in Sources */ = {isa = PBXBuildFile; fileRef = 265E2B619D0DEB5DF51A617E /* UITestScenario.swift */; };
 		2EB96E3049FAB476390D69AC /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 6590CFB399F88BEABD18D7D1 /* PrivacyInfo.xcprivacy */; };
 		2EC3DAAC8E4837653B01AF25 /* ShiftActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 901AD27FB3709E9B428100F3 /* ShiftActivityAttributes.swift */; };
 		30BBE0F3B61206C32716F9AD /* PersistenceService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99A7AB6D34C6D5EA2054DA92 /* PersistenceService.swift */; };
@@ -63,6 +64,7 @@
 		A6C4127A32C79B0776180564 /* PulseAura.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7EF73C3A77D4B77940075392 /* PulseAura.swift */; };
 		A9C9AB1E29EF7F5377C21EA4 /* HapticManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1DE0ECBC20AFF2C014C48A1 /* HapticManager.swift */; };
 		B7C7C8312873E0A83FFE2F6B /* AggregationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 609E94722DF52B0B79865C29 /* AggregationService.swift */; };
+		B8388E47E1D66BE866115184 /* BottomNavigationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7616820B632BAE5753F6ED36 /* BottomNavigationTests.swift */; };
 		B90DDB8ED8F3F066AF4BE6FE /* HistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7C6480BC46625FEDF8BFB7E /* HistoryView.swift */; };
 		BA668732F3D808803AA0D342 /* ShiftEarningsAllocation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FA05C54FF4549FE570F58EA /* ShiftEarningsAllocation.swift */; };
 		BC5D05EAC14C5303ED02DF8C /* AppNotificationDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8788FC074A315A5185BD5256 /* AppNotificationDelegate.swift */; };
@@ -88,6 +90,13 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		2E7A548D61ACC264A761F9EC /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A66A4E223EA9725430D0E548 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 4064C08BC37140B6CFCA23C8;
+			remoteInfo = BigBeautifulMoneyTracker;
+		};
 		6FDC6F321031C50B44B532D4 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = A66A4E223EA9725430D0E548 /* Project object */;
@@ -129,6 +138,7 @@
 		178598229E5BD008C8B2D0D4 /* SharedConstants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedConstants.swift; sourceTree = "<group>"; };
 		1D2F93B7E5B59A42A0A6D6F2 /* TaxEstimator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaxEstimator.swift; sourceTree = "<group>"; };
 		201758E7BDE542E59ECDF302 /* PreSalary.sqlite */ = {isa = PBXFileReference; lastKnownFileType = file; path = PreSalary.sqlite; sourceTree = "<group>"; };
+		265E2B619D0DEB5DF51A617E /* UITestScenario.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UITestScenario.swift; sourceTree = "<group>"; };
 		29D7B1AEF3E54493B27A850D /* BigBeautifulMoneyTrackerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BigBeautifulMoneyTrackerApp.swift; sourceTree = "<group>"; };
 		2B603D3512289418D6BAFB50 /* DataBootstrapper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataBootstrapper.swift; sourceTree = "<group>"; };
 		2DD7DE6232BF82BD65C94F47 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
@@ -145,6 +155,7 @@
 		6DD8261EF1F5EF3A6CB10651 /* MoneyTrackerShortcuts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoneyTrackerShortcuts.swift; sourceTree = "<group>"; };
 		72FC659281BA65A56A15F91B /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		751904045AF860B35193929A /* ReminderManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReminderManager.swift; sourceTree = "<group>"; };
+		7616820B632BAE5753F6ED36 /* BottomNavigationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BottomNavigationTests.swift; sourceTree = "<group>"; };
 		79F87771831E62ECAF918690 /* SalaryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SalaryTests.swift; sourceTree = "<group>"; };
 		7EF73C3A77D4B77940075392 /* PulseAura.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PulseAura.swift; sourceTree = "<group>"; };
 		818DAF58F9BBD8324AB4FBBD /* MetricTile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetricTile.swift; sourceTree = "<group>"; };
@@ -168,6 +179,7 @@
 		B5E29B0F97EE600971BD4659 /* AppControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppControls.swift; sourceTree = "<group>"; };
 		B9545A5E62D01D46BA2FBB8D /* MoneyTrackerEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoneyTrackerEngineTests.swift; sourceTree = "<group>"; };
 		BA854895C6BF1C471B25059A /* AppTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTheme.swift; sourceTree = "<group>"; };
+		C0D2DD2660AC906EB96656B3 /* BigBeautifulMoneyTrackerUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = BigBeautifulMoneyTrackerUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		C1DE0ECBC20AFF2C014C48A1 /* HapticManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HapticManager.swift; sourceTree = "<group>"; };
 		CBBC82F9E0FA6186E7A734CE /* JobAccentPalette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JobAccentPalette.swift; sourceTree = "<group>"; };
 		D3118303F124DA21C492C622 /* PayPeriodViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PayPeriodViews.swift; sourceTree = "<group>"; };
@@ -259,6 +271,7 @@
 				8FB06300F2A72693F5AF7D40 /* Automation */,
 				6FBAA5FC61B97BA59D26F975 /* DesignSystem */,
 				D0B0816C04B6A7E37DAF414C /* Features */,
+				92BFA0D842E1D12EFB4D962E /* Testing */,
 			);
 			name = Sources;
 			path = App/Sources;
@@ -317,6 +330,14 @@
 			path = Automation;
 			sourceTree = "<group>";
 		};
+		92BFA0D842E1D12EFB4D962E /* Testing */ = {
+			isa = PBXGroup;
+			children = (
+				265E2B619D0DEB5DF51A617E /* UITestScenario.swift */,
+			);
+			path = Testing;
+			sourceTree = "<group>";
+		};
 		9C66ED409C9F7071358D38F6 /* Sources */ = {
 			isa = PBXGroup;
 			children = (
@@ -356,6 +377,7 @@
 				9F6E71D7EE0BBF991C83B813 /* Sources */,
 				3C915D9ADECF23B011E4D604 /* Sources */,
 				9C66ED409C9F7071358D38F6 /* Sources */,
+				CFBD28E936618D35C36DE603 /* UI */,
 				B82431029C09E7768298D6D1 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -374,6 +396,7 @@
 			children = (
 				A45AC20038012567CD1B4FC4 /* BigBeautifulMoneyTracker.app */,
 				5D9FD3990BAA8AD4F6A93768 /* BigBeautifulMoneyTrackerTests.xctest */,
+				C0D2DD2660AC906EB96656B3 /* BigBeautifulMoneyTrackerUITests.xctest */,
 				8D606036C020E8AE5F2C85BC /* BigBeautifulMoneyTrackerWidgets.appex */,
 			);
 			name = Products;
@@ -394,6 +417,15 @@
 				5F6B04902CE15D6FA2B3AA1B /* SalaryHistoryView.swift */,
 			);
 			path = History;
+			sourceTree = "<group>";
+		};
+		CFBD28E936618D35C36DE603 /* UI */ = {
+			isa = PBXGroup;
+			children = (
+				7616820B632BAE5753F6ED36 /* BottomNavigationTests.swift */,
+			);
+			name = UI;
+			path = Tests/UI;
 			sourceTree = "<group>";
 		};
 		D0B0816C04B6A7E37DAF414C /* Features */ = {
@@ -490,6 +522,24 @@
 			productReference = 5D9FD3990BAA8AD4F6A93768 /* BigBeautifulMoneyTrackerTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
+		B053BFC2F6F944E6828CF890 /* BigBeautifulMoneyTrackerUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 704B00F61BC0CCEF5ADB4D49 /* Build configuration list for PBXNativeTarget "BigBeautifulMoneyTrackerUITests" */;
+			buildPhases = (
+				AB3776AFAD193E3A09CB072D /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				FC4378ECF0F1CEF7C28FFF3C /* PBXTargetDependency */,
+			);
+			name = BigBeautifulMoneyTrackerUITests;
+			packageProductDependencies = (
+			);
+			productName = BigBeautifulMoneyTrackerUITests;
+			productReference = C0D2DD2660AC906EB96656B3 /* BigBeautifulMoneyTrackerUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -509,6 +559,11 @@
 						DevelopmentTeam = CZ3N26YJ75;
 						ProvisioningStyle = Automatic;
 					};
+					B053BFC2F6F944E6828CF890 = {
+						DevelopmentTeam = CZ3N26YJ75;
+						ProvisioningStyle = Automatic;
+						TestTargetID = 4064C08BC37140B6CFCA23C8;
+					};
 				};
 			};
 			buildConfigurationList = A6F4C9EDD1B27E39E069C982 /* Build configuration list for PBXProject "BigBeautifulMoneyTracker" */;
@@ -527,6 +582,7 @@
 			targets = (
 				4064C08BC37140B6CFCA23C8 /* BigBeautifulMoneyTracker */,
 				51D5DB0E604870153733C5D5 /* BigBeautifulMoneyTrackerTests */,
+				B053BFC2F6F944E6828CF890 /* BigBeautifulMoneyTrackerUITests */,
 				4E9A5847F39ED5239992E567 /* BigBeautifulMoneyTrackerWidgets */,
 			);
 		};
@@ -562,6 +618,14 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		AB3776AFAD193E3A09CB072D /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B8388E47E1D66BE866115184 /* BottomNavigationTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		B3926028EC6AE59E77D1E9CC /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -614,6 +678,7 @@
 				6DA627ABE84400327BADCD87 /* SummaryView.swift in Sources */,
 				05FBEA34874BA0227D9EEBFD /* TaxEstimator.swift in Sources */,
 				9E8C96CE6ADD75280665BAFC /* TemplatesView.swift in Sources */,
+				2A299C6AAD35740F6BF0C614 /* UITestScenario.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -668,9 +733,32 @@
 			target = 4E9A5847F39ED5239992E567 /* BigBeautifulMoneyTrackerWidgets */;
 			targetProxy = 8338A37C3B48A1E8E48AA045 /* PBXContainerItemProxy */;
 		};
+		FC4378ECF0F1CEF7C28FFF3C /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 4064C08BC37140B6CFCA23C8 /* BigBeautifulMoneyTracker */;
+			targetProxy = 2E7A548D61ACC264A761F9EC /* PBXContainerItemProxy */;
+		};
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+		01A2A1295227BBB4A6E8750E /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.davis.BigBeautifulMoneyTrackerUITests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_TARGET_NAME = BigBeautifulMoneyTracker;
+			};
+			name = Release;
+		};
 		05C0F50FEB681251C8B36D6A /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -770,7 +858,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 12;
+				CURRENT_PROJECT_VERSION = 13;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = CZ3N26YJ75;
 				ENABLE_NS_ASSERTIONS = NO;
@@ -820,6 +908,24 @@
 			};
 			name = Release;
 		};
+		984912D7FFBC33FF8A1AD132 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.davis.BigBeautifulMoneyTrackerUITests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_TARGET_NAME = BigBeautifulMoneyTracker;
+			};
+			name = Debug;
+		};
 		BA322FC053304900FCB6164D /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -855,7 +961,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 12;
+				CURRENT_PROJECT_VERSION = 13;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = CZ3N26YJ75;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -957,6 +1063,15 @@
 			buildConfigurations = (
 				F4EF748460E4CE87AE3ADF55 /* Debug */,
 				15736E5FDD61ED6A92F352BC /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		704B00F61BC0CCEF5ADB4D49 /* Build configuration list for PBXNativeTarget "BigBeautifulMoneyTrackerUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				984912D7FFBC33FF8A1AD132 /* Debug */,
+				01A2A1295227BBB4A6E8750E /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;

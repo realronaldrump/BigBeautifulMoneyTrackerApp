@@ -980,8 +980,11 @@ private struct JobSettingsForm: View {
 
                         Spacer()
                     }
+                    .frame(maxWidth: .infinity, minHeight: 44)
+                    .contentShape(Rectangle())
                 }
                 .disabled(activeJobCount <= 1)
+                .accessibilityIdentifier("settings.archiveJob")
             } header: {
                 settingsLabel("Archive job", icon: "trash.fill", color: theme.roseAccent)
             } footer: {

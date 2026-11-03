@@ -31,6 +31,14 @@ struct BigBeautifulMoneyTrackerApp: App {
             }
             .environment(theme)
             .preferredColorScheme(.dark)
+            #if DEBUG
+            .transformEnvironment(\.dynamicTypeSize) { size in
+                if UITestScenario.current != nil {
+                    size = ProcessInfo.processInfo.environment["MONEY_TRACKER_UI_LARGE_TEXT"] == "1"
+                        ? .accessibility3 : .large
+                }
+            }
+            #endif
             .task { loadSavedData() }
         }
     }
@@ -38,6 +46,13 @@ struct BigBeautifulMoneyTrackerApp: App {
     private func loadSavedData() {
         guard modelContainer == nil else { return }
         do {
+            #if DEBUG
+            if let scenario = UITestScenario.current {
+                modelContainer = try scenario.makeContainer()
+                storageError = nil
+                return
+            }
+            #endif
             let container = try AppModelContainerFactory.makeSharedContainer()
             try DataBootstrapper.seedIfNeeded(in: container.mainContext)
             modelContainer = container

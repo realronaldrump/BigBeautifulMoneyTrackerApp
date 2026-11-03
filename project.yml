@@ -8,7 +8,7 @@ settings:
     SWIFT_VERSION: 6.0
     DEVELOPMENT_TEAM: CZ3N26YJ75
     CODE_SIGN_STYLE: Automatic
-    CURRENT_PROJECT_VERSION: 12
+    CURRENT_PROJECT_VERSION: 13
     MARKETING_VERSION: "1.6"
     GENERATE_INFOPLIST_FILE: NO
     SUPPORTS_MACCATALYST: NO
@@ -34,6 +34,7 @@ targets:
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LSRequiresIPhoneOS: true
         NSSupportsLiveActivities: true
+        ITSAppUsesNonExemptEncryption: false
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
         UIApplicationSceneManifest:
@@ -116,6 +117,19 @@ targets:
         TARGETED_DEVICE_FAMILY: "1"
     dependencies:
       - target: BigBeautifulMoneyTracker
+  BigBeautifulMoneyTrackerUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    deploymentTarget: "26.0"
+    sources:
+      - path: Tests/UI
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.davis.BigBeautifulMoneyTrackerUITests
+        GENERATE_INFOPLIST_FILE: YES
+        TARGETED_DEVICE_FAMILY: "1"
+    dependencies:
+      - target: BigBeautifulMoneyTracker
 schemes:
   BigBeautifulMoneyTracker:
     build:
@@ -123,9 +137,11 @@ schemes:
         BigBeautifulMoneyTracker: all
         BigBeautifulMoneyTrackerWidgets: [run, test]
         BigBeautifulMoneyTrackerTests: [test]
+        BigBeautifulMoneyTrackerUITests: [test]
     run:
       config: Debug
     test:
       config: Debug
       targets:
         - BigBeautifulMoneyTrackerTests
+        - BigBeautifulMoneyTrackerUITests

@@ -37,6 +37,20 @@
          </BuildActionEntry>
          <BuildActionEntry
             buildForTesting = "YES"
+            buildForRunning = "NO"
+            buildForProfiling = "NO"
+            buildForArchiving = "NO"
+            buildForAnalyzing = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "B053BFC2F6F944E6828CF890"
+               BuildableName = "BigBeautifulMoneyTrackerUITests.xctest"
+               BlueprintName = "BigBeautifulMoneyTrackerUITests"
+               ReferencedContainer = "container:BigBeautifulMoneyTracker.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
+         <BuildActionEntry
+            buildForTesting = "YES"
             buildForRunning = "YES"
             buildForProfiling = "NO"
             buildForArchiving = "NO"
@@ -75,6 +89,17 @@
                BlueprintIdentifier = "51D5DB0E604870153733C5D5"
                BuildableName = "BigBeautifulMoneyTrackerTests.xctest"
                BlueprintName = "BigBeautifulMoneyTrackerTests"
+               ReferencedContainer = "container:BigBeautifulMoneyTracker.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "B053BFC2F6F944E6828CF890"
+               BuildableName = "BigBeautifulMoneyTrackerUITests.xctest"
+               BlueprintName = "BigBeautifulMoneyTrackerUITests"
                ReferencedContainer = "container:BigBeautifulMoneyTracker.xcodeproj">
             </BuildableReference>
          </TestableReference>

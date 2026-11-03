@@ -71,7 +71,7 @@ struct RootView: View {
                 NavigationStack { OnboardingView() }
             }
         }
-        .background(Color.black.ignoresSafeArea())
+        .background(MoneyBackground(mode: preferences.first?.selectedDisplayMode ?? .gross))
         .task(id: automationKey) {
             guard scenePhase == .active else { return }
             await runAutomationWhileActive()
@@ -191,55 +191,62 @@ private struct MainTabContainerView: View {
     @State private var keyboardIsVisible = false
 
     var body: some View {
-        TabView(selection: $selectedTab) {
-            NavigationStack {
-                HomeView {
-                    withAnimation(reduceMotion ? nil : .snappy(duration: 0.32, extraBounce: 0.12)) {
-                        selectedTab = .history
+        // A sibling footer gives every root and pushed page a real content boundary.
+        // An inset on TabView can instead cover child bars and the last form rows.
+        VStack(spacing: 0) {
+            TabView(selection: $selectedTab) {
+                NavigationStack {
+                    HomeView {
+                        withAnimation(reduceMotion ? nil : .snappy(duration: 0.32, extraBounce: 0.12)) {
+                            selectedTab = .history
+                        }
                     }
                 }
-            }
-            .tag(AppTab.home)
-            .toolbar(.hidden, for: .tabBar)
-            .tabItem {
-                Label(AppTab.home.title, systemImage: AppTab.home.systemImage)
-            }
+                .tag(AppTab.home)
+                .toolbar(.hidden, for: .tabBar)
+                .tabItem {
+                    Label(AppTab.home.title, systemImage: AppTab.home.systemImage)
+                }
 
-            NavigationStack {
-                HistoryView()
-            }
-            .tag(AppTab.history)
-            .toolbar(.hidden, for: .tabBar)
-            .tabItem {
-                Label(AppTab.history.title, systemImage: AppTab.history.systemImage)
-            }
+                NavigationStack {
+                    HistoryView()
+                }
+                .tag(AppTab.history)
+                .toolbar(.hidden, for: .tabBar)
+                .tabItem {
+                    Label(AppTab.history.title, systemImage: AppTab.history.systemImage)
+                }
 
-            NavigationStack {
-                SummaryView()
-            }
-            .tag(AppTab.summary)
-            .toolbar(.hidden, for: .tabBar)
-            .tabItem {
-                Label(AppTab.summary.title, systemImage: AppTab.summary.systemImage)
-            }
+                NavigationStack {
+                    SummaryView()
+                }
+                .tag(AppTab.summary)
+                .toolbar(.hidden, for: .tabBar)
+                .tabItem {
+                    Label(AppTab.summary.title, systemImage: AppTab.summary.systemImage)
+                }
 
-            NavigationStack {
-                SettingsView()
+                NavigationStack {
+                    SettingsView()
+                }
+                .tag(AppTab.settings)
+                .toolbar(.hidden, for: .tabBar)
+                .tabItem {
+                    Label(AppTab.settings.title, systemImage: AppTab.settings.systemImage)
+                }
             }
-            .tag(AppTab.settings)
             .toolbar(.hidden, for: .tabBar)
-            .tabItem {
-                Label(AppTab.settings.title, systemImage: AppTab.settings.systemImage)
-            }
-        }
-        .toolbar(.hidden, for: .tabBar)
-        .safeAreaInset(edge: .bottom, spacing: 0) {
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .clipped()
+
             if !keyboardIsVisible {
                 FloatingTabBar(selection: $selectedTab, mode: mode)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 6)
+                    .padding(.bottom, 4)
             }
         }
+        .background(MoneyBackground(mode: mode))
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in keyboardIsVisible = true }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in keyboardIsVisible = false }
     }
@@ -280,13 +287,13 @@ private struct FloatingTabBar: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(tab.title)
+                .accessibilityIdentifier("main.tab.\(tab.rawValue)")
                 .accessibilityAddTraits(isSelected ? [.isSelected] : [])
             }
         }
         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
         .padding(6)
         .glassCard(cornerRadius: 24, hasShadow: false)
-        .overlay { RoundedRectangle(cornerRadius: 24).strokeBorder(theme.brandStroke, lineWidth: 0.7) }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Main navigation")
     }
