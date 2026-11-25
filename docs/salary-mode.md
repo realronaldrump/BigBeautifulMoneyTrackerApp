@@ -19,6 +19,8 @@ or 60 days after a period ends.
 - Dates and work windows use the agreement's saved time zone. Monthly anchors,
   unequal semimonthly periods, and daylight saving changes use calendar boundaries.
 
+Tap **Next payday** on Home, or **Settings → your job → Official payday**, to correct the upcoming date immediately. Choose the employer’s scheduled pay date. Early bank deposits can be recorded separately in salary history.
+
 Home shows a live salary counter, pay-period progress, today's accrued amount,
 month/year gross totals, and the next expected payday. Gross and estimated
 take-home follow the display preference and the job’s paycheck estimate. The counter

@@ -56,7 +56,7 @@ struct AdaptiveCardGrid<Content: View>: View {
     }
 }
 
-/// Use the native form's picker, disclosure and focus behavior on the same stock as the register.
+/// Keep grouped fields and keyboard focus on the same stock as the register.
 struct TimecardForm<Content: View>: View {
     @ViewBuilder var content: Content
 

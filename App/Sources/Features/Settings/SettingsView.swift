@@ -271,10 +271,8 @@ private struct JobSettingsForm: View {
                     }
                     NavigationLink {
                         TimecardForm {
-                            Picker("Paid", selection: $paySchedule.frequencyRawValue) {
-                                ForEach(PayFrequency.allCases) { Text($0.title).tag($0.rawValue) }
-                            }
-                            DatePicker("A pay period began", selection: $paySchedule.anchorDate, displayedComponents: .date)
+                            TimecardPicker("Pay frequency", selection: $paySchedule.frequency, options: PayFrequency.allCases, name: \.title)
+                            TimecardDateField("A pay period began", selection: $paySchedule.anchorDate, components: .date)
                         }.navigationTitle("Pay cycle").navigationBarTitleDisplayMode(.inline)
                     } label: { LabeledContent("Pay cycle", value: paySchedule.frequency.title) }
                 }
@@ -305,9 +303,7 @@ private struct JobSettingsForm: View {
                 NavigationLink("Job details") {
                     TimecardForm {
                         TextField("Job name", text: $job.name)
-                        Picker("Color", selection: $job.accentRawValue) {
-                            ForEach(JobAccentStyle.allCases) { Text($0.title).tag($0.rawValue) }
-                        }
+                        TimecardPicker("Color", selection: $job.accent, options: JobAccentStyle.allCases, swatch: \.color, name: \.title)
                         if job.compensationKind == .hourly { SalarySettingsSection(job: job) }
                     }.navigationTitle("Job details").navigationBarTitleDisplayMode(.inline)
                 }
@@ -378,17 +374,19 @@ private struct JobSettingsForm: View {
                     overtimeThreshold("Daily", hours: $overtimeRule.dailyThresholdHours, multiplier: $overtimeRule.dailyMultiplier, defaultHours: 8)
                     overtimeThreshold("Weekly", hours: $overtimeRule.weeklyThresholdHours, multiplier: $overtimeRule.weeklyMultiplier, defaultHours: 40)
                     if overtimeRule.weeklyThresholdHours != nil {
-                        Picker("Workweek starts", selection: Binding(
-                            get: { overtimeRule.workweekStartRawValue ?? Calendar.current.firstWeekday },
-                            set: { overtimeRule.workweekStartRawValue = $0 })) {
-                            ForEach(ScheduleWeekday.allCases) { Text($0.title).tag($0.rawValue) }
-                        }
+                        TimecardPicker("Workweek starts", selection: Binding(
+                            get: { ScheduleWeekday(rawValue: overtimeRule.workweekStartRawValue ?? Calendar.current.firstWeekday) ?? .sunday },
+                            set: { overtimeRule.workweekStartRawValue = $0.rawValue }
+                        ), options: ScheduleWeekday.allCases, name: \.title)
                     }
                     if overtimeRule.dailyThresholdHours != nil && overtimeRule.weeklyThresholdHours != nil {
-                        Picker("When both apply", selection: $overtimeRule.precedenceRawValue) {
-                            Text("Higher rate").tag(OvertimePrecedence.highestRateWins.rawValue)
-                            Text("Daily first").tag(OvertimePrecedence.dailyFirst.rawValue)
-                            Text("Weekly first").tag(OvertimePrecedence.weeklyFirst.rawValue)
+                        TimecardPicker("When both apply", selection: $overtimeRule.precedence,
+                                       options: OvertimePrecedence.allCases) { policy in
+                            switch policy {
+                            case .highestRateWins: "Higher rate"
+                            case .dailyFirst: "Daily first"
+                            case .weeklyFirst: "Weekly first"
+                            }
                         }
                     }
                 }
@@ -396,8 +394,8 @@ private struct JobSettingsForm: View {
             Section {
                 Toggle("Night premium", isOn: $nightRule.isEnabled)
                 if nightRule.isEnabled {
-                    DatePicker("From", selection: nightBonusStartBinding, displayedComponents: .hourAndMinute)
-                    DatePicker("Until", selection: nightBonusEndBinding, displayedComponents: .hourAndMinute)
+                    TimecardDateField("From", selection: nightBonusStartBinding, components: .time, wholeHours: true)
+                    TimecardDateField("Until", selection: nightBonusEndBinding, components: .time, wholeHours: true)
                     LabeledContent("Extra pay") {
                         TextField("Percent", value: Binding(get: { nightRule.percentIncrease }, set: { if $0.isFinite && $0 >= 0 { nightRule.percentIncrease = $0 } }), format: .percent)
                             .keyboardType(.decimalPad).multilineTextAlignment(.trailing)
@@ -551,31 +549,23 @@ private struct SupplementEditorView: View {
         TimecardForm {
             Section {
                 TextField("Label", text: $label)
-                Picker("Type", selection: $kind) {
-                    ForEach(JobSupplementKind.allCases) { kind in
-                        Text(kind.title).tag(kind)
-                    }
-                }
+                TimecardPicker("Type", selection: $kind, options: JobSupplementKind.allCases, name: \.title)
                 TextField("Amount per payment", text: $amountText)
                     .keyboardType(.decimalPad)
-                Picker("Frequency", selection: $frequency) {
-                    ForEach(PayFrequency.allCases) { frequency in
-                        Text(frequency.title).tag(frequency)
-                    }
-                }
+                TimecardPicker("Frequency", selection: $frequency, options: PayFrequency.allCases, name: \.title)
             } header: {
                 Text("Compensation")
             }
 
             Section {
-                DatePicker("Starts", selection: $startDate, displayedComponents: .date)
+                TimecardDateField("Starts", selection: $startDate, components: .date)
                     .onChange(of: startDate) { previous, new in
                         if anchorDate == previous { anchorDate = new }
                     }
                 DisclosureGroup("More options") {
-                    DatePicker("Pay cycle starts", selection: $anchorDate, displayedComponents: .date)
+                    TimecardDateField("Pay cycle starts", selection: $anchorDate, components: .date)
                     Toggle("Has an end date", isOn: $hasEndDate)
-                    if hasEndDate { DatePicker("Ends", selection: $endDate, in: startDate..., displayedComponents: .date) }
+                    if hasEndDate { TimecardDateField("Ends", selection: $endDate, minimum: startDate, components: .date) }
                     Toggle("Taxable", isOn: Binding(get: { taxTreatment == .taxable }, set: { taxTreatment = $0 ? .taxable : .nonTaxable }))
                     if editingSupplement != nil { Toggle("Enabled", isOn: $isEnabled) }
                 }
@@ -724,7 +714,7 @@ private struct RateEditorView: View {
     var body: some View {
         TimecardForm {
             Section {
-                DatePicker("Effective date", selection: $effectiveDate, displayedComponents: .date)
+                TimecardDateField("Effective date", selection: $effectiveDate, components: .date)
                 TextField("Hourly rate", text: $hourlyRateText)
                     .keyboardType(.decimalPad)
             } header: {

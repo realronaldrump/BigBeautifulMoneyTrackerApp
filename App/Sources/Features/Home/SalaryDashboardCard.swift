@@ -35,11 +35,22 @@ struct SalaryDashboardCard: View {
             }
             AdaptiveCardGrid(minimumWidth: 125, spacing: 14) {
                 metric("Today so far", mode == .gross ? snapshot.todayGross : snapshot.todayTakeHome)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Next payday").font(TypeStyle.caption).foregroundStyle(theme.secondaryText)
-                    Text(SalaryEngine.dateLabel(snapshot.payday, calendar: calendar)).font(TypeStyle.title3)
-                        .foregroundStyle(TimecardColor.ink)
+                NavigationLink {
+                    SalaryPaydayEditor(jobID: snapshot.id, payday: snapshot.scheduledPayday)
+                } label: {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Next payday").font(TypeStyle.caption).foregroundStyle(theme.secondaryText)
+                        HStack(spacing: 5) {
+                            Text(snapshot.scheduledPayday.label).font(TypeStyle.title3)
+                            Image(systemName: "chevron.right").font(.caption2)
+                        }
+                    }
+                    .frame(minHeight: 44, alignment: .leading)
                 }
+                .accessibilityLabel("Next payday")
+                .accessibilityValue(snapshot.scheduledPayday.label)
+                .accessibilityHint("Change the official payday")
+                .accessibilityIdentifier("salary.nextPayday")
             }
             DisclosureGroup("Salary details") {
                 VStack(alignment: .leading, spacing: 8) {

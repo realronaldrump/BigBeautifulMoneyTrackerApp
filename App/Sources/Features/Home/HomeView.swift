@@ -227,25 +227,12 @@ private struct HomeDashboardSceneView: View {
         .background(MoneyBackground())
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Menu {
-                    Picker("Earnings", selection: Binding(get: { preferences.selectedDisplayMode }, set: {
-                        preferences.selectedDisplayMode = $0
-                        saveChanges()
-                    })) {
-                        Text("Gross pay").tag(EarningsDisplayMode.gross)
-                        Text("Estimated take-home").tag(EarningsDisplayMode.takeHome)
-                    }
-                    if snapshot.hasSelectableEffectiveCompensation {
-                        Toggle("Include extra pay", isOn: Binding(get: { selectedCompensationMode == .effective }, set: {
-                            preferences.selectedCompensationDisplayMode = $0 ? .effective : .actual
-                            saveChanges()
-                        }))
-                    }
-                } label: {
-                    Text(preferences.selectedDisplayMode == .gross ? "Gross pay" : "Est. take-home")
+                TimecardMenu(title: "Earnings", items: earningsChoices) {
+                    TimecardToolbarLabel(symbol: "chevron.down", title: preferences.selectedDisplayMode == .gross ? "Gross pay" : "Est. take-home")
                 }
                 .accessibilityHint("Choose how to display earnings")
             }
+            .sharedBackgroundVisibility(.hidden)
         }
         .task(id: snapshot.currentGross.rounded(.down)) {
             await handleMilestones()
@@ -255,6 +242,22 @@ private struct HomeDashboardSceneView: View {
         }
     }
 
+
+    private var earningsChoices: [TimecardAction] {
+        var choices = [EarningsDisplayMode.gross, .takeHome].map { mode in
+            TimecardAction(mode == .gross ? "Gross pay" : "Estimated take-home", selected: preferences.selectedDisplayMode == mode) {
+                preferences.selectedDisplayMode = mode
+                saveChanges()
+            }
+        }
+        if snapshot.hasSelectableEffectiveCompensation {
+            choices.append(TimecardAction("Include extra pay", section: "Extra pay", selected: selectedCompensationMode == .effective) {
+                preferences.selectedCompensationDisplayMode = selectedCompensationMode == .effective ? .actual : .effective
+                saveChanges()
+            })
+        }
+        return choices
+    }
 
     private var restingContent: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -285,17 +288,12 @@ private struct HomeDashboardSceneView: View {
         if let selectedJob {
             Group {
                 if hourlyJobs.count > 1 {
-                    Menu {
-                        ForEach(hourlyJobs) { job in
-                            Button {
-                                preferences.selectedHomeJobIdentifier = job.id
-                                saveChanges()
-                            } label: {
-                                if selectedJob.id == job.id { Label(job.displayName, systemImage: "checkmark") }
-                                else { Text(job.displayName) }
-                            }
+                    TimecardMenu(title: "Clock in at", items: hourlyJobs.map { job in
+                        TimecardAction(job.displayName, id: job.id, swatch: job.accent.color, selected: selectedJob.id == job.id) {
+                            preferences.selectedHomeJobIdentifier = job.id
+                            saveChanges()
                         }
-                    } label: { jobSelection(selectedJob, canChoose: true) }
+                    }) { jobSelection(selectedJob, canChoose: true) }
                     .accessibilityHint("Choose the job for this shift")
                 } else {
                     jobSelection(selectedJob, canChoose: false)
@@ -399,13 +397,9 @@ private struct HomeDashboardSceneView: View {
     }
 
     private var addJobMenu: some View {
-        Menu {
-            ForEach(inactiveJobs) { job in
-                Button(job.displayName) {
-                    startJob(job)
-                }
-            }
-        } label: {
+        TimecardMenu(title: "Start another job", items: inactiveJobs.map { job in
+            TimecardAction(job.displayName, id: job.id, symbol: "play.fill") { startJob(job) }
+        }) {
             HStack {
                 Image(systemName: "plus.circle.fill")
                 Text("Start Another Job")
@@ -594,13 +588,13 @@ private struct ActiveShiftToolsView: View {
     var body: some View {
         TimecardForm {
             Section {
-                DatePicker("Started", selection: $startDate, in: ...Date.now)
+                TimecardDateField("Started", selection: $startDate, maximum: Date.now)
             }
 
             Section("Planned End") {
                 Toggle("Stop this shift automatically", isOn: $hasScheduledEnd)
                 if hasScheduledEnd {
-                    DatePicker("Shift should end", selection: $scheduledEndDate, in: startDate...)
+                    TimecardDateField("Shift should end", selection: $scheduledEndDate, minimum: startDate)
                     ShiftDurationSummary(startDate: startDate, endDate: scheduledEndDate)
 
                     DisclosureGroup("Reminders") {

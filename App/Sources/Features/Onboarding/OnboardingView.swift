@@ -51,9 +51,7 @@ struct OnboardingView: View {
                             LabeledContent("Gross pay", value: importedPaycheck.gross.formatted(.currency(code: "USD")))
                             LabeledContent("Take-home pay", value: importedPaycheck.net.formatted(.currency(code: "USD")))
                         }
-                        Picker("How are you paid?", selection: $compensationKind) {
-                            ForEach(CompensationKind.allCases) { Text($0.title).tag($0) }
-                        }.pickerStyle(.segmented)
+                        TimecardSegments(title: "How are you paid?", selection: $compensationKind, options: CompensationKind.allCases, name: \.title)
                         if compensationKind == .salary {
                             SalarySetupFields(draft: $salaryDraft)
                         } else {
@@ -76,10 +74,8 @@ struct OnboardingView: View {
                                 }
                             }
                             DisclosureGroup("Pay cycle · " + payFrequency.title) {
-                                Picker("Paid", selection: $payFrequency) {
-                                    ForEach(PayFrequency.allCases) { Text($0.title).tag($0) }
-                                }
-                                DatePicker("A pay period began", selection: $anchorDate, displayedComponents: .date)
+                                TimecardPicker("Pay frequency", selection: $payFrequency, options: PayFrequency.allCases, name: \.title)
+                                TimecardDateField("A pay period began", selection: $anchorDate, components: .date)
                             }
                         }
                     }

@@ -45,10 +45,13 @@
 		67075AD2D706B8443FB9EC25 /* RollingCurrencyText.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5BCF505C82EA2941D3097364 /* RollingCurrencyText.swift */; };
 		6903104608E1540DE66714BB /* EarningsEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = B51002DA3DDBCB87BC12024E /* EarningsEngine.swift */; };
 		6A59FF91FAB790821C8E5DFD /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 6C63B487E520BB088AEEF80D /* Assets.xcassets */; };
+		6CE5CDE07C5981FD1C3830CC /* TimecardDateField.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5DE426A7EF4C91264CA74A57 /* TimecardDateField.swift */; };
 		6DA627ABE84400327BADCD87 /* SummaryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8815E6411A1EFC6A0A7A42C6 /* SummaryView.swift */; };
+		6E45DD6DACA020A3309B69EE /* TimecardSelectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D013689EB19E336D6CA4C76 /* TimecardSelectionTests.swift */; };
 		6F59E2C1C0E933CFBE488AFB /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72FC659281BA65A56A15F91B /* OnboardingView.swift */; };
 		700EA711F1D75604419352F9 /* SharedConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 178598229E5BD008C8B2D0D4 /* SharedConstants.swift */; };
 		767EB6C6F469AF6D4E6B612A /* MoneyTrackerShortcuts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6DD8261EF1F5EF3A6CB10651 /* MoneyTrackerShortcuts.swift */; };
+		7829921C25C0BBFFB1D457B9 /* TimecardSelection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60DB225EAAF984D7A521189E /* TimecardSelection.swift */; };
 		79A3BF4FC486766EA45D1509 /* JobAccentPalette.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBBC82F9E0FA6186E7A734CE /* JobAccentPalette.swift */; };
 		7ABC6858B4DE3481A3B4C6CA /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9ADB18FA9F92E3D60AB4293E /* Models.swift */; };
 		7B1C44D0B30B021E2DF3D55E /* WorkweekStrip.swift in Sources */ = {isa = PBXBuildFile; fileRef = A43CE08AB5CBDC380A3E8672 /* WorkweekStrip.swift */; };
@@ -78,6 +81,7 @@
 		C18C78EBBC24A61F14C93E4B /* SalaryDashboardCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0E97F2AB5529E5121C77E2 /* SalaryDashboardCard.swift */; };
 		C9E73F9BD7E949D920FD035F /* Barlow-LICENSE.txt in Resources */ = {isa = PBXBuildFile; fileRef = 3E5088C5F1C412B05C0167A1 /* Barlow-LICENSE.txt */; };
 		CCCEFE04ABB13FF8131D8492 /* TimecardStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCA9D149AF2D3FB74AD19A06 /* TimecardStyle.swift */; };
+		CDE736A6F2740F247BFAD86B /* TimecardCalendar.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4B8D808F43912004A0C2C82 /* TimecardCalendar.swift */; };
 		CE75CFC8BF704E859438EDB8 /* AppTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA854895C6BF1C471B25059A /* AppTheme.swift */; };
 		CFBBF1645D09B7FC5AADEA19 /* SalaryHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F6B04902CE15D6FA2B3AA1B /* SalaryHistoryView.swift */; };
 		CFFD138395CD876094D8A43E /* MetricTile.swift in Sources */ = {isa = PBXBuildFile; fileRef = 818DAF58F9BBD8324AB4FBBD /* MetricTile.swift */; };
@@ -160,12 +164,15 @@
 		3E5088C5F1C412B05C0167A1 /* Barlow-LICENSE.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "Barlow-LICENSE.txt"; sourceTree = "<group>"; };
 		48BD6E9699791F5C26C48CC2 /* BarlowCondensed-Bold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "BarlowCondensed-Bold.ttf"; sourceTree = "<group>"; };
 		4CA398C7A3C0993943D3BD32 /* JobInitialBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JobInitialBadge.swift; sourceTree = "<group>"; };
+		4D013689EB19E336D6CA4C76 /* TimecardSelectionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimecardSelectionTests.swift; sourceTree = "<group>"; };
 		57EBF12AAF51D48C6D507FB3 /* JobService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JobService.swift; sourceTree = "<group>"; };
 		58461D8A23BF4ACD37CDEF51 /* PaycheckSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaycheckSettingsView.swift; sourceTree = "<group>"; };
 		5BCF505C82EA2941D3097364 /* RollingCurrencyText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RollingCurrencyText.swift; sourceTree = "<group>"; };
 		5D9FD3990BAA8AD4F6A93768 /* BigBeautifulMoneyTrackerTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = BigBeautifulMoneyTrackerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		5DE426A7EF4C91264CA74A57 /* TimecardDateField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimecardDateField.swift; sourceTree = "<group>"; };
 		5F6B04902CE15D6FA2B3AA1B /* SalaryHistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SalaryHistoryView.swift; sourceTree = "<group>"; };
 		609E94722DF52B0B79865C29 /* AggregationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AggregationService.swift; sourceTree = "<group>"; };
+		60DB225EAAF984D7A521189E /* TimecardSelection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimecardSelection.swift; sourceTree = "<group>"; };
 		6590CFB399F88BEABD18D7D1 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		6C63B487E520BB088AEEF80D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		6DD8261EF1F5EF3A6CB10651 /* MoneyTrackerShortcuts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoneyTrackerShortcuts.swift; sourceTree = "<group>"; };
@@ -200,6 +207,7 @@
 		C1DE0ECBC20AFF2C014C48A1 /* HapticManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HapticManager.swift; sourceTree = "<group>"; };
 		CBBC82F9E0FA6186E7A734CE /* JobAccentPalette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JobAccentPalette.swift; sourceTree = "<group>"; };
 		D3118303F124DA21C492C622 /* PayPeriodViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PayPeriodViews.swift; sourceTree = "<group>"; };
+		D4B8D808F43912004A0C2C82 /* TimecardCalendar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimecardCalendar.swift; sourceTree = "<group>"; };
 		DB51BF9A8191107D5D7B440D /* SalarySettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SalarySettingsView.swift; sourceTree = "<group>"; };
 		DBCEA1F6E01B66313AA520CE /* ReminderSchedule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReminderSchedule.swift; sourceTree = "<group>"; };
 		E4536CD38ACEC77D56EA1BB0 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
@@ -256,6 +264,7 @@
 				B9545A5E62D01D46BA2FBB8D /* MoneyTrackerEngineTests.swift */,
 				86A2369E58DA4A8E9AA98CE9 /* ReviewRegressionTests.swift */,
 				79F87771831E62ECAF918690 /* SalaryTests.swift */,
+				4D013689EB19E336D6CA4C76 /* TimecardSelectionTests.swift */,
 				2A242AE323C7048B014E3FC4 /* Fixtures */,
 			);
 			name = Sources;
@@ -308,6 +317,9 @@
 				B424C0E9252148F6CF3D2326 /* MoneyBackground.swift */,
 				3CA837B09E27436D5AF421EF /* PayReadout.swift */,
 				7EF73C3A77D4B77940075392 /* PulseAura.swift */,
+				D4B8D808F43912004A0C2C82 /* TimecardCalendar.swift */,
+				5DE426A7EF4C91264CA74A57 /* TimecardDateField.swift */,
+				60DB225EAAF984D7A521189E /* TimecardSelection.swift */,
 			);
 			path = DesignSystem;
 			sourceTree = "<group>";
@@ -719,6 +731,9 @@
 				6DA627ABE84400327BADCD87 /* SummaryView.swift in Sources */,
 				05FBEA34874BA0227D9EEBFD /* TaxEstimator.swift in Sources */,
 				9E8C96CE6ADD75280665BAFC /* TemplatesView.swift in Sources */,
+				CDE736A6F2740F247BFAD86B /* TimecardCalendar.swift in Sources */,
+				6CE5CDE07C5981FD1C3830CC /* TimecardDateField.swift in Sources */,
+				7829921C25C0BBFFB1D457B9 /* TimecardSelection.swift in Sources */,
 				CCCEFE04ABB13FF8131D8492 /* TimecardStyle.swift in Sources */,
 				2A299C6AAD35740F6BF0C614 /* UITestScenario.swift in Sources */,
 				7B1C44D0B30B021E2DF3D55E /* WorkweekStrip.swift in Sources */,
@@ -732,6 +747,7 @@
 				7BBA94BF80EBAD82D1B6EE09 /* MoneyTrackerEngineTests.swift in Sources */,
 				D02E2A516FEABDB4DC2190D1 /* ReviewRegressionTests.swift in Sources */,
 				A69A99D53B5D6A7606BD3986 /* SalaryTests.swift in Sources */,
+				6E45DD6DACA020A3309B69EE /* TimecardSelectionTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -918,7 +934,7 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
-				MARKETING_VERSION = 1.7;
+				MARKETING_VERSION = 1.6.1;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -1027,7 +1043,7 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
-				MARKETING_VERSION = 1.7;
+				MARKETING_VERSION = 1.6.1;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;

@@ -155,16 +155,90 @@ final class SalaryTests: XCTestCase {
     func testPaydayOffsetFindsPreviousPeriodsUpcomingDeposit() {
         let value = plan()
         value.paydayOffsetDays = 7
-        XCTAssertEqual(SalaryEngine.nextPayday(for: [value], at: date(4, 22), plan: value), date(4, 27))
-        XCTAssertEqual(SalaryEngine.nextPayday(for: [value], at: date(4, 27, 12), plan: value), date(4, 27))
-        XCTAssertEqual(SalaryEngine.nextPayday(for: [value], at: date(4, 28), plan: value), date(5, 11))
+        XCTAssertEqual(SalaryEngine.scheduledPayday(for: [value], at: date(4, 22), plan: value).date, date(4, 27))
+        XCTAssertEqual(SalaryEngine.scheduledPayday(for: [value], at: date(4, 27, 12), plan: value).date, date(4, 27))
+        XCTAssertEqual(SalaryEngine.scheduledPayday(for: [value], at: date(4, 28), plan: value).date, date(5, 11))
+    }
+
+    func testCorrectingSundayPaydayToFridayImmediatelyUpdatesDashboardAndRecurs() throws {
+        let container = AppModelContainerFactory.makeInMemoryContainer()
+        let context = ModelContext(container)
+        let job = try storedJob(in: context)
+        let first = date(11, 1)
+        let now = date(11, 25)
+        let original = plan(job: job, anchor: first, effective: first)
+        try SalaryService.savePlan(original, for: job, in: context, now: first)
+        let before = try XCTUnwrap(ShiftController.dashboardSnapshot(in: context, at: now, calendar: calendar).salaryJobs.first)
+        XCTAssertEqual(before.scheduledPayday.date, date(11, 29))
+        try SalaryService.correctPayday(before.scheduledPayday, for: job.id, to: date(11, 27), in: context, now: now)
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<SalaryPlan>()), 1)
+
+        let after = try XCTUnwrap(ShiftController.dashboardSnapshot(in: context, at: now, calendar: calendar).salaryJobs.first)
+        XCTAssertEqual(after.scheduledPayday.date, date(11, 27))
+        XCTAssertEqual(after.interval, before.interval)
+        XCTAssertEqual(after.gross, before.gross)
+        XCTAssertEqual(after.takeHome, before.takeHome)
+        XCTAssertEqual(try ShiftController.dashboardSnapshot(in: context, at: date(11, 27, 21), calendar: calendar).salaryJobs.first?.scheduledPayday.date, date(11, 27))
+        XCTAssertEqual(try ShiftController.dashboardSnapshot(in: context, at: date(11, 28), calendar: calendar).salaryJobs.first?.scheduledPayday.date, date(12, 11))
+    }
+
+    func testOfficialPaydayCanCorrectAClosedPeriodWithoutChangingItsEarlyDeposit() throws {
+        let container = AppModelContainerFactory.makeInMemoryContainer()
+        let context = ModelContext(container)
+        let job = try storedJob(in: context)
+        let original = plan(job: job, anchor: date(10, 25), effective: date(10, 25))
+        original.paydayOffsetDays = 7
+        try SalaryService.savePlan(original, for: job, in: context, now: date(10, 25))
+        let now = date(11, 25)
+        let due = SalaryEngine.scheduledPayday(for: [original], at: now, plan: original)
+        XCTAssertEqual(due.date, date(11, 29))
+        XCTAssertEqual(due.period, DateInterval(start: date(11, 8), end: date(11, 22)))
+        let tuesdayNight = date(11, 24, 21)
+        try SalaryService.savePayment(job: job, interval: due.period, paidDate: tuesdayNight,
+            gross: 800, takeHome: 640, note: "Early deposit", in: context, now: now)
+
+        XCTAssertThrowsError(try SalaryService.correctPayday(due, for: job.id, to: date(11, 24), in: context, now: now))
+        XCTAssertThrowsError(try SalaryService.correctPayday(due, for: job.id, to: date(12, 20), in: context, now: now))
+        XCTAssertEqual(original.paydayOffsetDays, 7)
+        try SalaryService.correctPayday(due, for: job.id, to: date(11, 27), in: context, now: now)
+        XCTAssertThrowsError(try SalaryService.correctPayday(due, for: job.id, to: date(11, 28), in: context, now: now))
+        XCTAssertEqual(original.paydayOffsetDays, 5)
+        let reopened = ModelContext(container)
+        let snapshot = try XCTUnwrap(ShiftController.dashboardSnapshot(in: reopened, at: now, calendar: calendar).salaryJobs.first)
+        XCTAssertEqual(snapshot.scheduledPayday.date, date(11, 27))
+        let payment = try XCTUnwrap(reopened.fetch(FetchDescriptor<SalaryPayment>()).first)
+        XCTAssertEqual(payment.paidDate, tuesdayNight)
+        XCTAssertEqual(payment.takeHome, 640)
+    }
+
+    func testPaydayCorrectionCarriesAcrossARaiseButHonorsAnExplicitLaterSchedule() throws {
+        let container = AppModelContainerFactory.makeInMemoryContainer()
+        let context = ModelContext(container)
+        let job = try storedJob(in: context)
+        let anchor = date(10, 25)
+        let original = plan(job: job, anchor: anchor, effective: anchor)
+        original.paydayOffsetDays = 7
+        try SalaryService.savePlan(original, for: job, in: context, now: anchor)
+        let raise = plan(job: job, amount: 3_500, anchor: anchor, effective: date(11, 22))
+        raise.paydayOffsetDays = 7
+        try SalaryService.savePlan(raise, for: job, in: context, now: date(11, 1))
+        let later = plan(job: job, anchor: anchor, effective: date(12, 20))
+        later.paydayOffsetDays = 3
+        try SalaryService.savePlan(later, for: job, in: context, now: date(11, 22))
+        let now = date(11, 25)
+        let due = try XCTUnwrap(ShiftController.dashboardSnapshot(in: context, at: now, calendar: calendar).salaryJobs.first?.scheduledPayday)
+        XCTAssertEqual(due.planID, original.id)
+        try SalaryService.correctPayday(due, for: job.id, to: date(11, 27), in: context, now: now)
+        XCTAssertEqual(raise.paydayOffsetDays, 5)
+        XCTAssertEqual(later.paydayOffsetDays, 3)
+        XCTAssertEqual(try ShiftController.dashboardSnapshot(in: context, at: date(11, 28), calendar: calendar).salaryJobs.first?.scheduledPayday.date, date(12, 11))
     }
 
     func testPaydayCanFallOnLastIncludedDayOfPeriod() {
         let value = plan()
         value.paydayOffsetDays = -1
         XCTAssertNoThrow(try SalaryService.validate(value))
-        XCTAssertEqual(SalaryEngine.nextPayday(for: [value], at: date(4, 13), plan: value), date(4, 19))
+        XCTAssertEqual(SalaryEngine.scheduledPayday(for: [value], at: date(4, 13), plan: value).date, date(4, 19))
     }
 
     func testInvalidSalaryInputsAreRejected() {

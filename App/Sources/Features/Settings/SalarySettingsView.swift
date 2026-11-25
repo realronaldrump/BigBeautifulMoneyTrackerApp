@@ -52,9 +52,7 @@ struct SalarySetupFields: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Picker("Salary amount", selection: $draft.amountBasis) {
-                ForEach(SalaryAmountBasis.allCases) { Text($0.title).tag($0) }
-            }
+            TimecardPicker("Salary amount", selection: $draft.amountBasis, options: SalaryAmountBasis.allCases, name: \.title)
             TextField(
                 draft.amountBasis == .annual ? "Annual gross salary" : "Gross per paycheck", text: $draft.amountText
             )
@@ -63,22 +61,18 @@ struct SalarySetupFields: View {
                 draft.amountBasis == .annual ? "Annual gross salary in dollars" : "Gross paycheck in dollars"
             )
             .padding(12).background(TimecardColor.inset, in: RoundedRectangle(cornerRadius: 4))
-            Picker("Pay frequency", selection: $draft.frequency) {
-                ForEach(PayFrequency.allCases) { Text($0.title).tag($0) }
-            }
-            DatePicker("A pay period began", selection: $draft.anchorDate, displayedComponents: .date)
+            TimecardPicker("Pay frequency", selection: $draft.frequency, options: PayFrequency.allCases, name: \.title)
+            TimecardDateField("A pay period began", selection: $draft.anchorDate, components: .date)
             if showsStartDate {
-                DatePicker("Track from", selection: $draft.effectiveDate, displayedComponents: .date)
+                TimecardDateField("Track from", selection: $draft.effectiveDate, components: .date)
             }
             DisclosureGroup("Tracking options") {
                 VStack(alignment: .leading, spacing: 12) {
                     if !showsStartDate {
-                        DatePicker("Track from", selection: $draft.effectiveDate, displayedComponents: .date)
+                        TimecardDateField("Track from", selection: $draft.effectiveDate, components: .date)
                     }
                     paydayPicker
-                    Picker("Count earnings", selection: $draft.accrualMode) {
-                        ForEach(SalaryAccrualMode.allCases) { Text($0.title).tag($0) }
-                    }
+                    TimecardPicker("Count earnings", selection: $draft.accrualMode, options: SalaryAccrualMode.allCases, name: \.title)
                     if draft.accrualMode == .workdays {
                         ForEach(ScheduleWeekday.allCases) { weekday in
                             Toggle(
@@ -95,9 +89,9 @@ struct SalarySetupFields: View {
                         }
                         Toggle("Use a standard work window", isOn: $draft.usesWorkHours)
                         if draft.usesWorkHours {
-                            DatePicker(
-                                "Window starts", selection: timeBinding(\.startMinute), displayedComponents: .hourAndMinute)
-                            DatePicker("Window ends", selection: timeBinding(\.endMinute), displayedComponents: .hourAndMinute)
+                            TimecardDateField(
+                                "Window starts", selection: timeBinding(\.startMinute), components: .time)
+                            TimecardDateField("Window ends", selection: timeBinding(\.endMinute), components: .time)
                         }
                     }
                 }
@@ -115,10 +109,10 @@ struct SalarySetupFields: View {
         let end = SalaryEngine.period(for: plan, at: draft.anchorDate).end
         let earliest = calendar.date(byAdding: .day, value: -30, to: end) ?? end
         let latest = calendar.date(byAdding: .day, value: 60, to: end) ?? end
-        return DatePicker("Payday for that period", selection: Binding(
+        return TimecardDateField("Payday for that period", selection: Binding(
             get: { calendar.date(byAdding: .day, value: draft.paydayOffsetDays, to: end) ?? end },
             set: { draft.paydayOffsetDays = calendar.dateComponents([.day], from: end, to: $0).day ?? 0 }
-        ), in: earliest...latest, displayedComponents: .date)
+        ), minimum: earliest, maximum: latest, components: .date)
     }
 
     private func timeBinding(_ keyPath: WritableKeyPath<SalarySetupDraft, Int>) -> Binding<Date> {
@@ -180,6 +174,56 @@ struct SalaryPlanEditorView: View {
     }
 }
 
+struct SalaryPaydayEditor: View {
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.dismiss) private var dismiss
+    let jobID: UUID
+    @State private var payday: ScheduledSalaryPayday
+    @State private var selection: Date
+    @State private var errorText: String?
+
+    init(jobID: UUID, payday: ScheduledSalaryPayday) {
+        self.jobID = jobID
+        _payday = State(initialValue: payday)
+        _selection = State(initialValue: payday.date)
+    }
+
+    private var selectableDates: ClosedRange<Date> {
+        let calendar = payday.calendar
+        let today = calendar.startOfDay(for: .now)
+        let earliest = max(today, calendar.date(byAdding: .day, value: -30, to: payday.period.end) ?? today)
+        let latest = calendar.date(byAdding: .day, value: 60, to: payday.period.end) ?? earliest
+        return earliest...max(earliest, latest)
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                TimecardCalendar(selection: $selection, minimum: selectableDates.lowerBound, maximum: selectableDates.upperBound)
+                Text("Choose the date printed on your paycheck. It repeats with your pay cycle, even if your bank posts the deposit early.")
+                    .font(TypeStyle.caption).foregroundStyle(TimecardColor.graphite)
+                if let errorText { AppInlineNotice(message: errorText) }
+            }.padding(20)
+        }
+        .background(TimecardColor.stock.ignoresSafeArea())
+        .environment(\.timeZone, payday.calendar.timeZone)
+        .environment(\.calendar, payday.calendar)
+        .navigationTitle("Official payday")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+                Button("Save") {
+                    do {
+                        try SalaryService.correctPayday(payday, for: jobID, to: selection, in: modelContext)
+                        WidgetCenter.shared.reloadAllTimelines()
+                        dismiss()
+                    } catch { errorText = error.localizedDescription }
+                }.disabled(payday.calendar.isDate(selection, inSameDayAs: payday.date))
+            }
+        }
+    }
+}
+
 struct SalarySettingsSection: View {
     @Environment(\.modelContext) private var modelContext
     let job: JobProfile
@@ -194,6 +238,13 @@ struct SalarySettingsSection: View {
             if let plan = jobPlans.first, job.compensationKind == .salary {
                 LabeledContent(plan.amountBasis.title, value: plan.amount.formatted(.currency(code: "USD")))
                 LabeledContent("Pay frequency", value: plan.frequency.title)
+                let now = Date.now
+                if let active = SalaryEngine.currentOrUpcomingPlan(in: jobPlans, at: now) {
+                    let payday = SalaryEngine.scheduledPayday(for: jobPlans, at: now, plan: active)
+                    NavigationLink {
+                        SalaryPaydayEditor(jobID: job.id, payday: payday)
+                    } label: { LabeledContent("Official payday", value: payday.label) }
+                }
                 Text(
                     "From \(plan.effectiveDate.formatted(date: .abbreviated, time: .omitted)) · \(plan.accrualDescription)"
                 )

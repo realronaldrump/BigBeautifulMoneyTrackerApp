@@ -30,6 +30,7 @@ struct BigBeautifulMoneyTrackerApp: App {
                 }
             }
             .environment(theme)
+            .disclosureGroupStyle(TimecardDisclosureStyle())
             .tint(theme.grossAccent)
             #if DEBUG
             .transformEnvironment(\.dynamicTypeSize) { size in

@@ -135,16 +135,12 @@ private struct TemplateEditorView: View {
         TimecardForm {
             Section {
                 if preselectedJobID == nil && availableJobs.count > 1 {
-                    Picker("Job", selection: $selectedJobID) {
-                        ForEach(availableJobs) { Text($0.displayName).tag(Optional($0.id)) }
-                    }
+                    TimecardJobPicker(jobs: availableJobs, selection: $selectedJobID)
                 }
-                Picker("Weekday", selection: $weekday) {
-                    ForEach(ScheduleWeekday.allCases) { weekday in Text(weekday.title).tag(weekday) }
-                }
+                TimecardPicker("Weekday", selection: $weekday, options: ScheduleWeekday.allCases, name: \.title)
 
-                DatePicker("Start time", selection: startTimeBinding, displayedComponents: .hourAndMinute)
-                DatePicker("End time", selection: endTimeBinding, displayedComponents: .hourAndMinute)
+                TimecardDateField("Start time", selection: startTimeBinding, components: .time)
+                TimecardDateField("End time", selection: endTimeBinding, components: .time)
                 if scheduledMinutes > 0 {
                     AppValueRow(title: "Scheduled duration", value: (Double(scheduledMinutes) / 60).formatted(.number.precision(.fractionLength(0...2))) + " hours")
                     if endHour * 60 + endMinute < startHour * 60 + startMinute {

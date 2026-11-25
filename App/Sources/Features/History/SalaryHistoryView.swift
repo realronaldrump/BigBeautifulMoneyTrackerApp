@@ -243,7 +243,7 @@ private struct SalaryPaymentEditorView: View {
                 Text(interval.displayRange)
                 TextField("Gross amount", text: $grossText).keyboardType(.decimalPad)
                 TextField("Take-home amount (optional)", text: $takeHomeText).keyboardType(.decimalPad)
-                DatePicker("Received on", selection: $paidDate, in: ...Date.now, displayedComponents: .date)
+                TimecardDateField("Received on", selection: $paidDate, maximum: Date.now, components: .date)
                 TextField("Notes", text: $note, axis: .vertical)
             }
             if let errorText { Text(errorText).foregroundStyle(.red) }
@@ -298,10 +298,10 @@ private struct SalaryHoursEditorView: View {
     var body: some View {
         TimecardForm {
             Section {
-                DatePicker(
+                TimecardDateField(
                     "Work date", selection: $date,
-                    in: interval.start...max(interval.start, min(.now, interval.end.addingTimeInterval(-1))),
-                    displayedComponents: .date)
+                    minimum: interval.start, maximum: max(interval.start, min(.now, interval.end.addingTimeInterval(-1))),
+                    components: .date)
                 TextField("Hours worked", text: $hoursText).keyboardType(.decimalPad)
                 TextField("Notes", text: $note, axis: .vertical)
                 Text("Optional hours help you understand your effective rate. Your fixed salary stays the same.").font(

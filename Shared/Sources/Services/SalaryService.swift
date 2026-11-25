@@ -1,6 +1,21 @@
 import Foundation
 import SwiftData
 
+/// An official pay date and the salary period that produced it. A bank deposit is recorded separately.
+struct ScheduledSalaryPayday: Equatable {
+    let planID: UUID
+    let period: DateInterval
+    let date: Date
+    let calendar: Calendar
+
+    var label: String {
+        var style = Date.FormatStyle().weekday(.abbreviated).month(.abbreviated).day()
+        style.calendar = calendar
+        style.timeZone = calendar.timeZone
+        return date.formatted(style)
+    }
+}
+
 struct SalaryDashboardSnapshot: Identifiable, Equatable {
     var id: UUID
     var name: String
@@ -17,7 +32,7 @@ struct SalaryDashboardSnapshot: Identifiable, Equatable {
     var yearGross: Double
     var allTimeGross: Double
     var annualGross: Double
-    var payday: Date
+    var scheduledPayday: ScheduledSalaryPayday
     var effectiveDate: Date
     var isUpcoming: Bool
     var accrualDescription: String
@@ -46,6 +61,10 @@ enum SalaryEngine {
     static func activePlan(in plans: [SalaryPlan], at date: Date) -> SalaryPlan? {
         plans.filter { $0.effectiveDate <= date && ($0.endDate ?? .distantFuture) > date }
             .max { $0.effectiveDate < $1.effectiveDate }
+    }
+
+    static func currentOrUpcomingPlan(in plans: [SalaryPlan], at date: Date) -> SalaryPlan? {
+        activePlan(in: plans, at: date) ?? plans.filter { $0.effectiveDate > date }.min { $0.effectiveDate < $1.effectiveDate }
     }
 
     static func period(for plan: SalaryPlan, at date: Date) -> DateInterval {
@@ -140,24 +159,33 @@ enum SalaryEngine {
         return intervals.sorted { $0.start > $1.start }
     }
 
-    static func nextPayday(for plans: [SalaryPlan], at date: Date, plan: SalaryPlan) -> Date {
+    static func scheduledPayday(
+        for plans: [SalaryPlan], at date: Date, plan: SalaryPlan,
+        correcting correction: (planIDs: Set<UUID>, offset: Int)? = nil
+    ) -> ScheduledSalaryPayday {
         let calendar = plan.calendar
         let today = calendar.startOfDay(for: date)
         let searchStart = calendar.date(byAdding: .day, value: -90, to: today) ?? today
         let current = period(for: plan, at: max(date, plan.effectiveDate))
         let searchEnd = calendar.date(byAdding: .day, value: 90, to: max(date, plan.effectiveDate)) ?? current.end
-        let candidates = periods(for: plans, from: searchStart, through: searchEnd).compactMap { interval -> Date? in
-            guard gross(for: plans, within: interval, through: interval.end) > 0,
-                let agreement = plans.filter({ period(for: $0, at: max(interval.start, $0.effectiveDate)) == interval })
-                    .max(by: { $0.effectiveDate < $1.effectiveDate })
-            else { return nil }
-            let payday =
-                agreement.calendar.date(byAdding: .day, value: agreement.paydayOffsetDays, to: interval.end)
-                ?? interval.end
-            return payday >= today ? payday : nil
+
+        func payday(_ agreement: SalaryPlan, _ interval: DateInterval) -> ScheduledSalaryPayday {
+            let offset = correction.flatMap { $0.planIDs.contains(agreement.id) ? $0.offset : nil } ?? agreement.paydayOffsetDays
+            let day = agreement.calendar.date(byAdding: .day, value: offset, to: interval.end) ?? interval.end
+            return ScheduledSalaryPayday(planID: agreement.id, period: interval, date: day, calendar: agreement.calendar)
         }
-        return candidates.min() ?? calendar.date(byAdding: .day, value: plan.paydayOffsetDays, to: current.end)
-            ?? current.end
+
+        let candidates = periods(for: plans, from: searchStart, through: searchEnd).compactMap { interval -> ScheduledSalaryPayday? in
+            guard gross(for: plans, within: interval, through: interval.end) > 0,
+                  let agreement = plans.filter({
+                      $0.effectiveDate < interval.end && ($0.endDate ?? .distantFuture) > interval.start &&
+                      period(for: $0, at: max(interval.start, $0.effectiveDate)) == interval
+                  }).max(by: { $0.effectiveDate < $1.effectiveDate })
+            else { return nil }
+            let due = payday(agreement, interval)
+            return due.date >= due.calendar.startOfDay(for: date) ? due : nil
+        }
+        return candidates.min { $0.date < $1.date } ?? payday(plan, current)
     }
 
     static func snapshot(
@@ -166,8 +194,7 @@ enum SalaryEngine {
     ) -> SalaryDashboardSnapshot? {
         let plans = plans.filter { $0.job?.id == job.id }
         guard !job.isArchived,
-            let plan = activePlan(in: plans, at: date)
-                ?? plans.filter({ $0.effectiveDate > date }).min(by: { $0.effectiveDate < $1.effectiveDate })
+            let plan = currentOrUpcomingPlan(in: plans, at: date)
         else { return nil }
         let upcoming = plan.effectiveDate > date
         let calendar = plan.calendar
@@ -193,7 +220,7 @@ enum SalaryEngine {
             monthGross: gross(for: plans, within: month, through: date),
             yearGross: gross(for: plans, within: year, through: date),
             allTimeGross: lifetimeGross(for: plans, through: date), annualGross: plan.annualGross,
-            payday: nextPayday(for: plans, at: date, plan: plan),
+            scheduledPayday: scheduledPayday(for: plans, at: date, plan: plan),
             effectiveDate: plan.effectiveDate, isUpcoming: upcoming, accrualDescription: plan.accrualDescription,
             loggedHours: workLogs.filter {
                 $0.job?.id == job.id && $0.date >= interval.start && $0.date <= date && $0.date < interval.end
@@ -204,9 +231,11 @@ enum SalaryEngine {
 
 enum SalaryServiceError: LocalizedError {
     case invalidAmount, invalidSchedule, invalidDate, activeShift, overlapsHistory, backdatedChange, duplicatePayment,
-        invalidHours
+        invalidHours, paydayChanged, invalidNextPayday
     var errorDescription: String? {
         switch self {
+        case .paydayChanged: "The pay schedule changed. Reopen Next payday to use the latest date."
+        case .invalidNextPayday: "Choose the next official payday for this pay cycle."
         case .invalidAmount: "Enter a valid amount greater than zero."
         case .invalidSchedule:
             "Choose at least one workday, valid daytime hours, and a payday from 30 days before to 60 days after the period ends."
@@ -241,6 +270,45 @@ enum SalaryService {
             plan.anchorDate.timeIntervalSinceReferenceDate.isFinite,
             plan.effectiveDate >= plan.calendar.date(from: DateComponents(year: 1900, month: 1, day: 1))!
         else { throw SalaryServiceError.invalidDate }
+    }
+
+    /// A payday correction changes the forecast only. It does not reprice work or create a deposit.
+    static func correctPayday(
+        _ expected: ScheduledSalaryPayday, for jobID: UUID, to newDate: Date,
+        in context: ModelContext, now: Date = .now
+    ) throws {
+        try PersistenceService.requireWritable(context)
+        let plans = try context.fetch(FetchDescriptor<SalaryPlan>()).filter { $0.job?.id == jobID }
+        guard let active = SalaryEngine.currentOrUpcomingPlan(in: plans, at: now),
+              active.job?.compensationKind == .salary, active.job?.isArchived == false,
+              let owner = plans.first(where: { $0.id == expected.planID }),
+              SalaryEngine.scheduledPayday(for: plans, at: now, plan: active) == expected
+        else { throw SalaryServiceError.paydayChanged }
+
+        let calendar = expected.calendar
+        let day = calendar.startOfDay(for: newDate)
+        guard day >= calendar.startOfDay(for: now),
+              let offset = calendar.dateComponents([.day], from: expected.period.end, to: day).day,
+              (-30...60).contains(offset)
+        else { throw SalaryServiceError.invalidNextPayday }
+
+        // Raises copy the prior payroll terms. Carry the correction through those
+        // revisions, stopping at the first break or independently configured cycle.
+        var matchingPlans = [owner]
+        var previous = owner
+        for next in plans.filter({ $0.effectiveDate > owner.effectiveDate }).sorted(by: { $0.effectiveDate < $1.effectiveDate }) {
+            guard previous.endDate == next.effectiveDate, next.frequency == owner.frequency,
+                  next.anchorDate == owner.anchorDate, next.timeZoneIdentifier == owner.timeZoneIdentifier,
+                  next.paydayOffsetDays == owner.paydayOffsetDays else { break }
+            matchingPlans.append(next)
+            previous = next
+        }
+        let forecast = SalaryEngine.scheduledPayday(for: plans, at: now, plan: active,
+            correcting: (Set(matchingPlans.map(\.id)), offset))
+        guard forecast.date == day, forecast.period == expected.period, forecast.planID == owner.id
+        else { throw SalaryServiceError.invalidNextPayday }
+        for agreement in matchingPlans { agreement.paydayOffsetDays = offset }
+        try PersistenceService.save(context)
     }
 
     /// Save an immutable revision in one transaction. New jobs may begin in the

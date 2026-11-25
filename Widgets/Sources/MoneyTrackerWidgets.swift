@@ -174,7 +174,7 @@ struct MoneyTrackerWidgetView: View {
                 if entry.isShiftActive {
                     stat("Pay period", payPeriodText)
                 } else if let salary = entry.snapshot.salaryJobs.first, entry.snapshot.salaryJobs.count == 1 {
-                    stat("Expected payday", salary.payday.formatted(date: .abbreviated, time: .omitted))
+                    stat("Expected payday", salary.scheduledPayday.label)
                 } else {
                     stat("Period hours", entry.snapshot.payPeriodAggregation == .unified ? entry.snapshot.payPeriodHours.formatted(.number.precision(.fractionLength(1))) + " hrs" : "Varies by job")
                 }

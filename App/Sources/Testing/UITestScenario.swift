@@ -4,6 +4,7 @@ import SwiftData
 
 /// UI tests use an isolated in-memory store and never open the user's records.
 enum UITestScenario: String {
+    case onboarding
     case hourlyJobs
     case earningsHistory
     case salaryOnly
@@ -19,13 +20,15 @@ enum UITestScenario: String {
         try DataBootstrapper.seedIfNeeded(in: context)
         let job = try JobService.jobs(in: context)[0]
         let preferences = try DataBootstrapper.first(AppPreferences.self, in: context)!
-        preferences.onboardingCompleted = true
+        preferences.onboardingCompleted = self != .onboarding
         preferences.liveActivitiesEnabled = false
         preferences.remindersEnabled = false
         preferences.hapticsEnabled = false
 
         let anchor = Calendar.current.date(byAdding: .day, value: -7, to: Calendar.current.startOfDay(for: .now))!
         switch self {
+        case .onboarding:
+            break
         case .hourlyJobs:
             job.name = "Big Beautiful Job"
             let second = try JobService.createJob(in: context, name: "Lululemon", anchorDate: anchor)

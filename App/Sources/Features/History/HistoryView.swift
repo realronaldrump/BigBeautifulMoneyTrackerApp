@@ -80,6 +80,9 @@ struct HistoryView: View {
     @Query private var templates: [ScheduleTemplate]
     @Query private var salaryPlans: [SalaryPlan]
     @State private var destination: HistoryEditorDestination?
+    @State private var actionShift: ShiftRecord?
+    @State private var showingShiftActions = false
+    @State private var showingSalaryHistory = false
     @State private var pendingDeletion: HistoryDeletion?
     @State private var deleteErrorText: String?
     @State private var searchText = ""
@@ -161,19 +164,18 @@ struct HistoryView: View {
         .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .automatic), prompt: "Search jobs, notes, or dates")
         .toolbar {
             if jobs.count > 1 || !scheduledShifts.isEmpty || scope != .all {
-                ToolbarItem(placement: .topBarLeading) { historyFilters }
+                ToolbarItem(placement: .topBarLeading) { historyFilters }.sharedBackgroundVisibility(.hidden)
             }
             ToolbarItem(placement: .topBarTrailing) {
-                Menu {
-                    if jobs.contains(where: { !$0.isArchived && $0.compensationKind == .hourly }) {
-                    Button("Log completed shift", systemImage: "plus") { destination = HistoryEditorDestination(kind: .newShift(nil)) }
-                    Button("Schedule future shift", systemImage: "calendar.badge.plus") { destination = HistoryEditorDestination(kind: .newScheduledShift(nil)) }
-                    }
-                    if !salaryPlans.isEmpty { NavigationLink("Salary history", destination: SalaryHistoryView(jobIdentifier: selectedJobID)) }
-                } label: { Image(systemName: "plus") }
+                TimecardMenu(title: "Add to history", items: historyActions) {
+                    TimecardToolbarLabel(symbol: "plus")
+                }
                 .accessibilityLabel("Add a completed or scheduled shift")
             }
+            .sharedBackgroundVisibility(.hidden)
         }
+        .navigationDestination(isPresented: $showingSalaryHistory) { SalaryHistoryView(jobIdentifier: selectedJobID) }
+        .timecardActions("Shift actions", isPresented: $showingShiftActions, items: shiftActions)
         .sheet(item: $destination) { destination in
             NavigationStack {
                 switch destination.kind {
@@ -202,25 +204,56 @@ struct HistoryView: View {
     }
 
     private var historyFilters: some View {
-        Menu {
-            if !scheduledShifts.isEmpty || scope != .all {
-                Picker("Show shifts", selection: $scope) {
-                    ForEach(HistoryScope.allCases) { Text($0.rawValue).tag($0) }
-                }
-            }
-            if jobs.count > 1 {
-                Picker("Job", selection: $selectedJobID) {
-                    Text("All jobs").tag(Optional<UUID>.none)
-                    ForEach(jobs) { job in
-                        Text(job.displayName + (job.isArchived ? " · Archived" : "")).tag(Optional(job.id))
-                    }
-                }
-            }
-        } label: {
-            Image(systemName: selectedJobID != nil || scope != .all ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
+        TimecardMenu(title: "Filter history", items: filterChoices) {
+            TimecardToolbarLabel(symbol: selectedJobID != nil || scope != .all ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
         }
         .accessibilityLabel("Filter history")
         .accessibilityValue(filterName + ", " + scope.rawValue)
+    }
+
+    private var historyActions: [TimecardAction] {
+        var items: [TimecardAction] = []
+        if jobs.contains(where: { !$0.isArchived && $0.compensationKind == .hourly }) {
+            items.append(TimecardAction("Log completed shift", symbol: "plus") { destination = HistoryEditorDestination(kind: .newShift(nil)) })
+            items.append(TimecardAction("Schedule future shift", symbol: "calendar.badge.plus") { destination = HistoryEditorDestination(kind: .newScheduledShift(nil)) })
+        }
+        if !salaryPlans.isEmpty {
+            items.append(TimecardAction("Salary history", symbol: "banknote") { showingSalaryHistory = true })
+        }
+        return items
+    }
+
+    private var filterChoices: [TimecardAction] {
+        var items: [TimecardAction] = []
+        if !scheduledShifts.isEmpty || scope != .all {
+            items = HistoryScope.allCases.map { value in
+                TimecardAction(value.rawValue, section: "Shifts", selected: scope == value) { scope = value }
+            }
+        }
+        if jobs.count > 1 {
+            items.append(TimecardAction("All jobs", section: "Job", selected: selectedJobID == nil) { selectedJobID = nil })
+            items += jobs.map { job in
+                TimecardAction(job.displayName + (job.isArchived ? " · Archived" : ""), id: job.id, section: "Job", selected: selectedJobID == job.id) {
+                    selectedJobID = job.id
+                }
+            }
+        }
+        return items
+    }
+
+    private var shiftActions: [TimecardAction] {
+        guard let shift = actionShift else { return [] }
+        return [
+            TimecardAction("Edit shift", symbol: "pencil") { destination = HistoryEditorDestination(kind: .editShift(shift)) },
+            TimecardAction("Duplicate shift", symbol: "doc.on.doc") { destination = HistoryEditorDestination(kind: .newShift(.duplicate(from: shift))) },
+            TimecardAction("Schedule again", symbol: "calendar.badge.plus") { destination = HistoryEditorDestination(kind: .newScheduledShift(.scheduledCopy(from: shift))) },
+            TimecardAction("Delete shift", symbol: "trash", destructive: true) { pendingDeletion = .completed(shift) }
+        ]
+    }
+
+    private func showOptions(for shift: ShiftRecord) {
+        actionShift = shift
+        showingShiftActions = true
     }
 
     private func scheduledShiftRow(_ shift: ScheduledShift) -> some View {
@@ -244,11 +277,10 @@ struct HistoryView: View {
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             Button("Delete", role: .destructive) { pendingDeletion = .completed(shift) }
         }
-        .contextMenu {
-            Button("Edit shift", systemImage: "pencil") { destination = HistoryEditorDestination(kind: .editShift(shift)) }
-            Button("Duplicate shift", systemImage: "doc.on.doc") { destination = HistoryEditorDestination(kind: .newShift(ShiftEditorSeed.duplicate(from: shift))) }
-            Button("Schedule again", systemImage: "calendar.badge.plus") { destination = HistoryEditorDestination(kind: .newScheduledShift(ShiftEditorSeed.scheduledCopy(from: shift))) }
-            Button("Delete shift", systemImage: "trash", role: .destructive) { pendingDeletion = .completed(shift) }
+        .highPriorityGesture(LongPressGesture().onEnded { _ in showOptions(for: shift) })
+        .accessibilityAction(named: "Shift actions") { showOptions(for: shift) }
+        .swipeActions(edge: .leading, allowsFullSwipe: false) {
+            Button("More", systemImage: "ellipsis") { showOptions(for: shift) }
         }
         .historyListRow(bottom: 0)
     }
@@ -389,14 +421,10 @@ private struct ShiftEditorView: View {
         TimecardForm {
             Section {
                 if availableJobs.count > 1 {
-                    Picker("Job", selection: $selectedJobIdentifier) {
-                        ForEach(availableJobs) { job in
-                            Text(job.displayName).tag(Optional(job.id))
-                        }
-                    }
+                    TimecardJobPicker(jobs: availableJobs, selection: $selectedJobIdentifier)
                 }
-                DatePicker("Start", selection: $startDate, in: ...Date.now)
-                DatePicker("End", selection: $endDate, in: startDate...)
+                TimecardDateField("Start", selection: $startDate, maximum: Date.now)
+                TimecardDateField("End", selection: $endDate, minimum: startDate)
                 ShiftDurationSummary(startDate: startDate, endDate: endDate)
                 if endDate > .now {
                     AppInlineNotice(message: "Use Schedule Future Shift for planned work.")
@@ -496,17 +524,13 @@ private struct ScheduledShiftEditorView: View {
         TimecardForm {
             Section {
                 if availableJobs.count > 1 {
-                    Picker("Job", selection: $selectedJobIdentifier) {
-                        ForEach(availableJobs) { job in
-                            Text(job.displayName).tag(Optional(job.id))
-                        }
-                    }
+                    TimecardJobPicker(jobs: availableJobs, selection: $selectedJobIdentifier)
                 }
-                DatePicker("Start", selection: $startDate)
+                TimecardDateField("Start", selection: $startDate)
                     .onChange(of: startDate) { oldStart, newStart in
                         endDate = newStart.addingTimeInterval(max(60, endDate.timeIntervalSince(oldStart)))
                     }
-                DatePicker("End", selection: $endDate, in: startDate...)
+                TimecardDateField("End", selection: $endDate, minimum: startDate)
                 ShiftDurationSummary(startDate: startDate, endDate: endDate)
 
                 Text("The app applies the planned start and end when it is open, or catches up the next time you open it.")
