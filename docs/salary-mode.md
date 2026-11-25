@@ -1,6 +1,6 @@
 # Salary mode
 
-Choose **Salary** during onboarding, or open **Settings → your job → Set up salary mode**.
+Choose **Salary** during onboarding, or open **Settings → your job → Job details → Switch to salary**.
 Enter an annual gross salary or a gross amount per paycheck, the pay frequency,
 a known first day of a pay cycle, and the date salary should start counting.
 Payday is separate from the cycle boundary; it can fall up to 30 days before
@@ -21,7 +21,7 @@ or 60 days after a period ends.
 
 Home shows a live salary counter, pay-period progress, today's accrued amount,
 month/year gross totals, and the next expected payday. Gross and estimated
-take-home follow the existing display preference and tax settings. The counter
+take-home follow the display preference and the job’s paycheck estimate. The counter
 is a visualization estimate, separate from cash received.
 
 Salary participates in shared summaries, weekly charts, pay-period archives,

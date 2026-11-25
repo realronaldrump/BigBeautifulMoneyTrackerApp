@@ -15,15 +15,15 @@ struct MetricTile: View {
                 .foregroundStyle(theme.tertiaryText)
 
             Text(value)
-                .font(.system(.title3, design: .rounded, weight: .bold))
+                .font(TimecardType.display(28, relativeTo: .title2))
                 .monospacedDigit()
-                .foregroundStyle(Color.white)
+                .foregroundStyle(TimecardColor.ink)
                 .lineLimit(1)
                 .minimumScaleFactor(0.4)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(CornerRadius.cardSmall)
-        .background(accent.opacity(0.07), in: RoundedRectangle(cornerRadius: CornerRadius.cardSmall))
+        .padding(.vertical, 8)
+        .overlay(alignment: .bottom) { Rectangle().fill(accent.opacity(0.3)).frame(height: 1) }
         .accessibilityElement(children: .combine)
     }
 }

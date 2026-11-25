@@ -30,7 +30,7 @@ struct BigBeautifulMoneyTrackerApp: App {
                 }
             }
             .environment(theme)
-            .preferredColorScheme(.dark)
+            .tint(theme.grossAccent)
             #if DEBUG
             .transformEnvironment(\.dynamicTypeSize) { size in
                 if UITestScenario.current != nil {

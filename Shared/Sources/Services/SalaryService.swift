@@ -178,7 +178,7 @@ enum SalaryEngine {
             currentGross: 0, annualizedGrossIncome: plan.annualGross,
             annualExtraWithholding: TaxEstimator.annualExtraWithholding(
                 payFrequency: plan.frequency, taxProfile: taxProfile),
-            taxProfile: taxProfile, payFrequency: plan.frequency)
+            taxProfile: taxProfile, payFrequency: plan.frequency, paycheck: job.paycheckReference)
         let today = calendar.dateInterval(of: .day, for: date)!
         let todayGross = gross(for: plans, within: today, through: date)
         let month = calendar.dateInterval(of: .month, for: date)!

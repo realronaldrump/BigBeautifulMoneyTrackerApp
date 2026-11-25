@@ -14,6 +14,17 @@ final class JobProfile {
     // Optional so existing stores continue to open as hourly jobs.
     var compensationKindRawValue: String?
 
+    var referenceGross: Double?
+    var referenceNet: Double?
+
+    var paycheckReference: PaycheckReference? {
+        get { PaycheckReference(gross: referenceGross, net: referenceNet) }
+        set {
+            referenceGross = newValue?.gross
+            referenceNet = newValue?.net
+        }
+    }
+
     var compensationKind: CompensationKind {
         get { CompensationKind(rawValue: compensationKindRawValue ?? "") ?? .hourly }
         set { compensationKindRawValue = newValue.rawValue }

@@ -13,6 +13,7 @@
 		0DA778022258C71D137220CD /* ReminderManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 751904045AF860B35193929A /* ReminderManager.swift */; };
 		1059A93FCAB797CE887C1C64 /* AggregationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 609E94722DF52B0B79865C29 /* AggregationService.swift */; };
 		1A81DA2918ABF8A45AA68590 /* SalaryModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F021DECCCABCA18E6641E51 /* SalaryModels.swift */; };
+		1DA0A8B00667BEC575BB9596 /* PaycheckSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58461D8A23BF4ACD37CDEF51 /* PaycheckSettingsView.swift */; };
 		21C9B704148FE89722FD3A2D /* MilestoneBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF049F2D4E3B430BEC531191 /* MilestoneBanner.swift */; };
 		2422F59220D7EED11ED6ABA6 /* ModelContainerFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6C94312478F761905736621 /* ModelContainerFactory.swift */; };
 		2633012326B30D97018C7EEA /* ReminderSchedule.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBCEA1F6E01B66313AA520CE /* ReminderSchedule.swift */; };
@@ -25,6 +26,7 @@
 		349E878087E58CE74AD02FCC /* ProjectionEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10780152B03F10E19A80E5D /* ProjectionEngine.swift */; };
 		36697D855B1EE5EB05A675D7 /* DataBootstrapper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B603D3512289418D6BAFB50 /* DataBootstrapper.swift */; };
 		368115C712E4E0C5205C2705 /* PayPeriodPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECCC50C9930A4042111B5DBF /* PayPeriodPresentation.swift */; };
+		3850AA03438DE05F67290ADA /* PaycheckReference.swift in Sources */ = {isa = PBXBuildFile; fileRef = 069C3D2EE1F3B84D21E6BCC3 /* PaycheckReference.swift */; };
 		3AC047F3CD6D3882894751D1 /* JobInitialBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CA398C7A3C0993943D3BD32 /* JobInitialBadge.swift */; };
 		3D1B6EDAA0CC51C916BA8C1C /* ShiftActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 901AD27FB3709E9B428100F3 /* ShiftActivityAttributes.swift */; };
 		3E42F5EFE31177FA53BD67A4 /* SharedTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01B22CAA9BA4B9C4C741C970 /* SharedTypes.swift */; };
@@ -49,8 +51,10 @@
 		767EB6C6F469AF6D4E6B612A /* MoneyTrackerShortcuts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6DD8261EF1F5EF3A6CB10651 /* MoneyTrackerShortcuts.swift */; };
 		79A3BF4FC486766EA45D1509 /* JobAccentPalette.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBBC82F9E0FA6186E7A734CE /* JobAccentPalette.swift */; };
 		7ABC6858B4DE3481A3B4C6CA /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9ADB18FA9F92E3D60AB4293E /* Models.swift */; };
+		7B1C44D0B30B021E2DF3D55E /* WorkweekStrip.swift in Sources */ = {isa = PBXBuildFile; fileRef = A43CE08AB5CBDC380A3E8672 /* WorkweekStrip.swift */; };
 		7BBA94BF80EBAD82D1B6EE09 /* MoneyTrackerEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9545A5E62D01D46BA2FBB8D /* MoneyTrackerEngineTests.swift */; };
 		7C87388B19C55CEFA51AC0A3 /* PersistenceService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99A7AB6D34C6D5EA2054DA92 /* PersistenceService.swift */; };
+		85173004F09C65A56E36A97C /* TimecardStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCA9D149AF2D3FB74AD19A06 /* TimecardStyle.swift */; };
 		8C7EEF2B24567FC8978B90EB /* SnapshotDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = F91F9684CDF451C937F91411 /* SnapshotDefaults.swift */; };
 		9CBB52C7AF8768A8742F0A97 /* EarningsEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = B51002DA3DDBCB87BC12024E /* EarningsEngine.swift */; };
 		9D2ABC486E07766DFC32CFB5 /* ModelContainerFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6C94312478F761905736621 /* ModelContainerFactory.swift */; };
@@ -63,6 +67,7 @@
 		A69A99D53B5D6A7606BD3986 /* SalaryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79F87771831E62ECAF918690 /* SalaryTests.swift */; };
 		A6C4127A32C79B0776180564 /* PulseAura.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7EF73C3A77D4B77940075392 /* PulseAura.swift */; };
 		A9C9AB1E29EF7F5377C21EA4 /* HapticManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1DE0ECBC20AFF2C014C48A1 /* HapticManager.swift */; };
+		B2F8706F84D0FA7883F77722 /* PaycheckReference.swift in Sources */ = {isa = PBXBuildFile; fileRef = 069C3D2EE1F3B84D21E6BCC3 /* PaycheckReference.swift */; };
 		B7C7C8312873E0A83FFE2F6B /* AggregationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 609E94722DF52B0B79865C29 /* AggregationService.swift */; };
 		B8388E47E1D66BE866115184 /* BottomNavigationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7616820B632BAE5753F6ED36 /* BottomNavigationTests.swift */; };
 		B90DDB8ED8F3F066AF4BE6FE /* HistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7C6480BC46625FEDF8BFB7E /* HistoryView.swift */; };
@@ -71,6 +76,8 @@
 		BE7C49CAA6C362B8F389F3D6 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 030DC5A14C5032E1060833FA /* RootView.swift */; };
 		BE8ADBD3AD03B13E9F620AED /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2DD7DE6232BF82BD65C94F47 /* SettingsView.swift */; };
 		C18C78EBBC24A61F14C93E4B /* SalaryDashboardCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0E97F2AB5529E5121C77E2 /* SalaryDashboardCard.swift */; };
+		C9E73F9BD7E949D920FD035F /* Barlow-LICENSE.txt in Resources */ = {isa = PBXBuildFile; fileRef = 3E5088C5F1C412B05C0167A1 /* Barlow-LICENSE.txt */; };
+		CCCEFE04ABB13FF8131D8492 /* TimecardStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCA9D149AF2D3FB74AD19A06 /* TimecardStyle.swift */; };
 		CE75CFC8BF704E859438EDB8 /* AppTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA854895C6BF1C471B25059A /* AppTheme.swift */; };
 		CFBBF1645D09B7FC5AADEA19 /* SalaryHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F6B04902CE15D6FA2B3AA1B /* SalaryHistoryView.swift */; };
 		CFFD138395CD876094D8A43E /* MetricTile.swift in Sources */ = {isa = PBXBuildFile; fileRef = 818DAF58F9BBD8324AB4FBBD /* MetricTile.swift */; };
@@ -79,8 +86,12 @@
 		D2CBBAC129DC4E0E841AF262 /* BigBeautifulMoneyTrackerWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 8D606036C020E8AE5F2C85BC /* BigBeautifulMoneyTrackerWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		D42A3D83F47FB03101E425A9 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4536CD38ACEC77D56EA1BB0 /* HomeView.swift */; };
 		D7ADEAF6544C8FAAC50B9B68 /* ShiftController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4B29FD43FC3E03F8439CE6B /* ShiftController.swift */; };
+		D8E6E77678864595A37CF2F7 /* BarlowCondensed-Bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 48BD6E9699791F5C26C48CC2 /* BarlowCondensed-Bold.ttf */; };
 		DA591E56A2944A258CAADFE2 /* SharedConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 178598229E5BD008C8B2D0D4 /* SharedConstants.swift */; };
+		DE7FAAC00144DE393BEC8451 /* BarlowCondensed-Bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 48BD6E9699791F5C26C48CC2 /* BarlowCondensed-Bold.ttf */; };
 		E0FE4468857EE65FCE1A909A /* SalaryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CF6A52C47CDB4CA357509B4 /* SalaryService.swift */; };
+		E9CE12769259526F47D23F60 /* Barlow-LICENSE.txt in Resources */ = {isa = PBXBuildFile; fileRef = 3E5088C5F1C412B05C0167A1 /* Barlow-LICENSE.txt */; };
+		EB7E85A2BDD1D8DD8C2385EC /* PayReadout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CA837B09E27436D5AF421EF /* PayReadout.swift */; };
 		EBE90F1C6DEC5627D060C926 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9ADB18FA9F92E3D60AB4293E /* Models.swift */; };
 		F2291EBEA1AFD9CF20E57F01 /* ReminderSchedule.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBCEA1F6E01B66313AA520CE /* ReminderSchedule.swift */; };
 		F485D80A5508407B6C75AD52 /* LiveActivityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0D64AF572535E621793DA7F /* LiveActivityManager.swift */; };
@@ -133,6 +144,7 @@
 		030DC5A14C5032E1060833FA /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		03E3047D09D6A5171738D07F /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		050FBDA9C687E87718B7AB00 /* SummaryDrawer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SummaryDrawer.swift; sourceTree = "<group>"; };
+		069C3D2EE1F3B84D21E6BCC3 /* PaycheckReference.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaycheckReference.swift; sourceTree = "<group>"; };
 		0F021DECCCABCA18E6641E51 /* SalaryModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SalaryModels.swift; sourceTree = "<group>"; };
 		0FA05C54FF4549FE570F58EA /* ShiftEarningsAllocation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShiftEarningsAllocation.swift; sourceTree = "<group>"; };
 		178598229E5BD008C8B2D0D4 /* SharedConstants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedConstants.swift; sourceTree = "<group>"; };
@@ -143,9 +155,13 @@
 		2B603D3512289418D6BAFB50 /* DataBootstrapper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataBootstrapper.swift; sourceTree = "<group>"; };
 		2DD7DE6232BF82BD65C94F47 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		37EA3FFF9A4FAF675E799D31 /* MoneyTrackerWidgets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoneyTrackerWidgets.swift; sourceTree = "<group>"; };
+		3CA837B09E27436D5AF421EF /* PayReadout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PayReadout.swift; sourceTree = "<group>"; };
 		3CF6A52C47CDB4CA357509B4 /* SalaryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SalaryService.swift; sourceTree = "<group>"; };
+		3E5088C5F1C412B05C0167A1 /* Barlow-LICENSE.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "Barlow-LICENSE.txt"; sourceTree = "<group>"; };
+		48BD6E9699791F5C26C48CC2 /* BarlowCondensed-Bold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "BarlowCondensed-Bold.ttf"; sourceTree = "<group>"; };
 		4CA398C7A3C0993943D3BD32 /* JobInitialBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JobInitialBadge.swift; sourceTree = "<group>"; };
 		57EBF12AAF51D48C6D507FB3 /* JobService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JobService.swift; sourceTree = "<group>"; };
+		58461D8A23BF4ACD37CDEF51 /* PaycheckSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaycheckSettingsView.swift; sourceTree = "<group>"; };
 		5BCF505C82EA2941D3097364 /* RollingCurrencyText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RollingCurrencyText.swift; sourceTree = "<group>"; };
 		5D9FD3990BAA8AD4F6A93768 /* BigBeautifulMoneyTrackerTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = BigBeautifulMoneyTrackerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		5F6B04902CE15D6FA2B3AA1B /* SalaryHistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SalaryHistoryView.swift; sourceTree = "<group>"; };
@@ -168,6 +184,7 @@
 		99A7AB6D34C6D5EA2054DA92 /* PersistenceService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistenceService.swift; sourceTree = "<group>"; };
 		9ADB18FA9F92E3D60AB4293E /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
 		A0D64AF572535E621793DA7F /* LiveActivityManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveActivityManager.swift; sourceTree = "<group>"; };
+		A43CE08AB5CBDC380A3E8672 /* WorkweekStrip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkweekStrip.swift; sourceTree = "<group>"; };
 		A45AC20038012567CD1B4FC4 /* BigBeautifulMoneyTracker.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = BigBeautifulMoneyTracker.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A4B29FD43FC3E03F8439CE6B /* ShiftController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShiftController.swift; sourceTree = "<group>"; };
 		AA0E97F2AB5529E5121C77E2 /* SalaryDashboardCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SalaryDashboardCard.swift; sourceTree = "<group>"; };
@@ -191,6 +208,7 @@
 		ECCC50C9930A4042111B5DBF /* PayPeriodPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PayPeriodPresentation.swift; sourceTree = "<group>"; };
 		EF049F2D4E3B430BEC531191 /* MilestoneBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MilestoneBanner.swift; sourceTree = "<group>"; };
 		F91F9684CDF451C937F91411 /* SnapshotDefaults.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnapshotDefaults.swift; sourceTree = "<group>"; };
+		FCA9D149AF2D3FB74AD19A06 /* TimecardStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimecardStyle.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -217,6 +235,7 @@
 			isa = PBXGroup;
 			children = (
 				9ADB18FA9F92E3D60AB4293E /* Models.swift */,
+				069C3D2EE1F3B84D21E6BCC3 /* PaycheckReference.swift */,
 				0F021DECCCABCA18E6641E51 /* SalaryModels.swift */,
 			);
 			path = Domain;
@@ -251,6 +270,7 @@
 				01B22CAA9BA4B9C4C741C970 /* SharedTypes.swift */,
 				901AD27FB3709E9B428100F3 /* ShiftActivityAttributes.swift */,
 				F91F9684CDF451C937F91411 /* SnapshotDefaults.swift */,
+				FCA9D149AF2D3FB74AD19A06 /* TimecardStyle.swift */,
 			);
 			path = Shared;
 			sourceTree = "<group>";
@@ -260,6 +280,7 @@
 			children = (
 				E4536CD38ACEC77D56EA1BB0 /* HomeView.swift */,
 				AA0E97F2AB5529E5121C77E2 /* SalaryDashboardCard.swift */,
+				A43CE08AB5CBDC380A3E8672 /* WorkweekStrip.swift */,
 			);
 			path = Home;
 			sourceTree = "<group>";
@@ -285,6 +306,7 @@
 				CBBC82F9E0FA6186E7A734CE /* JobAccentPalette.swift */,
 				4CA398C7A3C0993943D3BD32 /* JobInitialBadge.swift */,
 				B424C0E9252148F6CF3D2326 /* MoneyBackground.swift */,
+				3CA837B09E27436D5AF421EF /* PayReadout.swift */,
 				7EF73C3A77D4B77940075392 /* PulseAura.swift */,
 			);
 			path = DesignSystem;
@@ -304,6 +326,7 @@
 		72DF2F28ACB47BE6BD8584D6 /* Settings */ = {
 			isa = PBXGroup;
 			children = (
+				58461D8A23BF4ACD37CDEF51 /* PaycheckSettingsView.swift */,
 				DB51BF9A8191107D5D7B440D /* SalarySettingsView.swift */,
 				2DD7DE6232BF82BD65C94F47 /* SettingsView.swift */,
 			);
@@ -371,6 +394,7 @@
 		A2E3FC758DE090D1A1E9A8FF = {
 			isa = PBXGroup;
 			children = (
+				E34DB1F450CA12C4B65E3BC6 /* Fonts */,
 				795415BD7FDE3C2A7DAB75E5 /* Resources */,
 				AE0191874D4D17223659D530 /* Resources */,
 				6868E8F4988F0E59E352342F /* Sources */,
@@ -460,6 +484,16 @@
 				1D2F93B7E5B59A42A0A6D6F2 /* TaxEstimator.swift */,
 			);
 			path = Services;
+			sourceTree = "<group>";
+		};
+		E34DB1F450CA12C4B65E3BC6 /* Fonts */ = {
+			isa = PBXGroup;
+			children = (
+				3E5088C5F1C412B05C0167A1 /* Barlow-LICENSE.txt */,
+				48BD6E9699791F5C26C48CC2 /* BarlowCondensed-Bold.ttf */,
+			);
+			name = Fonts;
+			path = Shared/Fonts;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -594,6 +628,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				6A59FF91FAB790821C8E5DFD /* Assets.xcassets in Resources */,
+				C9E73F9BD7E949D920FD035F /* Barlow-LICENSE.txt in Resources */,
+				DE7FAAC00144DE393BEC8451 /* BarlowCondensed-Bold.ttf in Resources */,
 				5EEAAE6DDB74F377C3DBC71C /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -611,6 +647,8 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E9CE12769259526F47D23F60 /* Barlow-LICENSE.txt in Resources */,
+				D8E6E77678864595A37CF2F7 /* BarlowCondensed-Bold.ttf in Resources */,
 				2EB96E3049FAB476390D69AC /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -655,6 +693,9 @@
 				34300C36D75780B5B23B7A38 /* PayPeriodPresentation.swift in Sources */,
 				D102A98ADD58F30B1123CDD5 /* PayPeriodService.swift in Sources */,
 				A5447E7F94F869A3C0C47200 /* PayPeriodViews.swift in Sources */,
+				EB7E85A2BDD1D8DD8C2385EC /* PayReadout.swift in Sources */,
+				B2F8706F84D0FA7883F77722 /* PaycheckReference.swift in Sources */,
+				1DA0A8B00667BEC575BB9596 /* PaycheckSettingsView.swift in Sources */,
 				30BBE0F3B61206C32716F9AD /* PersistenceService.swift in Sources */,
 				349E878087E58CE74AD02FCC /* ProjectionEngine.swift in Sources */,
 				A6C4127A32C79B0776180564 /* PulseAura.swift in Sources */,
@@ -678,7 +719,9 @@
 				6DA627ABE84400327BADCD87 /* SummaryView.swift in Sources */,
 				05FBEA34874BA0227D9EEBFD /* TaxEstimator.swift in Sources */,
 				9E8C96CE6ADD75280665BAFC /* TemplatesView.swift in Sources */,
+				CCCEFE04ABB13FF8131D8492 /* TimecardStyle.swift in Sources */,
 				2A299C6AAD35740F6BF0C614 /* UITestScenario.swift in Sources */,
+				7B1C44D0B30B021E2DF3D55E /* WorkweekStrip.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -705,6 +748,7 @@
 				0826CB1DDC8E09E124FB672D /* MoneyTrackerWidgets.swift in Sources */,
 				368115C712E4E0C5205C2705 /* PayPeriodPresentation.swift in Sources */,
 				596E4954D061F15BFC62CE8C /* PayPeriodService.swift in Sources */,
+				3850AA03438DE05F67290ADA /* PaycheckReference.swift in Sources */,
 				7C87388B19C55CEFA51AC0A3 /* PersistenceService.swift in Sources */,
 				4B5FDADEE36FC71901B6A9AB /* ProjectionEngine.swift in Sources */,
 				2633012326B30D97018C7EEA /* ReminderSchedule.swift in Sources */,
@@ -717,6 +761,7 @@
 				BA668732F3D808803AA0D342 /* ShiftEarningsAllocation.swift in Sources */,
 				5750FA87EED32E227FD0AE7C /* SnapshotDefaults.swift in Sources */,
 				A5B2F7ACEB10E3CA2FF8CBF4 /* TaxEstimator.swift in Sources */,
+				85173004F09C65A56E36A97C /* TimecardStyle.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -858,7 +903,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 13;
+				CURRENT_PROJECT_VERSION = 14;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = CZ3N26YJ75;
 				ENABLE_NS_ASSERTIONS = NO;
@@ -873,7 +918,7 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
-				MARKETING_VERSION = 1.6;
+				MARKETING_VERSION = 1.7;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -961,7 +1006,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 13;
+				CURRENT_PROJECT_VERSION = 14;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = CZ3N26YJ75;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -982,7 +1027,7 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
-				MARKETING_VERSION = 1.6;
+				MARKETING_VERSION = 1.7;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;

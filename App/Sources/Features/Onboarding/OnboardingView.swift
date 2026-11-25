@@ -5,9 +5,6 @@ struct OnboardingView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(AppTheme.self) private var theme
 
-    @Query private var preferences: [AppPreferences]
-    @Query private var taxProfiles: [TaxProfile]
-    @Query(sort: \JobProfile.sortOrder) private var jobs: [JobProfile]
     @Query private var payRates: [PayRateSchedule]
 
     @State private var compensationKind: CompensationKind = .hourly
@@ -15,19 +12,45 @@ struct OnboardingView: View {
     @State private var hourlyRateText = ""
     @State private var payFrequency: PayFrequency = .biweekly
     @State private var anchorDate = Calendar.current.startOfDay(for: .now)
+    @State private var importedPaycheck: PaycheckReference?
     @State private var errorText: String?
     @FocusState private var rateIsFocused: Bool
 
     var body: some View {
         ZStack {
-            MoneyBackground(mode: .gross)
+            MoneyBackground()
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
-                    BrandHeader(eyebrow: "See what you earn", subtitle: "Watch your earnings grow with hourly shifts or automatic salary tracking.", mode: .gross)
-
+                    BrandSignature()
+                    TimecardHeading(title: "Set up your pay")
                     VStack(alignment: .leading, spacing: 18) {
-                        Text("Set up your pay").font(TypeStyle.title2).foregroundStyle(.white)
-                            .accessibilityAddTraits(.isHeader)
+                        PayStatementImportButton { statement in
+                            importedPaycheck = statement.paycheck
+                            if let rate = statement.hourlyRate {
+                                hourlyRateText = LocalizedNumericInput.decimalText(for: rate)
+                            }
+                            salaryDraft.amountBasis = .perPaycheck
+                            salaryDraft.amountText = LocalizedNumericInput.decimalText(for: statement.paycheck.gross)
+                            if let frequency = statement.frequency {
+                                payFrequency = frequency
+                                salaryDraft.frequency = frequency
+                            }
+                            if let start = statement.periodStart {
+                                anchorDate = start
+                                salaryDraft.anchorDate = start
+                                salaryDraft.effectiveDate = start
+                                if let paid = statement.paidDate, statement.frequency != nil {
+                                    let plan = salaryDraft.makePlan()
+                                    let end = SalaryEngine.period(for: plan, at: start).end
+                                    let offset = plan.calendar.dateComponents([.day], from: end, to: paid).day ?? 0
+                                    if (-30...60).contains(offset) { salaryDraft.paydayOffsetDays = offset }
+                                }
+                            }
+                        }
+                        if let importedPaycheck {
+                            LabeledContent("Gross pay", value: importedPaycheck.gross.formatted(.currency(code: "USD")))
+                            LabeledContent("Take-home pay", value: importedPaycheck.net.formatted(.currency(code: "USD")))
+                        }
                         Picker("How are you paid?", selection: $compensationKind) {
                             ForEach(CompensationKind.allCases) { Text($0.title).tag($0) }
                         }.pickerStyle(.segmented)
@@ -44,34 +67,24 @@ struct OnboardingView: View {
                                         .accessibilityLabel("Hourly rate in dollars")
                                     Text("/ hour").font(TypeStyle.callout).foregroundStyle(theme.secondaryText)
                                 }
-                                .font(.system(.title, design: .rounded, weight: .bold))
+                                .font(.system(.title, design: .default, weight: .bold))
                                 .padding(16)
-                                .background(theme.secondaryPanel, in: RoundedRectangle(cornerRadius: 16))
+                                .background(TimecardColor.inset, in: RoundedRectangle(cornerRadius: 4))
                                 if !hourlyRateText.isEmpty && !canBeginTracking {
                                     Text("Enter a valid amount greater than zero.")
-                                        .font(TypeStyle.caption).foregroundStyle(theme.roseAccent)
+                                        .font(TypeStyle.caption).foregroundStyle(theme.stopAccent)
                                 }
                             }
-                            Picker("Pay frequency", selection: $payFrequency) {
-                                ForEach(PayFrequency.allCases) { frequency in Text(frequency.title).tag(frequency) }
+                            DisclosureGroup("Pay cycle · " + payFrequency.title) {
+                                Picker("Paid", selection: $payFrequency) {
+                                    ForEach(PayFrequency.allCases) { Text($0.title).tag($0) }
+                                }
+                                DatePicker("A pay period began", selection: $anchorDate, displayedComponents: .date)
                             }
-                            DatePicker("Pay period began", selection: $anchorDate, displayedComponents: .date)
-                                .datePickerStyle(.compact)
-                            Text("Choose the first day of your current pay cycle. You can adjust it later in Settings.")
-                                .font(TypeStyle.caption).foregroundStyle(theme.secondaryText)
-                                .fixedSize(horizontal: false, vertical: true)
                         }
                     }
                     .padding(20)
-                    .glassCard(accent: theme.grossAccent, hasShadow: false)
-
-                    DisclosureGroup("How take-home is estimated") {
-                        Text("Estimates start with single filing status, the standard deduction, and 2026 federal and Colorado tax rules. Adjust insurance, retirement, and tax details in Settings.")
-                            .font(TypeStyle.callout).foregroundStyle(theme.secondaryText)
-                            .padding(.top, 10).fixedSize(horizontal: false, vertical: true)
-                    }
-                    .font(TypeStyle.callout).foregroundStyle(.white)
-                    .padding(18).glassCard(hasShadow: false)
+                    .ruledSection()
 
                     Label("Private on this iPhone. No account needed.", systemImage: "lock.shield")
                         .font(TypeStyle.caption).foregroundStyle(theme.secondaryText)
@@ -88,14 +101,14 @@ struct OnboardingView: View {
                     rateIsFocused = false
                     completeOnboarding()
                 } label: { Label("Begin tracking", systemImage: "arrow.right") }
-                .buttonStyle(AppActionButtonStyle(accent: theme.grossAccent))
+                .buttonStyle(AppActionButtonStyle())
                 .disabled(!canBeginTracking)
                 if !canBeginTracking {
                     Text(compensationKind == .salary ? "Enter your salary and pay cycle to begin." : "Enter your hourly rate to begin.").font(TypeStyle.caption).foregroundStyle(theme.secondaryText)
                 }
             }
             .padding(.horizontal, 20).padding(.vertical, 10)
-            .background(theme.trueBlack.opacity(0.96))
+            .background(TimecardColor.stock.opacity(0.96))
         }
         .appKeyboardToolbar()
         .toolbar(.hidden, for: .navigationBar)
@@ -111,8 +124,7 @@ struct OnboardingView: View {
             try DataBootstrapper.seedIfNeeded(in: modelContext)
 
             let existingJobs = try JobService.jobs(in: modelContext)
-            guard let preferences = try DataBootstrapper.first(AppPreferences.self, in: modelContext),
-                  let taxProfile = try DataBootstrapper.first(TaxProfile.self, in: modelContext) else { return }
+            guard let preferences = try DataBootstrapper.first(AppPreferences.self, in: modelContext) else { return }
 
             let job: JobProfile
             if let existingJob = existingJobs.first {
@@ -130,11 +142,7 @@ struct OnboardingView: View {
             preferences.selectedDisplayMode = .gross
             preferences.selectedHomeJobIdentifier = job.id
 
-            taxProfile.filingStatus = .single
-            taxProfile.usesStandardDeduction = true
-            taxProfile.annualPretaxInsurance = 0
-            taxProfile.annualRetirementContribution = 0
-            taxProfile.expectedWeeklyHours = SharedConstants.fallbackExpectedWeeklyHours
+            job.paycheckReference = importedPaycheck
 
             if compensationKind == .salary {
                 paySchedule.frequency = salaryDraft.frequency

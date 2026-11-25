@@ -38,19 +38,7 @@ private enum AppTab: String, CaseIterable, Identifiable {
         }
     }
 
-    @MainActor
-    func tint(theme: AppTheme, mode: EarningsDisplayMode) -> Color {
-        switch self {
-        case .home:
-            theme.accent(for: mode)
-        case .history:
-            Color(red: 0.46, green: 0.74, blue: 0.98)
-        case .summary:
-            theme.takeHomeAccent
-        case .settings:
-            theme.roseAccent
-        }
-    }
+
 }
 
 struct RootView: View {
@@ -71,7 +59,7 @@ struct RootView: View {
                 NavigationStack { OnboardingView() }
             }
         }
-        .background(MoneyBackground(mode: preferences.first?.selectedDisplayMode ?? .gross))
+        .background(MoneyBackground())
         .task(id: automationKey) {
             guard scenePhase == .active else { return }
             await runAutomationWhileActive()
@@ -240,60 +228,47 @@ private struct MainTabContainerView: View {
             .clipped()
 
             if !keyboardIsVisible {
-                FloatingTabBar(selection: $selectedTab, mode: mode)
-                    .padding(.horizontal, 16)
-                    .padding(.top, 6)
-                    .padding(.bottom, 4)
+                TimecardTabBar(selection: $selectedTab)
             }
         }
-        .background(MoneyBackground(mode: mode))
+        .background(MoneyBackground())
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in keyboardIsVisible = true }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in keyboardIsVisible = false }
     }
 }
 
-private struct FloatingTabBar: View {
-    @Environment(AppTheme.self) private var theme
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+private struct TimecardTabBar: View {
     @Binding var selection: AppTab
-    let mode: EarningsDisplayMode
-    @Namespace private var selectionNamespace
 
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: 0) {
             ForEach(AppTab.allCases) { tab in
-                let isSelected = selection == tab
+                let selected = selection == tab
                 Button {
-                    withAnimation(reduceMotion ? nil : .snappy(duration: 0.25)) { selection = tab }
+                    selection = tab
                 } label: {
-                    VStack(spacing: 5) {
+                    VStack(spacing: 3) {
                         Image(systemName: tab.systemImage)
-                            .font(.system(size: 19, weight: .semibold))
+                            .font(.system(size: 18, weight: selected ? .bold : .regular))
                         Text(tab.title)
-                            .font(.system(.caption2, design: .rounded, weight: .semibold))
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.8)
+                            .font(.system(.caption, design: .monospaced, weight: selected ? .bold : .regular))
+                            .lineLimit(1).minimumScaleFactor(0.8)
                     }
-                    .foregroundStyle(isSelected ? tab.tint(theme: theme, mode: mode) : theme.secondaryText)
-                    .frame(maxWidth: .infinity, minHeight: 56)
-                    .background {
-                        if isSelected {
-                            RoundedRectangle(cornerRadius: 18)
-                                .fill(tab.tint(theme: theme, mode: mode).opacity(0.14))
-                                .matchedGeometryEffect(id: "selectedTab", in: selectionNamespace)
-                        }
-                    }
+                    .foregroundStyle(selected ? TimecardColor.chalk : TimecardColor.ink)
+                    .frame(maxWidth: .infinity, minHeight: 49)
+                    .background(selected ? TimecardColor.cobalt : .clear)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(tab.title)
                 .accessibilityIdentifier("main.tab.\(tab.rawValue)")
-                .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+                .accessibilityAddTraits(selected ? [.isSelected] : [])
             }
         }
         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
-        .padding(6)
-        .glassCard(cornerRadius: 24, hasShadow: false)
+        .padding(.horizontal, 6).padding(.vertical, 5)
+        .overlay(alignment: .top) { Rectangle().fill(TimecardColor.rule).frame(height: 1) }
+        .background(TimecardColor.stock.ignoresSafeArea(edges: .bottom))
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Main navigation")
     }

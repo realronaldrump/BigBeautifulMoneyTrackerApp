@@ -103,6 +103,34 @@ enum JobService {
         return newJob
     }
 
+    /// Save the reviewed paycheck and any imported hourly terms in one transaction.
+    static func savePaycheckReference(
+        _ paycheck: PaycheckReference?, for job: JobProfile, hourlyDetails: PayStatement? = nil,
+        in context: ModelContext, calendar: Calendar = .current
+    ) throws {
+        try PersistenceService.requireWritable(context)
+        if paycheck != nil, job.compensationKind == .hourly, let statement = hourlyDetails,
+           let rate = statement.hourlyRate, let start = statement.periodStart, let frequency = statement.frequency {
+            let rates = try context.fetch(FetchDescriptor<PayRateSchedule>()).filter { $0.job?.id == job.id }
+            let schedules = try context.fetch(FetchDescriptor<PaySchedule>())
+            let schedule = schedules.first { $0.job?.id == job.id } ?? PaySchedule(job: job)
+            if schedule.modelContext == nil { context.insert(schedule) }
+
+            if let sameDay = rates.first(where: { calendar.isDate($0.effectiveDate, inSameDayAs: start) }) {
+                sameDay.hourlyRate = rate
+            } else {
+                let previous = rates.filter { $0.effectiveDate <= start }.max { $0.effectiveDate < $1.effectiveDate }
+                if previous?.hourlyRate != rate {
+                    context.insert(PayRateSchedule(job: job, effectiveDate: start, hourlyRate: rate))
+                }
+            }
+            schedule.frequency = frequency
+            schedule.anchorDate = start
+        }
+        job.paycheckReference = paycheck
+        try PersistenceService.save(context)
+    }
+
     static func archiveJob(_ job: JobProfile, in context: ModelContext) throws {
         try PersistenceService.requireWritable(context)
         guard !job.isArchived else {

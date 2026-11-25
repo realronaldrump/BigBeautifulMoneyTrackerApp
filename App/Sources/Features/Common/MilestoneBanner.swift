@@ -1,19 +1,15 @@
 import SwiftUI
 
 struct MilestoneBanner: View {
-    @Environment(AppTheme.self) private var theme
-
     let text: String
-    let mode: EarningsDisplayMode
 
     var body: some View {
         Text(text)
-            .font(.system(.subheadline, design: .rounded, weight: .semibold))
-            .foregroundStyle(Color.black)
+            .font(.system(.subheadline, design: .default, weight: .semibold))
+            .foregroundStyle(TimecardColor.chalk)
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
-            .background(theme.accent(for: mode))
-            .clipShape(Capsule())
-            .shadow(color: theme.accent(for: mode).opacity(0.4), radius: 20)
+            .background(TimecardColor.cobalt)
+            .clipShape(RoundedRectangle(cornerRadius: 3))
     }
 }

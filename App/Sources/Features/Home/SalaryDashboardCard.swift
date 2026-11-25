@@ -15,7 +15,7 @@ struct SalaryDashboardCard: View {
             HStack(spacing: 10) {
                 JobInitialBadge(name: snapshot.name, accent: snapshot.accent.color, size: 32)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(snapshot.name).font(TypeStyle.title3).foregroundStyle(.white)
+                    Text(snapshot.name).font(TypeStyle.title3).foregroundStyle(TimecardColor.ink)
                     Text(
                         snapshot.isUpcoming
                             ? "Salary starts \(snapshot.effectiveDate.formatted(date: .abbreviated, time: .omitted))"
@@ -24,35 +24,30 @@ struct SalaryDashboardCard: View {
                     .font(TypeStyle.caption).foregroundStyle(theme.secondaryText)
                 }
             }
-            VStack(alignment: .leading, spacing: 10) {
-                Text(mode == .gross ? "Salary accrued this pay period" : "Estimated take-home accrued")
-                    .font(TypeStyle.callout).foregroundStyle(theme.secondaryText)
-                RollingCurrencyText(amount: snapshot.amount(for: mode), mode: mode)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                ProgressView(value: snapshot.progress).tint(theme.accent(for: mode))
-                    .accessibilityLabel("Salary progress")
-                    .accessibilityValue(snapshot.progress.formatted(.percent.precision(.fractionLength(1))))
-                Text(
-                    "\(snapshot.progress.formatted(.percent.precision(.fractionLength(1)))) of \(snapshot.expectedAmount(for: mode).formatted(.currency(code: "USD")))"
-                )
-                .font(TypeStyle.callout).foregroundStyle(.white).monospacedDigit()
-                Text(SalaryEngine.displayRange(snapshot.interval, calendar: calendar)).font(TypeStyle.caption)
-                    .foregroundStyle(theme.secondaryText)
+            PayReadout(title: mode == .gross ? "Salary this period · gross" : "Salary this period · est. take-home",
+                         amount: snapshot.amount(for: mode), mode: mode) {
+                VStack(alignment: .leading, spacing: 8) {
+                    ProgressView(value: snapshot.progress).tint(mode == .gross ? TimecardColor.chalk : TimecardColor.ink)
+                        .accessibilityLabel("Salary progress")
+                    Text("\(snapshot.progress.formatted(.percent.precision(.fractionLength(0)))) of \(snapshot.expectedAmount(for: mode).formatted(.currency(code: "USD")))").monospacedDigit()
+                    Text(SalaryEngine.displayRange(snapshot.interval, calendar: calendar)).font(.caption)
+                }
             }
             AdaptiveCardGrid(minimumWidth: 125, spacing: 14) {
                 metric("Today so far", mode == .gross ? snapshot.todayGross : snapshot.todayTakeHome)
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Next payday").font(TypeStyle.caption).foregroundStyle(theme.secondaryText)
-                    Text(SalaryEngine.dateLabel(snapshot.payday, calendar: calendar)).font(TypeStyle.callout)
-                        .foregroundStyle(.white)
+                    Text(SalaryEngine.dateLabel(snapshot.payday, calendar: calendar)).font(TypeStyle.title3)
+                        .foregroundStyle(TimecardColor.ink)
                 }
-                metric("Month to date · gross", snapshot.monthGross)
-                metric("Year to date · gross", snapshot.yearGross)
             }
-            Text(snapshot.accrualDescription + ". No clocking in or out.")
-                .font(TypeStyle.caption).foregroundStyle(theme.secondaryText)
-            Text("Visualization estimate · record received paychecks separately.")
-                .font(TypeStyle.caption).foregroundStyle(theme.secondaryText)
+            DisclosureGroup("Salary details") {
+                VStack(alignment: .leading, spacing: 8) {
+                    metric("Month to date · gross", snapshot.monthGross)
+                    metric("Year to date · gross", snapshot.yearGross)
+                    Text(snapshot.accrualDescription).font(TypeStyle.caption).foregroundStyle(theme.secondaryText)
+                }.frame(maxWidth: .infinity, alignment: .leading)
+            }
             if let rate = snapshot.effectiveHourlyRate {
                 Text(
                     "\(rate.formatted(.currency(code: "USD")))/hr across \(snapshot.loggedHours.formatted()) logged hours"
@@ -67,15 +62,14 @@ struct SalaryDashboardCard: View {
             }
             .tint(snapshot.accent.color)
         }
-        .padding(20)
-        .glassCard(cornerRadius: CornerRadius.cardLarge, accent: snapshot.accent.color)
+        .padding(.bottom, 12).ruledSection()
     }
 
     private func metric(_ title: String, _ amount: Double) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title).font(TypeStyle.caption).foregroundStyle(theme.secondaryText)
             Text(amount, format: .currency(code: "USD"))
-                .font(TypeStyle.callout).monospacedDigit().foregroundStyle(.white)
+                .font(TypeStyle.callout).monospacedDigit().foregroundStyle(TimecardColor.ink)
                 .lineLimit(1).minimumScaleFactor(0.5)
         }.accessibilityElement(children: .combine)
     }

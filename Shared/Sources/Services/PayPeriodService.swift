@@ -70,6 +70,7 @@ struct PayPeriodSummary: Identifiable, Equatable {
     var yearToDateGrossBeforePeriod: Double
 
     var effectiveCompensation: EffectiveCompensationSnapshot
+    var paycheck: PaycheckReference? = nil
     var salaryGross: Double = 0
     var salaryExpectedGross: Double = 0
     var salaryLoggedHours: Double = 0
@@ -367,7 +368,8 @@ enum PayPeriodService {
                 taxProfile: taxProfile
             ),
             taxProfile: taxProfile,
-            payFrequency: configuration.paySchedule.frequency
+            payFrequency: configuration.paySchedule.frequency,
+            paycheck: job.paycheckReference
         )
         let effectiveEstimate = TaxEstimator.estimate(
             currentGross: 0,
@@ -378,7 +380,8 @@ enum PayPeriodService {
                 taxProfile: taxProfile
             ),
             taxProfile: taxProfile,
-            payFrequency: configuration.paySchedule.frequency
+            payFrequency: configuration.paySchedule.frequency,
+            paycheck: job.paycheckReference
         )
         let shifts = preTaxShifts.map { shift in
             var resolved = shift
@@ -420,6 +423,7 @@ enum PayPeriodService {
                 estimate: effectiveEstimate,
                 hours: totals.hours
             ),
+            paycheck: job.paycheckReference,
             salaryGross: salaryGross,
             salaryExpectedGross: salaryExpected,
             salaryLoggedHours: salaryHours
@@ -603,7 +607,9 @@ enum PayPeriodService {
             taxProfile: taxProfile,
             payFrequency: reference.frequency
         )
+        let calibratedIDs = Set(summaries.filter { $0.paycheck != nil }.compactMap(\.jobIdentifier))
         let resolvedShifts = shifts.map { shift in
+            if let jobID = shift.jobIdentifier, calibratedIDs.contains(jobID) { return shift }
             var resolved = shift
             resolved.estimatedTakeHome = TaxEstimator.estimatedTakeHome(for: shift.grossEarnings, estimate: taxEstimate)
             return resolved
@@ -618,6 +624,15 @@ enum PayPeriodService {
             }
         let supplementTotals = SupplementAllocationService.totals(for: supplementAllocations)
 
+        var combinedNet = TaxEstimator.estimatedTakeHome(for: combinedGross, estimate: taxEstimate)
+        var compensation = SupplementAllocationService.effectiveSnapshot(
+            regularGross: combinedGross, supplementTotals: supplementTotals, estimate: effectiveEstimate, hours: totals.hours)
+        for summary in summaries {
+            guard let paycheck = summary.paycheck else { continue }
+            combinedNet += summary.grossEarnings * (paycheck.netRate - taxEstimate.estimatedNetRate)
+            compensation.effectiveTakeHome += summary.effectiveCompensation.taxableGross * (paycheck.netRate - effectiveEstimate.estimatedNetRate)
+        }
+
         return PayPeriodSummary(
             id: summaryID(prefix: "combined", interval: reference.interval),
             jobIdentifier: nil,
@@ -631,7 +646,7 @@ enum PayPeriodService {
             supplementAllocations: supplementAllocations,
             shiftCount: resolvedShifts.count,
             grossEarnings: combinedGross,
-            estimatedTakeHome: TaxEstimator.estimatedTakeHome(for: combinedGross, estimate: taxEstimate),
+            estimatedTakeHome: combinedNet,
             baseEarnings: totals.base,
             nightPremiumEarnings: totals.nightPremium,
             overtimePremiumEarnings: totals.overtimePremium,
@@ -645,12 +660,7 @@ enum PayPeriodService {
             annualizedGrossIncome: annualizedGrossIncome,
             annualizedTaxableSupplementIncome: annualizedTaxableSupplementIncome,
             yearToDateGrossBeforePeriod: summaries.reduce(0) { $0 + $1.yearToDateGrossBeforePeriod },
-            effectiveCompensation: SupplementAllocationService.effectiveSnapshot(
-                regularGross: combinedGross,
-                supplementTotals: supplementTotals,
-                estimate: effectiveEstimate,
-                hours: totals.hours
-            ),
+            effectiveCompensation: compensation,
             salaryGross: summaries.reduce(0) { $0 + $1.salaryGross },
             salaryExpectedGross: summaries.reduce(0) { $0 + $1.salaryExpectedGross },
             salaryLoggedHours: summaries.reduce(0) { $0 + $1.salaryLoggedHours }

@@ -8,9 +8,11 @@ Local-first iPhone earnings tracker built with SwiftUI, SwiftData, WidgetKit, Ac
 - Earnings support dated rates, night premiums, daily and weekly overtime, and a configurable workweek start.
 - Salary mode supports annual or per-paycheck amounts, automatic continuous or workday accrual, dated salary changes, received paychecks, and optional work hours. See [salary mode](docs/salary-mode.md).
 - Newly saved shifts retain priced earning segments so later settings changes do not move their earnings between periods.
-- Take-home estimates use 2026 federal, Colorado, and FICA rules, with insurance, retirement, and paycheck adjustments.
+- In Settings, choose your job and open **Take-home pay**. Import a supported paycheck PDF or enter gross and net pay. That job’s estimates use the share you kept. Jobs without a reference use the existing federal, Colorado, and FICA estimate.
 - SwiftData stays local. The app and widgets share an App Group store; existing app data is copied with SQLite's online backup before switching stores.
 - See [the correctness review](docs/review-2026-10-24.md) and [UI/UX polish notes](docs/ui-ux-review-2026-10-25.md) for changes, test coverage, and device verification limits.
+
+The [Timecard design system](docs/design-system.md) covers screen layouts, typography, and color.
 
 ## Local Validation
 

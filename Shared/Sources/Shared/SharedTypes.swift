@@ -76,9 +76,9 @@ enum PayFrequency: String, Codable, CaseIterable, Identifiable {
         case .weekly:
             "Weekly"
         case .biweekly:
-            "Biweekly"
+            "Every 2 weeks"
         case .semiMonthly:
-            "Semi-Monthly"
+            "Twice a month"
         case .monthly:
             "Monthly"
         }
@@ -373,6 +373,8 @@ struct EffectiveCompensationSnapshot: Equatable {
     var effectiveGross: Double
     var effectiveTakeHome: Double
     var effectiveHourlyRate: Double?
+
+    var taxableGross: Double { effectiveGross - supplementalNonTaxableTotal }
 
     static let zero = EffectiveCompensationSnapshot(
         supplementalTotal: 0,

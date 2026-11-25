@@ -7,62 +7,21 @@ struct PayPeriodArchivePreviewCard: View {
     let snapshot: PayPeriodArchiveSnapshot
     let mode: EarningsDisplayMode
 
-    private var latestSummary: PayPeriodSummary? {
-        snapshot.latestSummary
-    }
-
     var body: some View {
         NavigationLink {
             PayPeriodArchiveView(snapshot: snapshot, mode: mode)
         } label: {
-            VStack(alignment: .leading, spacing: Spacing.md) {
-                HStack(alignment: .top, spacing: Spacing.md) {
-                    VStack(alignment: .leading, spacing: Spacing.xs) {
-                        Label("PAY PERIODS", systemImage: "calendar.badge.clock")
-                            .font(TypeStyle.micro)
-                            .tracking(1.4)
-                            .foregroundStyle(theme.accent(for: mode).opacity(0.78))
-
-                        Text("Pay-period archive")
-                            .font(TypeStyle.title2)
-                            .foregroundStyle(.white)
-
-                        Text("Browse recent pay cycles and share a PDF.")
-                            .font(TypeStyle.caption)
-                            .foregroundStyle(theme.secondaryText)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-
-                    Spacer()
-
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(theme.tertiaryText)
-                        .padding(.top, 4)
+            HStack(spacing: 14) {
+                Image(systemName: "doc.on.doc").font(.title3).foregroundStyle(theme.accent(for: mode))
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Pay statements").font(TypeStyle.title2).foregroundStyle(TimecardColor.ink)
+                    Text("Browse pay periods and export a PDF").font(TypeStyle.caption).foregroundStyle(theme.secondaryText)
                 }
-
-                if let latestSummary {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(latestSummary.jobName).font(TypeStyle.callout).foregroundStyle(latestSummary.accent.color)
-                        Text(latestSummary.interval.displayRange).font(TypeStyle.caption).foregroundStyle(theme.secondaryText)
-                        Text(latestSummary.displayAmount(for: mode).asCurrency)
-                            .font(.system(.title, design: .rounded, weight: .bold))
-                            .foregroundStyle(theme.accent(for: mode)).monospacedDigit()
-                            .lineLimit(1).minimumScaleFactor(0.35)
-                        Text(latestSummary.displaySummaryContext).font(TypeStyle.caption).foregroundStyle(theme.secondaryText)
-                    }
-                    WrappingHStack(spacing: 8) {
-                        PayPeriodPill(text: "Last 12 months", color: theme.takeHomeAccent)
-                        PayPeriodPill(text: "PDF export", color: theme.roseAccent)
-                    }
-                } else {
-                    Text("Pay summaries appear here once shifts are logged.")
-                        .font(TypeStyle.caption)
-                        .foregroundStyle(theme.secondaryText)
-                }
+                Spacer(minLength: 4)
+                Image(systemName: "chevron.right").font(.caption).foregroundStyle(theme.secondaryText)
             }
             .padding(Spacing.lg)
-            .glassCard(cornerRadius: CornerRadius.cardLarge, accent: theme.accent(for: mode))
+            .ruledSection()
         }
         .buttonStyle(.plain)
     }
@@ -89,17 +48,11 @@ struct PayPeriodArchiveView: View {
 
     var body: some View {
         ZStack {
-            MoneyBackground(mode: mode)
+            MoneyBackground()
 
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: Spacing.lg) {
-                    BrandHeader(
-                        eyebrow: "Pay Periods",
-                        subtitle: "Review estimated personal pay summaries from your recent work history.",
-                        mode: mode,
-                        compact: true
-                    )
-
+                    TimecardHeading(title: "Pay statements")
                     if snapshot.sections.count > 1 {
                         sectionPicker
                     }
@@ -112,11 +65,11 @@ struct PayPeriodArchiveView: View {
                                 NavigationLink {
                                     PayPeriodDetailView(summary: summary, mode: mode)
                                 } label: {
-                            PayPeriodSummaryCard(summary: summary, mode: mode)
+                                    PayPeriodSummaryCard(summary: summary, mode: mode)
+                                }
+                                .buttonStyle(.plain)
+                            }
                         }
-                        .buttonStyle(.plain)
-                    }
-                }
                     } else {
                         emptyState
                     }
@@ -147,10 +100,10 @@ struct PayPeriodArchiveView: View {
                             )
 
                             Text(section.title)
-                                .font(.system(.footnote, design: .rounded, weight: .bold))
+                                .font(.system(.footnote, design: .default, weight: .bold))
                                 .lineLimit(1)
                         }
-                        .foregroundStyle(isSelected ? .white : theme.secondaryText)
+                        .foregroundStyle(isSelected ? TimecardColor.ink : theme.secondaryText)
                         .padding(.horizontal, 12)
                         .frame(minHeight: 44)
                         .background {
@@ -158,7 +111,7 @@ struct PayPeriodArchiveView: View {
                                 .fill(section.accent.color.opacity(isSelected ? 0.22 : 0.08))
                                 .overlay {
                                     Capsule()
-                                        .strokeBorder(Color.white.opacity(isSelected ? 0.18 : 0.08), lineWidth: 1)
+                                        .strokeBorder(TimecardColor.ink.opacity(isSelected ? 0.18 : 0.08), lineWidth: 1)
                                 }
                         }
                     }
@@ -176,7 +129,7 @@ struct PayPeriodArchiveView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(section.title)
                     .font(TypeStyle.title2)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(TimecardColor.ink)
                 Text(section.isCombined ? "Matching pay schedules only" : "\(section.summaries.count) recent pay periods")
                     .font(TypeStyle.caption)
                     .foregroundStyle(theme.secondaryText)
@@ -197,14 +150,14 @@ struct PayPeriodArchiveView: View {
                 .foregroundStyle(theme.tertiaryText)
             Text("No pay periods yet")
                 .font(TypeStyle.title2)
-                .foregroundStyle(.white)
+                .foregroundStyle(TimecardColor.ink)
             Text("Log shifts to build estimated pay summaries.")
                 .font(TypeStyle.caption)
                 .foregroundStyle(theme.secondaryText)
         }
         .frame(maxWidth: .infinity)
         .padding(28)
-        .glassCard(cornerRadius: CornerRadius.cardLarge, accent: theme.accent(for: mode))
+        .ruledSection()
     }
 }
 
@@ -249,12 +202,12 @@ private struct PayPeriodSummaryCard: View {
                 PayPeriodPill(text: summary.frequency.title, color: accent)
                 if summary.isCombined { PayPeriodPill(text: "Combined", color: accent) }
             }
-            Text(summary.interval.displayRange).font(TypeStyle.title3).foregroundStyle(.white)
+            Text(summary.interval.displayRange).font(TypeStyle.title3).foregroundStyle(TimecardColor.ink)
                 .fixedSize(horizontal: false, vertical: true)
             HStack(alignment: .firstTextBaseline, spacing: 12) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(summary.displayAmount(for: mode).asCurrency)
-                        .font(.system(.title2, design: .rounded, weight: .bold))
+                        .font(.system(.title2, design: .default, weight: .bold))
                         .foregroundStyle(theme.accent(for: mode)).monospacedDigit()
                         .lineLimit(1).minimumScaleFactor(0.35)
                     Text(summary.displayModeCaption(for: mode)).font(TypeStyle.caption).foregroundStyle(theme.secondaryText)
@@ -266,7 +219,7 @@ private struct PayPeriodSummaryCard: View {
                 ForEach(Array(metricItems.enumerated()), id: \.offset) { _, item in metric(item.0, item.1, systemImage: item.2) }
             }
         }
-        .padding(18).glassCard(accent: accent, hasShadow: false)
+        .padding(18).ruledSection()
         .accessibilityElement(children: .combine)
         .accessibilityHint("Open the pay-period breakdown")
     }
@@ -283,12 +236,12 @@ private struct PayPeriodSummaryCard: View {
     private func metric(_ title: String, _ value: String, systemImage: String) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Label(title, systemImage: systemImage)
-                .font(.system(.caption2, design: .rounded, weight: .semibold))
+                .font(.system(.caption2, design: .default, weight: .semibold))
                 .foregroundStyle(theme.tertiaryText)
                 .lineLimit(1)
 
             Text(value)
-                .font(.system(.caption, design: .rounded, weight: .bold))
+                .font(.system(.caption, design: .default, weight: .bold))
                 .foregroundStyle(theme.secondaryText)
                 .lineLimit(1)
                 .minimumScaleFactor(0.4)
@@ -340,7 +293,7 @@ struct PayPeriodDetailView: View {
 
     var body: some View {
         ZStack {
-            MoneyBackground(mode: mode)
+            MoneyBackground()
 
             ScrollView(showsIndicators: false) {
                 VStack(spacing: Spacing.lg) {
@@ -350,7 +303,7 @@ struct PayPeriodDetailView: View {
                         supplementalCard
                         effectiveEarningsCard
                     }
-                    breakdownCard
+                    if summary.shiftCount > 0 || summary.salaryExpectedGross > 0 { breakdownCard }
 
                     if !summary.shifts.isEmpty {
                         shiftList
@@ -385,48 +338,12 @@ struct PayPeriodDetailView: View {
     }
 
     private var heroCard: some View {
-        VStack(alignment: .leading, spacing: Spacing.lg) {
-            HStack(alignment: .top, spacing: Spacing.md) {
-                JobInitialBadge(name: summary.jobName, accent: accent, size: 44)
-
-                VStack(alignment: .leading, spacing: 5) {
-                    Text(summary.jobName)
-                        .font(TypeStyle.title2)
-                        .foregroundStyle(.white)
-
-                    Text("Big Beautiful Summary")
-                        .font(TypeStyle.caption)
-                        .foregroundStyle(theme.secondaryText)
-                }
-
-                Spacer()
-
-                PayPeriodPill(text: summary.status.title, color: statusColor)
-            }
-
-            VStack(alignment: .leading, spacing: 6) {
+        PayReadout(title: summary.displayModeCaption(for: mode), amount: summary.displayAmount(for: mode), mode: mode) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(summary.jobName).font(.headline)
                 Text(summary.interval.displayRange)
-                    .font(TypeStyle.title3)
-                    .foregroundStyle(theme.secondaryText)
-
-                Text(summary.displayAmount(for: mode).asCurrency)
-                    .font(.system(.largeTitle, design: .rounded, weight: .heavy))
-                    .lineLimit(1).monospacedDigit()
-                    .foregroundStyle(theme.accent(for: mode))
-                    .minimumScaleFactor(0.4)
-
-                Text(summary.displayModeCaption(for: mode))
-                    .font(TypeStyle.caption)
-                    .foregroundStyle(theme.tertiaryText)
             }
-
-            Text("This is a personal estimate from your tracked shifts, pay rules, and tax settings. It is not an employer-issued pay stub.")
-                .font(TypeStyle.caption)
-                .foregroundStyle(theme.secondaryText)
-                .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(Spacing.lg)
-        .glassCard(cornerRadius: CornerRadius.cardLarge, accent: accent)
     }
 
     private var metricsGrid: some View {
@@ -445,7 +362,7 @@ struct PayPeriodDetailView: View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Supplemental Compensation")
                 .font(TypeStyle.title3)
-                .foregroundStyle(.white)
+                .foregroundStyle(TimecardColor.ink)
                 .padding(.bottom, 12)
 
             if summary.supplementAllocations.isEmpty {
@@ -470,14 +387,14 @@ struct PayPeriodDetailView: View {
             PayPeriodDetailRow(label: "Supplement Total", value: summary.supplementalTotal.asCurrency)
         }
         .padding(Spacing.lg)
-        .glassCard(cornerRadius: CornerRadius.cardLarge, accent: theme.takeHomeAccent)
+        .ruledSection()
     }
 
     private var effectiveEarningsCard: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Effective Earnings")
                 .font(TypeStyle.title3)
-                .foregroundStyle(.white)
+                .foregroundStyle(TimecardColor.ink)
                 .padding(.bottom, 12)
 
             PayPeriodDetailRow(label: "Effective Gross", value: summary.effectiveGross.asCurrency)
@@ -490,16 +407,17 @@ struct PayPeriodDetailView: View {
             )
         }
         .padding(Spacing.lg)
-        .glassCard(cornerRadius: CornerRadius.cardLarge, accent: accent)
+        .ruledSection()
     }
 
     private var breakdownCard: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Breakdown")
                 .font(TypeStyle.title3)
-                .foregroundStyle(.white)
+                .foregroundStyle(TimecardColor.ink)
                 .padding(.bottom, 12)
 
+            Text(summary.estimateDescription).font(TypeStyle.caption).foregroundStyle(theme.secondaryText)
             if summary.salaryExpectedGross > 0 {
                 PayPeriodDetailRow(label: "Salary Accrued", value: summary.salaryGross.asCurrency)
                 Text("Visualization estimate. Received paychecks are recorded separately in salary history.")
@@ -509,24 +427,22 @@ struct PayPeriodDetailView: View {
                         .frame(minHeight: 44)
                 }
             }
-            if summary.shiftCount > 0 || summary.salaryExpectedGross == 0 {
-                PayPeriodDetailRow(label: "Base Earnings", value: summary.baseEarnings.asCurrency)
-                PayPeriodDivider()
-                PayPeriodDetailRow(label: "Night Premium", value: summary.nightPremiumEarnings.asCurrency)
-                PayPeriodDivider()
-                PayPeriodDetailRow(label: "Overtime Premium", value: summary.overtimePremiumEarnings.asCurrency)
-                PayPeriodDivider()
-                PayPeriodDetailRow(label: "Day Hours", value: summary.regularHours.asHours)
-                PayPeriodDivider()
-                PayPeriodDetailRow(label: "Night Hours", value: summary.nightHours.asHours)
-                PayPeriodDivider()
-                PayPeriodDetailRow(label: "Overtime Hours", value: summary.overtimeHours.asHours)
-                Text("Overtime hours are included in day or night hours.")
-                    .font(TypeStyle.caption).foregroundStyle(theme.secondaryText).padding(.top, 10)
+            if summary.shiftCount > 0 {
+                PayPeriodDetailRow(label: "Base earnings", value: summary.baseEarnings.asCurrency)
+                if summary.nightHours > 0 {
+                    PayPeriodDivider()
+                    PayPeriodDetailRow(label: "Night hours", value: summary.nightHours.asHours)
+                    PayPeriodDetailRow(label: "Night premium", value: summary.nightPremiumEarnings.asCurrency)
+                }
+                if summary.overtimeHours > 0 {
+                    PayPeriodDivider()
+                    PayPeriodDetailRow(label: "Overtime hours", value: summary.overtimeHours.asHours)
+                    PayPeriodDetailRow(label: "Overtime premium", value: summary.overtimePremiumEarnings.asCurrency)
+                }
             }
         }
         .padding(Spacing.lg)
-        .glassCard(cornerRadius: CornerRadius.cardLarge, accent: accent)
+        .ruledSection()
     }
 
     private var shiftList: some View {
@@ -534,7 +450,7 @@ struct PayPeriodDetailView: View {
             HStack {
                 Text("Included Shifts")
                     .font(TypeStyle.title3)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(TimecardColor.ink)
                 Spacer()
                 Text("\(summary.shiftCount)")
                     .font(TypeStyle.caption)
@@ -591,13 +507,13 @@ private struct PayPeriodMetricTile: View {
 
             Text(value)
                 .font(TypeStyle.title2)
-                .foregroundStyle(.white)
+                .foregroundStyle(TimecardColor.ink)
                 .lineLimit(1)
                 .minimumScaleFactor(0.4)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
-        .glassCard(cornerRadius: CornerRadius.cardSmall, accent: accent, hasShadow: false)
+        .ruledSection()
     }
 }
 
@@ -648,12 +564,12 @@ private struct PayPeriodShiftRow: View {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 5) {
                     Text(shift.jobName)
-                        .font(.system(.caption, design: .rounded, weight: .bold))
+                        .font(.system(.caption, design: .default, weight: .bold))
                         .foregroundStyle(accent)
 
                     Text(shift.allocatedStartDate.formatted(date: .abbreviated, time: .omitted))
-                        .font(.system(.headline, design: .rounded, weight: .bold))
-                        .foregroundStyle(.white)
+                        .font(.system(.headline, design: .default, weight: .bold))
+                        .foregroundStyle(TimecardColor.ink)
 
                     Text(timeRange)
                         .font(TypeStyle.caption)
@@ -682,7 +598,7 @@ private struct PayPeriodShiftRow: View {
                     PayPeriodPill(text: "\(shift.overtimeHours.oneDecimal) OT", color: theme.takeHomeAccent)
                 }
                 if shift.isPartial {
-                    PayPeriodPill(text: "Partial", color: theme.roseAccent)
+                    PayPeriodPill(text: "Partial", color: theme.stopAccent)
                 }
                 if shift.isActive {
                     PayPeriodPill(text: "Active", color: theme.grossAccent)
@@ -692,11 +608,11 @@ private struct PayPeriodShiftRow: View {
             if !shift.note.isEmpty {
                 Text(shift.note)
                     .font(TypeStyle.caption)
-                    .foregroundStyle(Color.white.opacity(0.86))
+                    .foregroundStyle(TimecardColor.ink.opacity(0.86))
             }
         }
         .padding(18)
-        .glassCard(cornerRadius: CornerRadius.cardLarge, accent: accent)
+        .ruledSection()
     }
 
     private var timeRange: String {
@@ -713,8 +629,8 @@ private struct PayPeriodPill: View {
 
     var body: some View {
         Text(text)
-            .font(.system(.caption2, design: .rounded, weight: .bold))
-            .foregroundStyle(.white)
+            .font(.system(.caption2, design: .default, weight: .bold))
+            .foregroundStyle(TimecardColor.ink)
             .lineLimit(1)
             .padding(.horizontal, 9)
             .padding(.vertical, 5)
@@ -730,7 +646,7 @@ private struct PayPeriodPill: View {
 private struct PayPeriodDivider: View {
     var body: some View {
         Divider()
-            .overlay(Color.white.opacity(0.05))
+            .overlay(TimecardColor.ink.opacity(0.05))
     }
 }
 

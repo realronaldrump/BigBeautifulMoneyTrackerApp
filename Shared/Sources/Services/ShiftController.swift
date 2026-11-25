@@ -789,6 +789,30 @@ enum ShiftController {
             salaryJobCount: jobSummaries.reduce(0) { $0 + $1.rollup.salaryJobCount },
             salaryLoggedHours: jobSummaries.reduce(0) { $0 + $1.rollup.salaryLoggedHours }
         )
+        // Keep the household estimate for other income and substitute only each
+        // calibrated employer's share, including its taxable supplemental pay.
+        for job in snapshotData.jobs {
+            guard let paycheck = job.paycheckReference else { continue }
+            let baseDifference = paycheck.netRate - combinedTaxEstimate.estimatedNetRate
+            let effectiveDifference = paycheck.netRate - combinedEffectiveEstimate.estimatedNetRate
+            if let rollup = jobSummaries.first(where: { $0.id == job.id })?.rollup {
+                combinedRollup.activeTakeHome += rollup.activeGross * baseDifference
+                combinedRollup.activeEffective.effectiveTakeHome += rollup.activeEffective.taxableGross * effectiveDifference
+                if payPeriodAggregation == .unified {
+                    combinedRollup.payPeriodTakeHome += rollup.payPeriodGross * baseDifference
+                    combinedRollup.projectedTakeHome += rollup.projectedGross * baseDifference
+                    combinedRollup.payPeriodEffective.effectiveTakeHome += rollup.payPeriodEffective.taxableGross * effectiveDifference
+                    combinedRollup.projectedEffective.effectiveTakeHome += rollup.projectedEffective.taxableGross * effectiveDifference
+                }
+                combinedRollup.allTimeTakeHome += rollup.allTimeGross * baseDifference
+                combinedRollup.allTimeEffective.effectiveTakeHome += rollup.allTimeEffective.taxableGross * effectiveDifference
+            } else {
+                let cutoff = min(date, job.archivedAt ?? job.updatedAt)
+                let archived = buildJobSummary(for: job, from: snapshotData, at: cutoff, calendar: calendar).rollup
+                combinedRollup.allTimeTakeHome += archived.allTimeGross * baseDifference
+                combinedRollup.allTimeEffective.effectiveTakeHome += archived.allTimeEffective.taxableGross * effectiveDifference
+            }
+        }
         if combinedRollup.salaryAllTimeGross > 0 {
             combinedRollup.allTimeEffective.effectiveHourlyRate = nil
         }
@@ -996,7 +1020,8 @@ enum ShiftController {
                 taxProfile: snapshotData.taxProfile
             ),
             taxProfile: snapshotData.taxProfile,
-            payFrequency: configuration.paySchedule.frequency
+            payFrequency: configuration.paySchedule.frequency,
+            paycheck: job.paycheckReference
         )
         let effectiveTaxEstimate = TaxEstimator.estimate(
             currentGross: 0,
@@ -1007,7 +1032,8 @@ enum ShiftController {
                 taxProfile: snapshotData.taxProfile
             ),
             taxProfile: snapshotData.taxProfile,
-            payFrequency: configuration.paySchedule.frequency
+            payFrequency: configuration.paySchedule.frequency,
+            paycheck: job.paycheckReference
         )
 
         let takeHomeRate = 1 - taxEstimate.estimatedNetRate

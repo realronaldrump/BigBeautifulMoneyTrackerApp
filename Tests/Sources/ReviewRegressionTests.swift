@@ -26,6 +26,93 @@ final class ReviewRegressionTests: XCTestCase {
         ))
     }
 
+    private let sampleStatement = """
+    Period Start Date 04/05/2026
+    Pay Date 04/24/2026
+    Pay Rate $25.0000
+    Pay Frequency Biweekly
+    Regular 40.000000 $0.0000 $1,000.00 $9,000.00
+    Pay Summary
+    Gross FIT Taxable Wages Taxes Deductions Net Pay
+    Current $1,000.00 $970.00 $145.00 $45.00 $810.00
+    YTD $9,000.00 $8,730.00 $1,305.00 $405.00 $7,290.00
+    """
+
+    func testStatementUsesReconciledCurrentTotalsAndBaseRate() throws {
+        let statement = try XCTUnwrap(PayStatement(text: sampleStatement, calendar: calendar))
+        XCTAssertEqual(statement.paycheck.gross, 1_000)
+        XCTAssertEqual(statement.paycheck.net, 810)
+        XCTAssertEqual(statement.hourlyRate, 25)
+        XCTAssertEqual(statement.frequency, .biweekly)
+        XCTAssertEqual(statement.periodStart, date(4, 5))
+        XCTAssertEqual(statement.paidDate, date(4, 24))
+        XCTAssertNil(PayStatement(text: sampleStatement.replacingOccurrences(of: "$145.00", with: "$140.00")))
+        XCTAssertNil(PayStatement(text: sampleStatement.replacingOccurrences(of: "Current $", with: "YTD $")))
+        XCTAssertNil(PayStatement(text: sampleStatement + "\n" + sampleStatement))
+        XCTAssertNil(PaycheckReference(gross: 0, net: 0))
+        XCTAssertNil(PaycheckReference(gross: .infinity, net: 10))
+        XCTAssertNil(PaycheckReference(gross: 10, net: .nan))
+        XCTAssertNil(PaycheckReference(gross: 10, net: 11))
+        XCTAssertEqual(PaycheckReference(gross: 10, net: 0)?.netRate, 0)
+        XCTAssertEqual(PaycheckReference(gross: 10, net: 10)?.netRate, 1)
+    }
+
+    @MainActor
+    func testImportedPaycheckDrivesLiveAndArchivedEstimatesPerJob() throws {
+        let container = AppModelContainerFactory.makeInMemoryContainer()
+        let context = container.mainContext
+        try DataBootstrapper.seedIfNeeded(in: context)
+        let job = try XCTUnwrap(try JobService.jobs(in: context).first)
+        let second = try JobService.createJob(in: context, name: "Second")
+        let secondSchedule = try XCTUnwrap(try context.fetch(FetchDescriptor<PaySchedule>()).first { $0.job?.id == second.id })
+        secondSchedule.anchorDate = date(4, 5)
+        let statement = try XCTUnwrap(PayStatement(text: sampleStatement, calendar: calendar))
+        let priorRate = PayRateSchedule(job: job, effectiveDate: date(3, 1), hourlyRate: 20)
+        let nextRate = PayRateSchedule(job: job, effectiveDate: date(5, 1), hourlyRate: 30)
+        context.insert(priorRate)
+        context.insert(nextRate)
+        for _ in 0..<2 {
+            try JobService.savePaycheckReference(statement.paycheck, for: job, hourlyDetails: statement, in: context, calendar: calendar)
+        }
+        var rates = try context.fetch(FetchDescriptor<PayRateSchedule>())
+        XCTAssertEqual(rates.count, 3)
+        XCTAssertEqual(EarningsEngine.payRate(at: date(4, 1), payRates: rates), 20)
+        XCTAssertEqual(EarningsEngine.payRate(at: date(4, 6), payRates: rates), 25)
+        XCTAssertEqual(EarningsEngine.payRate(at: date(5, 5), payRates: rates), 30)
+        XCTAssertNil(second.paycheckReference)
+        try JobService.savePaycheckReference(PaycheckReference(gross: 100, net: 65), for: second, in: context)
+        let schedule = try XCTUnwrap(try context.fetch(FetchDescriptor<PaySchedule>()).first { $0.job?.id == job.id })
+        XCTAssertEqual(schedule.anchorDate, date(4, 5))
+        context.insert(PayRateSchedule(job: second, effectiveDate: date(4, 5), hourlyRate: 40))
+        let shift = record(job: job, start: date(4, 6), end: date(4, 7, 16), rate: 25)
+        context.insert(shift)
+        context.insert(OpenShiftState(job: second, startDate: date(4, 8, 10)))
+        try context.save()
+        let asOf = date(4, 8, 12)
+        let home = try ShiftController.dashboardSnapshot(in: context, at: asOf, calendar: calendar)
+        XCTAssertEqual(home.currentTakeHome, 52, accuracy: 0.001)
+        XCTAssertEqual(home.payPeriodTakeHome, 862, accuracy: 0.001)
+        XCTAssertEqual(home.projectedPaycheckTakeHome, 862, accuracy: 0.001)
+        let schedules = try context.fetch(FetchDescriptor<PaySchedule>())
+        rates = try context.fetch(FetchDescriptor<PayRateSchedule>())
+        let tax = TaxProfile(extraFederalWithholdingPerPeriod: 90)
+        let history = TaxEstimator.estimatedTakeHome(for: shift, allShifts: [shift], payRates: rates,
+            paySchedules: schedules, templates: [], taxProfile: tax, calendar: calendar)
+        XCTAssertEqual(history, 810, accuracy: 0.001)
+        let archive = PayPeriodService.archiveSnapshot(asOf: asOf, jobs: [job, second], completedShifts: [shift],
+            openShifts: try context.fetch(FetchDescriptor<OpenShiftState>()), paySchedules: schedules, payRates: rates,
+            nightRules: [], overtimeRules: [], templates: [], taxProfile: tax, calendar: calendar)
+        let combined = try XCTUnwrap(archive.sections.first { $0.isCombined }?.summaries.first)
+        XCTAssertEqual(combined.estimatedTakeHome, 862, accuracy: 0.001)
+        XCTAssertEqual(combined.shifts.reduce(0) { $0 + $1.estimatedTakeHome }, 862, accuracy: 0.001)
+        XCTAssertEqual(combined.effectiveTakeHome, 862, accuracy: 0.001)
+        try JobService.archiveJob(job, in: context)
+        let archivedHome = try ShiftController.dashboardSnapshot(in: context, at: asOf, calendar: calendar)
+        XCTAssertEqual(archivedHome.allTimeTakeHome, 862, accuracy: 0.001)
+        try JobService.savePaycheckReference(nil, for: second, in: context)
+        XCTAssertNil(second.paycheckReference)
+    }
+
     func testFutureHistoryDoesNotMoveEarlierHoursIntoOvertime() {
         let result = EarningsEngine.calculate(
             start: date(4, 6, 8), end: date(4, 6, 16),

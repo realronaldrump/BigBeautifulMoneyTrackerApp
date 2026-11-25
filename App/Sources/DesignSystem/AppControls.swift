@@ -36,7 +36,7 @@ struct WrappingHStack: Layout {
             rowHeight = max(rowHeight, size.height)
             x += size.width + spacing
         }
-        return (CGSize(width: width ?? usedWidth, height: frames.isEmpty ? 0 : y + rowHeight), frames)
+        return (CGSize(width: max(0, width ?? usedWidth), height: frames.isEmpty ? 0 : y + rowHeight), frames)
     }
 }
 
@@ -56,12 +56,26 @@ struct AdaptiveCardGrid<Content: View>: View {
     }
 }
 
+/// Use the native form's picker, disclosure and focus behavior on the same stock as the register.
+struct TimecardForm<Content: View>: View {
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        Form {
+            content.listRowBackground(TimecardColor.stock)
+                .listRowSeparatorTint(TimecardColor.rule)
+        }
+        .environment(\.defaultMinListRowHeight, 50)
+        .timecardForm()
+    }
+}
+
 struct AppValueRow: View {
     @Environment(AppTheme.self) private var theme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let title: String
     let value: String
-    var accent: Color = .white
+    var accent: Color = TimecardColor.ink
 
     var body: some View {
         Group {
@@ -93,7 +107,7 @@ struct AppValueRow: View {
     }
 
     private var valueText: some View {
-        Text(value).font(.system(.body, design: .rounded, weight: .semibold))
+        Text(value).font(.system(.body, design: .default, weight: .semibold))
             .foregroundStyle(accent).monospacedDigit()
             .lineLimit(1).minimumScaleFactor(0.35)
             .fixedSize(horizontal: false, vertical: true)
@@ -103,17 +117,17 @@ struct AppValueRow: View {
 struct AppActionButtonStyle: ButtonStyle {
     @Environment(\.isEnabled) private var isEnabled
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    let accent: Color
+    var fill = TimecardColor.cobalt
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(.headline, design: .rounded, weight: .bold))
+            .font(TimecardType.display(24, relativeTo: .headline))
             .multilineTextAlignment(.center)
-            .foregroundStyle(Color.black)
-            .frame(maxWidth: .infinity, minHeight: 52)
+            .foregroundStyle(isEnabled ? TimecardColor.chalk : TimecardColor.graphite)
+            .frame(maxWidth: .infinity, minHeight: 48)
             .padding(.horizontal, 18)
             .padding(.vertical, 5)
-            .background(accent.opacity(isEnabled ? 1 : 0.36), in: RoundedRectangle(cornerRadius: 18))
+            .background(isEnabled ? fill : TimecardColor.inset, in: RoundedRectangle(cornerRadius: 4))
             .opacity(configuration.isPressed ? 0.82 : 1)
             .scaleEffect(configuration.isPressed && !reduceMotion ? 0.985 : 1)
             .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: configuration.isPressed)
@@ -123,7 +137,7 @@ struct AppActionButtonStyle: ButtonStyle {
 struct AppInlineNotice: View {
     let message: String
     var systemImage = "exclamationmark.circle.fill"
-    var color: Color = Color(red: 1, green: 0.63, blue: 0.68)
+    var color = TimecardColor.redInk
 
     var body: some View {
         Label {

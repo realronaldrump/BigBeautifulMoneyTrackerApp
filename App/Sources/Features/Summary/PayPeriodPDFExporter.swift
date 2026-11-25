@@ -1,5 +1,6 @@
 import Foundation
 import UIKit
+import SwiftUI
 
 enum PayPeriodPDFExporter {
     static func export(
@@ -30,36 +31,36 @@ enum PayPeriodPDFExporter {
                 palette: palette
             )
 
-            let snapshotMetrics: [(String, String, UIColor)] = summary.salaryExpectedGross > 0 && summary.shiftCount == 0
+            let snapshotMetrics: [(String, String)] = summary.salaryExpectedGross > 0 && summary.shiftCount == 0
                 ? [
-                    ("Salary accrued", summary.salaryGross.pdfCurrency, palette.grossAccent),
-                    ("Est. take-home", summary.estimatedTakeHome.pdfCurrency, palette.takeHomeAccent),
-                    ("Full period salary", summary.salaryExpectedGross.pdfCurrency, palette.accent),
-                    ("Optional logged hours", summary.salaryLoggedHours.pdfHours, palette.complementaryAccent),
+                    ("Salary accrued", summary.salaryGross.pdfCurrency),
+                    ("Est. take-home", summary.estimatedTakeHome.pdfCurrency),
+                    ("Full period salary", summary.salaryExpectedGross.pdfCurrency),
+                    ("Optional logged hours", summary.salaryLoggedHours.pdfHours),
                 ]
                 : summary.isSupplementOnly
                 ? [
-                    (summary.displayMetricTitle(for: .gross), summary.displayGrossAmount.pdfCurrency, palette.grossAccent),
-                    (summary.displayMetricTitle(for: .takeHome), summary.displayTakeHomeAmount.pdfCurrency, palette.takeHomeAccent),
-                    ("Supplement Total", summary.supplementalTotal.pdfCurrency, palette.accent),
-                    ("Taxable Portion", summary.supplementalTaxableTotal.pdfCurrency, palette.roseAccent),
-                    ("Non-Taxable Portion", summary.supplementalNonTaxableTotal.pdfCurrency, palette.complementaryAccent),
-                    ("Supplements", summary.supplementMetricLabel, palette.accent),
+                    (summary.displayMetricTitle(for: .gross), summary.displayGrossAmount.pdfCurrency),
+                    (summary.displayMetricTitle(for: .takeHome), summary.displayTakeHomeAmount.pdfCurrency),
+                    ("Supplement Total", summary.supplementalTotal.pdfCurrency),
+                    ("Taxable Portion", summary.supplementalTaxableTotal.pdfCurrency),
+                    ("Non-Taxable Portion", summary.supplementalNonTaxableTotal.pdfCurrency),
+                    ("Supplements", summary.supplementMetricLabel),
                 ]
                 : [
-                    (summary.displayMetricTitle(for: .gross), summary.displayGrossAmount.pdfCurrency, palette.grossAccent),
-                    (summary.displayMetricTitle(for: .takeHome), summary.displayTakeHomeAmount.pdfCurrency, palette.takeHomeAccent),
-                    ("Hours", summary.totalHours.pdfHours, palette.accent),
-                    ("Shifts", "\(summary.shiftCount)", palette.roseAccent),
-                    ("Effective Rate", summary.displayHourlyRate.map { $0.pdfCurrency + "/hr" } ?? "Unavailable", palette.complementaryAccent),
-                    ("Best Shift", summary.bestShiftGross.pdfCurrency, palette.accent),
+                    (summary.displayMetricTitle(for: .gross), summary.displayGrossAmount.pdfCurrency),
+                    (summary.displayMetricTitle(for: .takeHome), summary.displayTakeHomeAmount.pdfCurrency),
+                    ("Hours", summary.totalHours.pdfHours),
+                    ("Shifts", "\(summary.shiftCount)"),
+                    ("Effective Rate", summary.displayHourlyRate.map { $0.pdfCurrency + "/hr" } ?? "Unavailable"),
+                    ("Best Shift", summary.bestShiftGross.pdfCurrency),
                 ]
 
             canvas.beginPage(compact: false)
-            canvas.drawMetricGrid(snapshotMetrics)
+            canvas.drawPeriodTotals(snapshotMetrics)
 
             if summary.salaryExpectedGross > 0 {
-                canvas.drawKeyValueSection(title: "Salary Visualization", subtitle: "Accrued estimate; received paychecks are recorded separately.",
+                canvas.drawKeyValueSection(title: "Salary Visualization", subtitle: "Salary accrual is a visualization estimate. Recorded deposits appear in salary history.",
                     rows: [("Salary accrued", summary.salaryGross.pdfCurrency), ("Full period salary", summary.salaryExpectedGross.pdfCurrency)])
             }
             if summary.shiftCount > 0 || summary.salaryExpectedGross == 0 {
@@ -125,7 +126,7 @@ enum PayPeriodPDFExporter {
             )
 
             if summary.salaryExpectedGross == 0 || !summary.shifts.isEmpty { canvas.drawShiftSection(summary.shifts) }
-            canvas.drawDisclaimer("This PDF is generated from personal earnings tracking and estimated tax settings. Salary accrual is a visualization estimate. It is not an employer-issued pay stub.")
+            canvas.drawDisclaimer(summary.estimateDescription)
         }
 
         return url
@@ -153,25 +154,21 @@ enum PayPeriodPDFExporter {
 }
 
 private struct PayPeriodPDFPalette {
-    let pageBackground = UIColor(red: 0.03, green: 0.04, blue: 0.05, alpha: 1)
-    let pageSecondaryBackground = UIColor(red: 0.12, green: 0.13, blue: 0.15, alpha: 1)
-    let surface = UIColor(red: 0.08, green: 0.09, blue: 0.11, alpha: 0.98)
-    let raisedSurface = UIColor(red: 0.12, green: 0.13, blue: 0.15, alpha: 0.98)
-    let ink = UIColor.white
-    let mutedInk = UIColor.white.withAlphaComponent(0.72)
-    let subtleInk = UIColor.white.withAlphaComponent(0.48)
-    let border = UIColor.white.withAlphaComponent(0.08)
-    let innerHighlight = UIColor.white.withAlphaComponent(0.18)
-    let headerFill = UIColor(red: 0.08, green: 0.09, blue: 0.11, alpha: 0.98)
-    let headerSecondaryFill = UIColor(red: 0.12, green: 0.13, blue: 0.15, alpha: 0.98)
+    let pageBackground = UIColor(red: 0.985, green: 0.981, blue: 0.96, alpha: 1)
+    let surface = UIColor.white
+    let raisedSurface = UIColor(white: 0.95, alpha: 1)
+    let ink = UIColor(red: 0.06, green: 0.14, blue: 0.11, alpha: 1)
+    let mutedInk = UIColor(white: 0.28, alpha: 1)
+    let subtleInk = UIColor(white: 0.36, alpha: 1)
+    let border = UIColor(white: 0.78, alpha: 1)
+    let headerFill = UIColor(TimecardColor.cobalt)
+    let headerSecondaryFill = UIColor(red: 0.08, green: 0.15, blue: 0.46, alpha: 1)
     let inverseInk = UIColor.white
-    let grossAccent = UIColor(red: 0.30, green: 0.94, blue: 0.62, alpha: 1)
-    let takeHomeAccent = UIColor(red: 0.95, green: 0.78, blue: 0.38, alpha: 1)
-    let roseAccent = UIColor(red: 0.90, green: 0.48, blue: 0.60, alpha: 1)
+    let grossAccent = UIColor(TimecardColor.cobalt)
+    let takeHomeAccent = UIColor(red: 0.15, green: 0.17, blue: 0.23, alpha: 1)
+    let roseAccent = UIColor(red: 0.50, green: 0.22, blue: 0.20, alpha: 1)
     let accent: UIColor
-    let accentSoft: UIColor
     let accentMuted: UIColor
-    let complementaryAccent: UIColor
 
     init(summary: PayPeriodSummary) {
         let baseAccent: UIColor = switch summary.accent {
@@ -189,17 +186,8 @@ private struct PayPeriodPDFPalette {
             UIColor(red: 0.455, green: 0.533, blue: 0.663, alpha: 1)
         }
 
-        accent = summary.isCombined ? grossAccent : baseAccent
-        complementaryAccent = switch summary.accent {
-        case .amber:
-            grossAccent
-        case .coral, .rose:
-            takeHomeAccent
-        default:
-            takeHomeAccent
-        }
-        accentSoft = accent.withAlphaComponent(0.16)
-        accentMuted = accent.withAlphaComponent(0.74)
+        accent = summary.isCombined ? grossAccent : baseAccent.darkened(by: 0.22)
+        accentMuted = accent.withAlphaComponent(0.92)
     }
 }
 
@@ -250,56 +238,25 @@ private final class PayPeriodPDFCanvas {
         y = margin + (compact ? 78 : 154)
     }
 
-    func drawMetricGrid(_ items: [(String, String, UIColor)]) {
-        let columns = 2
-        let spacing: CGFloat = 14
-        let cardHeight: CGFloat = 76
-        let columnWidth = (contentWidth - spacing) / CGFloat(columns)
-        let initialBodyHeight = items.isEmpty ? sectionSpacing : (cardHeight + sectionSpacing)
-
-        beginSection(
-            title: "Snapshot",
-            subtitle: "Primary numbers for this pay period.",
-            minimumBodyHeight: initialBodyHeight
-        )
-
-        for index in items.indices {
-            let row = index / columns
-            let column = index % columns
-            let requiredHeight = CGFloat(row + 1) * cardHeight + CGFloat(row) * spacing
-            ensureSpace(requiredHeight + sectionSpacing) { canvas in
-                canvas.drawSectionTitle("Snapshot", subtitle: "Primary numbers for this pay period.")
-            }
-
-            let rect = CGRect(
-                x: margin + CGFloat(column) * (columnWidth + spacing),
-                y: y + CGFloat(row) * (cardHeight + spacing),
-                width: columnWidth,
-                height: cardHeight
-            )
-            drawRoundedCard(rect, fill: palette.surface, stroke: items[index].2)
-            drawText(
-                items[index].0.uppercased(),
-                font: .systemFont(ofSize: 10, weight: .semibold),
-                color: items[index].2.withAlphaComponent(0.82),
-                rect: rect.insetBy(dx: 16, dy: 14),
-                tracking: 1.0
-            )
-            drawText(
-                items[index].1,
-                font: .systemFont(ofSize: 20, weight: .bold),
-                color: items[index].2,
-                rect: CGRect(
-                    x: rect.minX + 16,
-                    y: rect.minY + 32,
-                    width: rect.width - 32,
-                    height: 26
-                )
-            )
+    func drawPeriodTotals(_ items: [(String, String)]) {
+        let rowHeight: CGFloat = 40
+        beginSection(title: "Period totals", subtitle: summary.interval.pdfDisplayRange,
+                     minimumBodyHeight: CGFloat(items.count) * rowHeight + sectionSpacing)
+        for (label, value) in items {
+            context.cgContext.setFillColor(palette.border.cgColor)
+            context.cgContext.fill(CGRect(x: margin, y: y, width: contentWidth, height: 0.6))
+            drawText(label, font: .systemFont(ofSize: 12, weight: .medium), color: palette.ink,
+                     rect: CGRect(x: margin, y: y + 10, width: contentWidth * 0.53, height: 24))
+            let valueWidth = contentWidth * 0.45
+            let valueLayout = PayPeriodPDFTextLayout.fittedSingleLine(
+                value, font: UIFont(name: "BarlowCondensed-Bold", size: 22) ?? .boldSystemFont(ofSize: 22),
+                maxWidth: valueWidth, minimumPointSize: 12)
+            drawText(valueLayout.text, font: valueLayout.font, color: palette.grossAccent,
+                     rect: CGRect(x: margin + contentWidth - valueWidth, y: y + 4, width: valueWidth, height: 32),
+                     alignment: .right)
+            y += rowHeight
         }
-
-        let rows = Int(ceil(Double(items.count) / Double(columns)))
-        y += CGFloat(rows) * cardHeight + CGFloat(max(0, rows - 1)) * spacing + sectionSpacing
+        y += sectionSpacing
     }
 
     func drawKeyValueSection(title: String, subtitle: String, rows: [(String, String)]) {
@@ -467,7 +424,7 @@ private final class PayPeriodPDFCanvas {
 
     private func drawHeader(compact: Bool) {
         let headerRect = CGRect(x: margin, y: margin, width: contentWidth, height: compact ? 62 : 138)
-        drawRoundedCard(headerRect, fill: palette.headerFill, stroke: palette.accent, cornerRadius: 28)
+        drawRoundedCard(headerRect, fill: palette.headerFill, stroke: palette.accent, cornerRadius: 3)
 
         if compact {
             let jobNameLayout = PayPeriodPDFTextLayout.fittedSingleLine(
@@ -479,7 +436,7 @@ private final class PayPeriodPDFCanvas {
             drawText(
                 "BIG BEAUTIFUL EXPORT",
                 font: .systemFont(ofSize: 10, weight: .semibold),
-                color: palette.takeHomeAccent,
+                color: UIColor(TimecardColor.chalk),
                 rect: CGRect(x: headerRect.minX + 18, y: headerRect.minY + 12, width: 180, height: 12),
                 tracking: 1.2
             )
@@ -503,7 +460,7 @@ private final class PayPeriodPDFCanvas {
         drawRoundedCard(summaryPanel, fill: palette.headerSecondaryFill, stroke: palette.takeHomeAccent)
         let jobNameLayout = PayPeriodPDFTextLayout.fittedSingleLine(
             summary.jobName,
-            font: .systemFont(ofSize: 28, weight: .heavy),
+            font: UIFont(name: "BarlowCondensed-Bold", size: 28) ?? .boldSystemFont(ofSize: 28),
             maxWidth: headerRect.width - 228,
             minimumPointSize: 22
         )
@@ -511,7 +468,7 @@ private final class PayPeriodPDFCanvas {
         drawText(
             "BIG BEAUTIFUL SUMMARY",
             font: .systemFont(ofSize: 10, weight: .semibold),
-            color: palette.takeHomeAccent,
+            color: UIColor(TimecardColor.chalk),
             rect: CGRect(x: headerRect.minX + 22, y: headerRect.minY + 20, width: 220, height: 12),
             tracking: 1.4
         )
@@ -547,13 +504,13 @@ private final class PayPeriodPDFCanvas {
         drawText(
             summary.displayTakeHomeAmount.pdfCurrency,
             font: .systemFont(ofSize: 20, weight: .bold),
-            color: palette.takeHomeAccent,
+            color: UIColor(TimecardColor.chalk),
             rect: CGRect(x: summaryPanel.minX + 16, y: summaryPanel.minY + 28, width: summaryPanel.width - 32, height: 24)
         )
         drawText(
             "\(summary.displayMetricTitle(for: .gross)) \(summary.displayGrossAmount.pdfCurrency)",
             font: .systemFont(ofSize: 11, weight: .semibold),
-            color: palette.grossAccent,
+            color: UIColor(TimecardColor.chalk),
             rect: CGRect(x: summaryPanel.minX + 16, y: summaryPanel.minY + 58, width: summaryPanel.width - 32, height: 16)
         )
         drawText(
@@ -649,137 +606,17 @@ private final class PayPeriodPDFCanvas {
     }
 
     private func drawPageBackground() {
-        drawLinearGradient(
-            in: pageBounds,
-            colors: [palette.pageBackground, palette.pageSecondaryBackground, palette.pageBackground],
-            startPoint: CGPoint(x: 0, y: 0),
-            endPoint: CGPoint(x: 1, y: 1)
-        )
-
-        drawRadialGlow(
-            center: CGPoint(x: pageBounds.maxX - 96, y: pageBounds.minY + 72),
-            radius: 240,
-            color: palette.accent.withAlphaComponent(0.18)
-        )
-        drawRadialGlow(
-            center: CGPoint(x: pageBounds.minX + 130, y: pageBounds.maxY - 120),
-            radius: 210,
-            color: palette.complementaryAccent.withAlphaComponent(0.10)
-        )
-        drawRadialGlow(
-            center: CGPoint(x: pageBounds.minX + 88, y: pageBounds.midY + 120),
-            radius: 170,
-            color: palette.roseAccent.withAlphaComponent(0.07)
-        )
-
-        let highlightRect = CGRect(x: 0, y: 0, width: pageBounds.width, height: pageBounds.height)
-        drawLinearGradient(
-            in: highlightRect,
-            colors: [
-                UIColor.white.withAlphaComponent(0.06),
-                UIColor.clear,
-                UIColor.white.withAlphaComponent(0.03)
-            ],
-            startPoint: CGPoint(x: 0, y: 0),
-            endPoint: CGPoint(x: 1, y: 1)
-        )
+        context.cgContext.setFillColor(palette.pageBackground.cgColor)
+        context.cgContext.fill(pageBounds)
     }
 
-    private func drawRoundedCard(
-        _ rect: CGRect,
-        fill: UIColor,
-        stroke: UIColor,
-        cornerRadius: CGFloat = 20
-    ) {
+    private func drawRoundedCard(_ rect: CGRect, fill: UIColor, stroke: UIColor, cornerRadius: CGFloat = 2) {
         let path = UIBezierPath(roundedRect: rect, cornerRadius: cornerRadius)
-        let cgContext = context.cgContext
-
-        cgContext.saveGState()
-        cgContext.setShadow(
-            offset: CGSize(width: 0, height: 10),
-            blur: 26,
-            color: stroke.withAlphaComponent(0.22).cgColor
-        )
         fill.setFill()
         path.fill()
-        cgContext.restoreGState()
-
-        cgContext.saveGState()
-        path.addClip()
-        drawLinearGradient(
-            in: rect,
-            colors: [fill.lightened(by: 0.04), fill, fill.darkened(by: 0.14)],
-            startPoint: CGPoint(x: 0, y: 0),
-            endPoint: CGPoint(x: 1, y: 1)
-        )
-        drawLinearGradient(
-            in: rect,
-            colors: [stroke.withAlphaComponent(0.10), UIColor.clear, palette.pageBackground.withAlphaComponent(0.10)],
-            startPoint: CGPoint(x: 0, y: 0),
-            endPoint: CGPoint(x: 1, y: 1)
-        )
-        drawRadialGlow(
-            center: CGPoint(x: rect.maxX - rect.width * 0.14, y: rect.minY + rect.height * 0.12),
-            radius: max(rect.width, rect.height) * 0.60,
-            color: stroke.withAlphaComponent(0.16)
-        )
-        cgContext.restoreGState()
-
-        palette.innerHighlight.setStroke()
-        path.lineWidth = 1
+        stroke.withAlphaComponent(0.25).setStroke()
+        path.lineWidth = 0.75
         path.stroke()
-
-        let innerPath = UIBezierPath(
-            roundedRect: rect.insetBy(dx: 1, dy: 1),
-            cornerRadius: max(0, cornerRadius - 1)
-        )
-        stroke.withAlphaComponent(0.16).setStroke()
-        innerPath.lineWidth = 1
-        innerPath.stroke()
-    }
-
-    private func drawLinearGradient(
-        in rect: CGRect,
-        colors: [UIColor],
-        startPoint: CGPoint,
-        endPoint: CGPoint
-    ) {
-        guard let gradient = CGGradient(
-            colorsSpace: CGColorSpaceCreateDeviceRGB(),
-            colors: colors.map(\.cgColor) as CFArray,
-            locations: nil
-        ) else {
-            return
-        }
-
-        let cgContext = context.cgContext
-        let start = CGPoint(x: rect.minX + (rect.width * startPoint.x), y: rect.minY + (rect.height * startPoint.y))
-        let end = CGPoint(x: rect.minX + (rect.width * endPoint.x), y: rect.minY + (rect.height * endPoint.y))
-        cgContext.saveGState()
-        cgContext.drawLinearGradient(gradient, start: start, end: end, options: [])
-        cgContext.restoreGState()
-    }
-
-    private func drawRadialGlow(center: CGPoint, radius: CGFloat, color: UIColor) {
-        guard let gradient = CGGradient(
-            colorsSpace: CGColorSpaceCreateDeviceRGB(),
-            colors: [color.cgColor, color.withAlphaComponent(0).cgColor] as CFArray,
-            locations: [0, 1]
-        ) else {
-            return
-        }
-
-        let cgContext = context.cgContext
-        cgContext.saveGState()
-        cgContext.drawRadialGradient(
-            gradient,
-            startCenter: center,
-            startRadius: 0,
-            endCenter: center,
-            endRadius: radius,
-            options: [.drawsAfterEndLocation]
-        )
-        cgContext.restoreGState()
     }
 
     private func drawText(
@@ -878,10 +715,6 @@ private extension Double {
 }
 
 private extension UIColor {
-    func lightened(by amount: CGFloat) -> UIColor {
-        adjusted(by: abs(amount))
-    }
-
     func darkened(by amount: CGFloat) -> UIColor {
         adjusted(by: -abs(amount))
     }

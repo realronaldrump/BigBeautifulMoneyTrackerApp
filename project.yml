@@ -8,8 +8,8 @@ settings:
     SWIFT_VERSION: 6.0
     DEVELOPMENT_TEAM: CZ3N26YJ75
     CODE_SIGN_STYLE: Automatic
-    CURRENT_PROJECT_VERSION: 13
-    MARKETING_VERSION: "1.6"
+    CURRENT_PROJECT_VERSION: 14
+    MARKETING_VERSION: "1.7"
     GENERATE_INFOPLIST_FILE: NO
     SUPPORTS_MACCATALYST: NO
     TARGETED_DEVICE_FAMILY: "1"
@@ -24,6 +24,8 @@ targets:
     sources:
       - path: App/Sources
       - path: Shared/Sources
+      - path: Shared/Fonts
+        buildPhase: resources
       - path: App/Resources
     info:
       path: App/Info.plist
@@ -32,6 +34,8 @@ targets:
         CFBundleIconName: AppIcon
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UIAppFonts:
+          - BarlowCondensed-Bold.ttf
         LSRequiresIPhoneOS: true
         NSSupportsLiveActivities: true
         ITSAppUsesNonExemptEncryption: false
@@ -73,6 +77,8 @@ targets:
     sources:
       - path: Widgets/Sources
       - path: Shared/Sources
+      - path: Shared/Fonts
+        buildPhase: resources
       - path: Widgets/Resources
     info:
       path: Widgets/Info.plist
@@ -80,6 +86,8 @@ targets:
         CFBundleDisplayName: Davis's Big Beautiful Money Tracker App Widgets
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UIAppFonts:
+          - BarlowCondensed-Bold.ttf
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
     entitlements:

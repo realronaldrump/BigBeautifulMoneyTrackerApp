@@ -94,7 +94,8 @@ struct MoneyTrackerWidgetView: View {
                 Text(entry.statusMessage ?? "Open Money Tracker")
                     .font(.caption)
             }
-            .containerBackground(widgetBackground, for: .widget)
+            .environment(\.colorScheme, .dark)
+            .containerBackground(TimecardColor.cobalt, for: .widget)
         } else {
             switch family {
         case .systemSmall:
@@ -118,63 +119,52 @@ struct MoneyTrackerWidgetView: View {
         return period + " · " + (entry.mode == .gross ? "gross" : "est. take-home")
     }
 
-    private var widgetBackground: LinearGradient {
-        LinearGradient(
-            colors: [
-                Color.black,
-                Color(red: 0.08, green: 0.10, blue: 0.12),
-                Color(red: 0.16, green: 0.23, blue: 0.19)
-            ],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-    }
-
     private var smallView: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Davis's Big Beautiful")
-                .font(.system(size: 10, weight: .semibold, design: .rounded))
-                .foregroundStyle(.tertiary)
-                .lineLimit(1).minimumScaleFactor(0.8)
+            Text("Davis's Big Beautiful Money Tracker App")
+                .font(.system(size: 10, weight: .semibold, design: .default))
+                .foregroundStyle(.secondary)
+                .lineLimit(2).minimumScaleFactor(0.8)
 
             Text(amountLabel)
-                .font(.system(size: 11, weight: .semibold, design: .rounded))
+                .font(.system(size: 11, weight: .semibold, design: .monospaced))
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
             Text(amount, format: .currency(code: "USD"))
-                .font(.system(size: 22, weight: .heavy, design: .rounded))
+                .font(TimecardType.display(34, relativeTo: .title))
                 .minimumScaleFactor(0.7)
                 .lineLimit(1)
                 .monospacedDigit()
             if compensationMode == .effective {
-                Text("Includes supplements").font(.system(size: 10, weight: .medium, design: .rounded)).foregroundStyle(.secondary)
+                Text("Includes supplements").font(.system(size: 10, weight: .medium, design: .default)).foregroundStyle(.secondary)
             }
             Spacer(minLength: 0)
             Text(statusText)
-                .font(.system(size: 12, weight: .medium, design: .rounded))
+                .font(.system(size: 12, weight: .medium, design: .default))
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .containerBackground(widgetBackground, for: .widget)
+        .environment(\.colorScheme, .dark)
+        .containerBackground(TimecardColor.cobalt, for: .widget)
     }
 
     private var mediumView: some View {
         HStack(alignment: .top, spacing: 14) {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Davis's Big Beautiful Money Tracker App")
-                    .font(.system(size: 11, weight: .semibold, design: .rounded))
-                    .foregroundStyle(.tertiary)
+                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(.secondary)
                     .lineLimit(2)
 
                 Text(amountLabel)
-                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .font(.system(size: 12, weight: .semibold, design: .default))
                     .foregroundStyle(.secondary)
                 Text(amount, format: .currency(code: "USD"))
-                    .font(.system(size: 30, weight: .heavy, design: .rounded))
+                    .font(TimecardType.display(39, relativeTo: .title))
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
                 Text(statusText)
-                    .font(.system(size: 13, weight: .medium, design: .rounded))
+                    .font(.system(size: 13, weight: .medium, design: .default))
                     .foregroundStyle(.secondary)
             }
 
@@ -192,7 +182,8 @@ struct MoneyTrackerWidgetView: View {
                 stat("All Time", formattedAmount(entry.snapshot.allTimeAmount(for: entry.mode, compensationMode: compensationMode)))
             }
         }
-        .containerBackground(widgetBackground, for: .widget)
+        .environment(\.colorScheme, .dark)
+        .containerBackground(TimecardColor.cobalt, for: .widget)
     }
 
     private var accessoryView: some View {
@@ -201,7 +192,7 @@ struct MoneyTrackerWidgetView: View {
                 .font(.caption2)
                 .foregroundStyle(.secondary)
             Text(amount, format: .currency(code: "USD"))
-                .font(.system(size: 16, weight: .bold, design: .rounded))
+                .font(.system(size: 16, weight: .bold, design: .default))
                 .lineLimit(1)
             if entry.isShiftActive {
                 Text(statusText)
@@ -248,10 +239,10 @@ struct MoneyTrackerWidgetView: View {
     private func stat(_ title: String, _ value: String) -> some View {
         VStack(alignment: .trailing, spacing: 3) {
             Text(title.uppercased())
-                .font(.system(size: 10, weight: .semibold, design: .rounded))
+                .font(.system(size: 10, weight: .semibold, design: .default))
                 .foregroundStyle(.secondary)
             Text(value)
-                .font(.system(size: 14, weight: .bold, design: .rounded))
+                .font(.system(size: 14, weight: .bold, design: .default))
                 .monospacedDigit().lineLimit(1).minimumScaleFactor(0.7)
         }
     }
@@ -264,17 +255,17 @@ struct MoneyShiftActivityView: View {
         VStack(alignment: .leading, spacing: 10) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(context.attributes.title)
-                    .font(.system(size: 11, weight: .semibold, design: .rounded))
-                    .foregroundStyle(.tertiary)
+                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(.secondary)
                     .lineLimit(2)
 
                 Text(context.state.amountLabel)
-                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .font(.system(size: 12, weight: .semibold, design: .default))
                     .foregroundStyle(.secondary)
             }
 
             Text(context.state.syncedAmount, format: .currency(code: "USD"))
-                .font(.system(size: 28, weight: .heavy, design: .rounded))
+                .font(TimecardType.display(37, relativeTo: .title))
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
 
@@ -284,7 +275,7 @@ struct MoneyShiftActivityView: View {
                 Spacer()
                 Text("\(context.state.currentRate, format: .currency(code: "USD"))/hr")
             }
-            .font(.system(size: 13, weight: .medium, design: .rounded))
+            .font(.system(size: 13, weight: .medium, design: .default))
             .foregroundStyle(.secondary)
 
             LiveActivitySyncStatus(
@@ -293,7 +284,9 @@ struct MoneyShiftActivityView: View {
             )
         }
         .padding()
-        .activityBackgroundTint(Color(red: 0.08, green: 0.10, blue: 0.12))
+        .environment(\.colorScheme, .dark)
+        .foregroundStyle(TimecardColor.chalk)
+        .activityBackgroundTint(TimecardColor.cobalt)
         .activitySystemActionForegroundColor(.white)
     }
 }
@@ -317,7 +310,7 @@ private struct LiveActivitySyncStatus: View {
                 }
             }
         }
-        .font(.system(size: 11, weight: .semibold, design: .rounded))
+        .font(.system(size: 11, weight: .semibold, design: .monospaced))
         .foregroundStyle(isStale ? Color.yellow : Color.white.opacity(0.58))
         .lineLimit(1)
         .minimumScaleFactor(0.75)
@@ -361,20 +354,20 @@ struct MoneyShiftActivity: Widget {
                         Text("\(context.state.currentRate, format: .currency(code: "USD"))/hr")
                             .foregroundStyle(.secondary)
                     }
-                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .font(.system(size: 12, weight: .semibold, design: .default))
                 }
                 DynamicIslandExpandedRegion(.center) {
                     VStack(spacing: 2) {
                         Text(context.state.amountLabel)
-                            .font(.system(size: 11, weight: .semibold, design: .rounded))
+                            .font(.system(size: 11, weight: .semibold, design: .monospaced))
                             .foregroundStyle(.secondary)
                         Text(context.state.syncedAmount, format: .currency(code: "USD"))
-                            .font(.system(size: 18, weight: .bold, design: .rounded))
+                            .font(.system(size: 18, weight: .bold, design: .default))
                     }
                 }
                 DynamicIslandExpandedRegion(.trailing) {
                     Text(context.state.startDate, style: .timer)
-                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                        .font(.system(size: 12, weight: .medium, design: .default))
                 }
                 DynamicIslandExpandedRegion(.bottom) {
                     LiveActivitySyncStatus(
@@ -386,7 +379,7 @@ struct MoneyShiftActivity: Widget {
                 Text("$$")
             } compactTrailing: {
                 Text(context.state.syncedAmount, format: .currency(code: "USD"))
-                    .font(.system(size: 12, weight: .bold, design: .rounded))
+                    .font(.system(size: 12, weight: .bold, design: .default))
             } minimal: {
                 Text("$")
             }

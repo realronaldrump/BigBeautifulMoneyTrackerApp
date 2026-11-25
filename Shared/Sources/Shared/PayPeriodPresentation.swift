@@ -3,6 +3,13 @@ import Foundation
 extension PayPeriodSummary {
     private static let presentationEpsilon = 0.000_001
 
+    var estimateDescription: String {
+        if let paycheck {
+            return "Estimated take-home uses the \(paycheck.netRate.formatted(.percent.precision(.fractionLength(2)))) you kept on your reference paycheck."
+        }
+        return "Personal earnings estimate based on your records and pay settings."
+    }
+
     var hasSupplementalCompensation: Bool {
         supplementalTotal > Self.presentationEpsilon || !supplementAllocations.isEmpty
     }

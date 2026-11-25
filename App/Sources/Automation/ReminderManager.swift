@@ -22,8 +22,8 @@ final class ReminderManager {
         notificationCenter.removePendingNotificationRequests(
             withIdentifiers: Array(Set(templateIdentifiers + pendingIdentifiers))
         )
-        guard isEnabled else { return }
-        await requestAuthorization()
+        guard isEnabled, activeTemplates.contains(where: \.isEnabled) else { return }
+        guard await requestAuthorization() else { return }
         guard !Task.isCancelled else { return }
 
         for template in activeTemplates where template.isEnabled {

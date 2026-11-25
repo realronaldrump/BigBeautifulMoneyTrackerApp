@@ -42,17 +42,13 @@ struct SalarySetupDraft {
             timeZoneIdentifier: timeZoneIdentifier)
     }
     var isValid: Bool { (try? SalaryService.validate(makePlan())) != nil }
-    var paycheckGross: Double { makePlan().paycheckGross }
-    var paydayDescription: String {
-        if paydayOffsetDays == 0 { return "Payday: when the period ends" }
-        let days = abs(paydayOffsetDays)
-        return "Payday: \(days) \(days == 1 ? "day" : "days") \(paydayOffsetDays < 0 ? "before" : "after") period ends"
-    }
+
 }
 
 /// Shared by first-run setup and the dated salary editor.
 struct SalarySetupFields: View {
     @Binding var draft: SalarySetupDraft
+    var showsStartDate = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -66,70 +62,63 @@ struct SalarySetupFields: View {
             .accessibilityLabel(
                 draft.amountBasis == .annual ? "Annual gross salary in dollars" : "Gross paycheck in dollars"
             )
-            .padding(12).background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 12))
+            .padding(12).background(TimecardColor.inset, in: RoundedRectangle(cornerRadius: 4))
             Picker("Pay frequency", selection: $draft.frequency) {
                 ForEach(PayFrequency.allCases) { Text($0.title).tag($0) }
             }
-            if draft.paycheckGross > 0 {
-                Text("\(draft.paycheckGross.formatted(.currency(code: "USD"))) gross per paycheck")
-                    .font(.callout).foregroundStyle(.secondary)
-                if draft.amountBasis == .annual {
-                    Text(
-                        "Uses \(Int(draft.frequency.periodsPerYear)) paychecks per year. Enter your paycheck amount directly if your employer uses a different calculation."
-                    )
-                    .font(.caption).foregroundStyle(.secondary)
+            DatePicker("A pay period began", selection: $draft.anchorDate, displayedComponents: .date)
+            if showsStartDate {
+                DatePicker("Track from", selection: $draft.effectiveDate, displayedComponents: .date)
+            }
+            DisclosureGroup("Tracking options") {
+                VStack(alignment: .leading, spacing: 12) {
+                    if !showsStartDate {
+                        DatePicker("Track from", selection: $draft.effectiveDate, displayedComponents: .date)
+                    }
+                    paydayPicker
+                    Picker("Count earnings", selection: $draft.accrualMode) {
+                        ForEach(SalaryAccrualMode.allCases) { Text($0.title).tag($0) }
+                    }
+                    if draft.accrualMode == .workdays {
+                        ForEach(ScheduleWeekday.allCases) { weekday in
+                            Toggle(
+                                weekday.title,
+                                isOn: Binding(
+                                    get: { draft.weekdays.contains(weekday.rawValue) },
+                                    set: { selected in
+                                        if selected {
+                                            draft.weekdays.insert(weekday.rawValue)
+                                        } else {
+                                            draft.weekdays.remove(weekday.rawValue)
+                                        }
+                                    }))
+                        }
+                        Toggle("Use a standard work window", isOn: $draft.usesWorkHours)
+                        if draft.usesWorkHours {
+                            DatePicker(
+                                "Window starts", selection: timeBinding(\.startMinute), displayedComponents: .hourAndMinute)
+                            DatePicker("Window ends", selection: timeBinding(\.endMinute), displayedComponents: .hourAndMinute)
+                        }
+                    }
                 }
             }
-            DatePicker("Pay cycle anchor", selection: $draft.anchorDate, displayedComponents: .date)
-            Text("Choose a known first day of a pay period. This is separate from payday.")
-                .font(.caption).foregroundStyle(.secondary)
-            DatePicker("Salary starts counting", selection: $draft.effectiveDate, displayedComponents: .date)
-            Stepper(draft.paydayDescription, value: $draft.paydayOffsetDays, in: -30...60)
-            Picker("Visualize earnings", selection: $draft.accrualMode) {
-                ForEach(SalaryAccrualMode.allCases) { Text($0.title).tag($0) }
-            }
-            Text(
-                draft.accrualMode == .continuous
-                    ? "The counter grows across every day, including weekends. No start or end times needed."
-                    : "The same paycheck is spread across selected weekdays. Paid holidays and vacation keep counting."
-            )
-            .font(.caption).foregroundStyle(.secondary)
-            if draft.accrualMode == .workdays {
-                ForEach(ScheduleWeekday.allCases) { weekday in
-                    Toggle(
-                        weekday.title,
-                        isOn: Binding(
-                            get: { draft.weekdays.contains(weekday.rawValue) },
-                            set: { selected in
-                                if selected {
-                                    draft.weekdays.insert(weekday.rawValue)
-                                } else {
-                                    draft.weekdays.remove(weekday.rawValue)
-                                }
-                            }))
-                }
-                Toggle("Use a standard work window", isOn: $draft.usesWorkHours)
-                if draft.usesWorkHours {
-                    DatePicker(
-                        "Window starts", selection: timeBinding(\.startMinute), displayedComponents: .hourAndMinute)
-                    DatePicker("Window ends", selection: timeBinding(\.endMinute), displayedComponents: .hourAndMinute)
-                    Text(
-                        "Use a daytime window with the end after the start. This only controls the animation; it does not record hours worked."
-                    )
-                    .font(.caption).foregroundStyle(.secondary)
-                }
-            }
-            Text("Schedule time zone: \(draft.timeZoneIdentifier)")
-                .font(.caption).foregroundStyle(.secondary)
-            Text(
-                "Accrual is a visualization estimate. Deposits are recorded separately in salary history. A partial first or last period is prorated."
-            )
-            .font(.caption).foregroundStyle(.secondary)
         }
         .environment(\.timeZone, draft.makePlan().calendar.timeZone)
         .onChange(of: draft.anchorDate) { oldValue, newValue in
             if draft.effectiveDate == oldValue { draft.effectiveDate = newValue }
         }
+    }
+
+    private var paydayPicker: some View {
+        let plan = draft.makePlan()
+        let calendar = plan.calendar
+        let end = SalaryEngine.period(for: plan, at: draft.anchorDate).end
+        let earliest = calendar.date(byAdding: .day, value: -30, to: end) ?? end
+        let latest = calendar.date(byAdding: .day, value: 60, to: end) ?? end
+        return DatePicker("Payday for that period", selection: Binding(
+            get: { calendar.date(byAdding: .day, value: draft.paydayOffsetDays, to: end) ?? end },
+            set: { draft.paydayOffsetDays = calendar.dateComponents([.day], from: end, to: $0).day ?? 0 }
+        ), in: earliest...latest, displayedComponents: .date)
     }
 
     private func timeBinding(_ keyPath: WritableKeyPath<SalarySetupDraft, Int>) -> Binding<Date> {
@@ -161,9 +150,9 @@ struct SalaryPlanEditorView: View {
     }
 
     var body: some View {
-        Form {
+        TimecardForm {
             Section {
-                SalarySetupFields(draft: $draft)
+                SalarySetupFields(draft: $draft, showsStartDate: true)
             } header: {
                 Text(previousPlan == nil ? "Set up salary" : "New salary agreement")
             } footer: {
@@ -202,7 +191,6 @@ struct SalarySettingsSection: View {
 
     var body: some View {
         Section {
-            LabeledContent("Pay type", value: job.compensationKind.title)
             if let plan = jobPlans.first, job.compensationKind == .salary {
                 LabeledContent(plan.amountBasis.title, value: plan.amount.formatted(.currency(code: "USD")))
                 LabeledContent("Pay frequency", value: plan.frequency.title)
@@ -210,7 +198,7 @@ struct SalarySettingsSection: View {
                     "From \(plan.effectiveDate.formatted(date: .abbreviated, time: .omitted)) · \(plan.accrualDescription)"
                 )
                 .font(.caption).foregroundStyle(.secondary)
-                NavigationLink("Schedule salary or display change") {
+                NavigationLink("Change salary") {
                     SalaryPlanEditorView(job: job, previousPlan: plan)
                 }
                 if plan.effectiveDate > .now {
@@ -218,14 +206,14 @@ struct SalarySettingsSection: View {
                 }
                 Button("Switch to hourly pay", role: .destructive) { confirmingHourly = true }
             } else {
-                NavigationLink("Set up salary mode") { SalaryPlanEditorView(job: job, previousPlan: jobPlans.first) }
+                NavigationLink("Switch to salary") { SalaryPlanEditorView(job: job, previousPlan: jobPlans.first) }
             }
             if !jobPlans.isEmpty {
                 NavigationLink("Salary history and paychecks") { SalaryHistoryView(jobIdentifier: job.id) }
             }
             if let errorText { Text(errorText).foregroundStyle(.red) }
         } header: {
-            Text("Salary & Pay Type")
+            Text("Salary")
         }
         .confirmationDialog("Switch to hourly pay?", isPresented: $confirmingHourly, titleVisibility: .visible) {
             Button("Stop salary and switch to hourly", role: .destructive) {

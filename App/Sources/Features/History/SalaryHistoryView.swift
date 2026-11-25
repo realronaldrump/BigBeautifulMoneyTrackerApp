@@ -12,13 +12,6 @@ struct SalaryHistoryView: View {
     var body: some View {
         TimelineView(.periodic(from: .now, by: 60)) { timeline in
             List {
-                Section {
-                    Text(
-                        "Salary accrues automatically. Record a paycheck when you receive it, and optionally log work hours to see your effective hourly rate."
-                    )
-                    .font(.callout).foregroundStyle(.secondary)
-                    Toggle("Include older pay periods", isOn: $showsAllPeriods)
-                }
                 ForEach(jobs.filter { jobIdentifier == nil || $0.id == jobIdentifier }) { job in
                     let jobPlans = plans.filter { $0.job?.id == job.id }
                     if !jobPlans.isEmpty {
@@ -65,7 +58,7 @@ struct SalaryHistoryView: View {
                                 ).foregroundStyle(.secondary)
                             }
                         }
-                        Section("Salary agreements · \(job.displayName)") {
+                        DisclosureGroup("Salary agreements · \(job.displayName)") {
                             ForEach(jobPlans.sorted { $0.effectiveDate > $1.effectiveDate }) { plan in
                                 VStack(alignment: .leading, spacing: 6) {
                                     Text("\(plan.amount.formatted(.currency(code: "USD"))) · \(plan.amountBasis.title)")
@@ -82,8 +75,13 @@ struct SalaryHistoryView: View {
                         }
                     }
                 }
+                if let cutoff = Calendar.current.date(byAdding: .month, value: -12, to: timeline.date),
+                   plans.contains(where: { (jobIdentifier == nil || $0.job?.id == jobIdentifier) && $0.effectiveDate < cutoff }) {
+                    Button(showsAllPeriods ? "Show recent periods" : "Show older periods") { showsAllPeriods.toggle() }
+                }
             }
         }
+        .timecardForm()
         .navigationTitle("Salary History")
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -174,6 +172,7 @@ private struct SalaryPeriodDetailView: View {
             }
             if let errorText { Section { Text(errorText).foregroundStyle(.red) } }
         }
+        .timecardForm()
         .navigationTitle("Salary Pay Period")
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $editingPayment) {
@@ -239,7 +238,7 @@ private struct SalaryPaymentEditorView: View {
         _note = State(initialValue: payment?.note ?? "")
     }
     var body: some View {
-        Form {
+        TimecardForm {
             Section("Actual paycheck") {
                 Text(interval.displayRange)
                 TextField("Gross amount", text: $grossText).keyboardType(.decimalPad)
@@ -249,6 +248,7 @@ private struct SalaryPaymentEditorView: View {
             }
             if let errorText { Text(errorText).foregroundStyle(.red) }
         }
+        .timecardForm()
         .navigationTitle(payment == nil ? "Record Paycheck" : "Edit Paycheck")
         .appKeyboardToolbar()
         .toolbar {
@@ -296,7 +296,7 @@ private struct SalaryHoursEditorView: View {
         _note = State(initialValue: log?.note ?? "")
     }
     var body: some View {
-        Form {
+        TimecardForm {
             Section {
                 DatePicker(
                     "Work date", selection: $date,
@@ -310,6 +310,7 @@ private struct SalaryHoursEditorView: View {
             }
             if let errorText { Text(errorText).foregroundStyle(.red) }
         }
+        .timecardForm()
         .navigationTitle("Work Hours")
         .appKeyboardToolbar()
         .toolbar {

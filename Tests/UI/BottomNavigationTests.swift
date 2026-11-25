@@ -75,6 +75,75 @@ final class BottomNavigationTests: XCTestCase {
         XCTAssertTrue(archive.isHittable)
     }
 
+    func testEarningsScreensAndPayStatementNavigation() {
+        let app = launch("earningsHistory")
+        assertShiftActionAboveNavigation(app, label: "Start Shift")
+        XCTAssertTrue(app.staticTexts["Last 7 days"].exists)
+        capture(app, name: "Timecard Home")
+        app.buttons["main.tab.history"].tap()
+        XCTAssertTrue(app.staticTexts["Work history"].waitForExistence(timeout: 5))
+        capture(app, name: "Timecard History")
+        app.buttons["main.tab.summary"].tap()
+        XCTAssertTrue(app.staticTexts["Weekly earnings"].waitForExistence(timeout: 5))
+        capture(app, name: "Timecard Summary")
+        let statements = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Pay statements'")).firstMatch
+        for _ in 0..<4 {
+            if statements.isHittable { break }
+            app.swipeUp()
+        }
+        statements.tap()
+        XCTAssertTrue(app.navigationBars["Pay Periods"].waitForExistence(timeout: 5))
+        app.buttons["main.tab.settings"].tap()
+        let job = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Studio'")).firstMatch
+        XCTAssertTrue(job.waitForExistence(timeout: 5))
+        capture(app, name: "Timecard Settings")
+    }
+
+    func testWorkweekCanBeReadAtAccessibilitySize() {
+        let app = launch("earningsHistory", largeText: true)
+        let today = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label == %@", Date.now.formatted(date: .complete, time: .omitted))).firstMatch
+        for _ in 0..<7 {
+            if today.isHittable && today.frame.maxY <= app.buttons["home.shiftAction"].frame.minY { break }
+            app.swipeUp()
+        }
+        XCTAssertTrue(today.isHittable)
+        XCTAssertTrue((today.value as? String)?.contains("hours worked") == true)
+        assertShiftActionAboveNavigation(app, label: "Start Shift")
+        capture(app, name: "Workweek at accessibility size")
+    }
+
+    func testPaycheckCanBeSetFromTwoAmountsAndReopened() {
+        let app = launch("hourlyJobs")
+        app.buttons["main.tab.settings"].tap()
+        let jobRow = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Business System Support Analyst")).firstMatch
+        XCTAssertTrue(jobRow.waitForExistence(timeout: 8))
+        capture(app, name: "Simplified settings")
+        jobRow.tap()
+        let paycheck = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Take-home pay")).firstMatch
+        XCTAssertTrue(paycheck.waitForExistence(timeout: 5))
+        paycheck.tap()
+        let save = app.buttons["Save paycheck settings"]
+        XCTAssertFalse(save.isEnabled)
+        let gross = app.textFields["paycheck.gross"]
+        gross.tap()
+        gross.typeText("500")
+        let net = app.textFields["paycheck.net"]
+        net.tap()
+        net.typeText("405")
+        XCTAssertTrue(save.isEnabled)
+        save.tap()
+        XCTAssertTrue(paycheck.waitForExistence(timeout: 5))
+        XCTAssertTrue(paycheck.label.contains("81"))
+        paycheck.tap()
+        XCTAssertEqual(gross.value as? String, "500")
+        XCTAssertEqual(net.value as? String, "405")
+        capture(app, name: "Paycheck reference")
+        app.buttons["Use automatic estimate"].tap()
+        XCTAssertTrue(paycheck.waitForExistence(timeout: 5))
+        XCTAssertTrue(paycheck.label.contains("Add paycheck"))
+    }
+
     func testSalaryHomeNeedsNoClockButtonAndKeepsNavigationReachable() {
         let app = launch("salaryOnly")
         XCTAssertTrue(app.staticTexts["Automatic salary tracking"].waitForExistence(timeout: 8))

@@ -15,9 +15,7 @@ struct SummaryDrawer: View {
             } label: {
                 HStack(spacing: 12) {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Your totals").font(TypeStyle.title3).foregroundStyle(.white)
-                        Text(mode == .gross ? "Gross earnings" : "Estimated take-home")
-                            .font(TypeStyle.caption).foregroundStyle(theme.secondaryText)
+                        Text("Earnings details").font(TypeStyle.title3).foregroundStyle(TimecardColor.ink)
                     }
                     Spacer()
                     Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
@@ -32,10 +30,10 @@ struct SummaryDrawer: View {
             .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
             .accessibilityHint(isExpanded ? "Hide extra details" : "Show hours, projection, and premiums")
 
-            AdaptiveCardGrid(minimumWidth: 136) {
-                MetricTile(title: "Pay period", value: payPeriodValue, accent: theme.accent(for: mode))
-                MetricTile(title: "All time", value: display(snapshot.allTimeAmount(for: mode, compensationMode: compensationMode)), accent: theme.accent(for: mode))
-                if isExpanded {
+            if isExpanded {
+                AdaptiveCardGrid(minimumWidth: 136) {
+                    MetricTile(title: "Pay period", value: payPeriodValue, accent: theme.accent(for: mode))
+                    MetricTile(title: "All time", value: display(snapshot.allTimeAmount(for: mode, compensationMode: compensationMode)), accent: theme.accent(for: mode))
                     if !snapshot.salaryJobs.isEmpty {
                         MetricTile(title: "Salary work hours", value: snapshot.salaryJobs.reduce(0) { $0 + $1.loggedHours }.formatted(.number.precision(.fractionLength(1))) + " hrs logged", accent: theme.accent(for: mode))
                     }
@@ -43,22 +41,20 @@ struct SummaryDrawer: View {
                         MetricTile(title: "Hourly shift hours", value: payPeriodMetric(snapshot.payPeriodHours.formatted(.number.precision(.fractionLength(1))) + " hrs"), accent: theme.accent(for: mode))
                     }
                     MetricTile(title: "Projected paycheck", value: projectedValue, accent: theme.accent(for: mode))
-                    if snapshot.salaryJobs.isEmpty || snapshot.payPeriodNightPremium > 0 {
-                    MetricTile(title: "Night premium · gross", value: payPeriodMetric(display(snapshot.payPeriodNightPremium)), accent: theme.accent(for: mode))
+                    if snapshot.payPeriodNightPremium > 0 {
+                        MetricTile(title: "Night premium · gross", value: payPeriodMetric(display(snapshot.payPeriodNightPremium)), accent: theme.accent(for: mode))
                     }
                     if snapshot.salaryJobs.isEmpty || snapshot.allTimeHours > 0 {
                         MetricTile(title: "Lifetime hourly hours", value: snapshot.allTimeHours.formatted(.number.precision(.fractionLength(1))) + " hrs", accent: theme.accent(for: mode))
                     }
                 }
-            }
-            if isExpanded {
                 Text(snapshot.payPeriodAggregation == .unified ? snapshot.projectedConfidenceLabel : "Pay periods differ between jobs. Open Summary for each job’s totals.")
                     .font(TypeStyle.caption).foregroundStyle(theme.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(18)
-        .glassCard(cornerRadius: CornerRadius.cardLarge, accent: theme.accent(for: mode), hasShadow: false)
+        .padding(.vertical, 4)
+        .ruledSection()
     }
 
     private func display(_ amount: Double) -> String { amount.formatted(.currency(code: "USD")) }

@@ -1,4 +1,3 @@
-import Charts
 import SwiftData
 import SwiftUI
 
@@ -59,30 +58,22 @@ struct SummaryView: View {
 
     private func summaryContent(snapshot: SummarySnapshot, payPeriodArchive: PayPeriodArchiveSnapshot) -> some View {
         ZStack {
-            MoneyBackground(mode: mode)
+            MoneyBackground()
 
             ScrollView(showsIndicators: false) {
                 VStack(spacing: Spacing.lg) {
-                    BrandHeader(
-                        eyebrow: "Summary",
-                        subtitle: "Your earnings at a glance, with details for each job.",
-                        mode: mode,
-                        compact: true
-                    )
-
-                    // MARK: - Combined card
-                    SummaryJobCard(
-                        title: "Combined",
-                        accent: accent,
-                        confidenceLabel: snapshot.projectedConfidenceLabel,
-                        rollup: snapshot.combined,
-                        mode: mode,
-                        isCombined: true
-                    )
+                    TimecardHeading(title: "Earnings", detail: Date.now.formatted(.dateTime.month(.wide).year()))
+                    if snapshot.jobs.count == 1 && !jobs.contains(where: \.isArchived), let job = snapshot.jobs.first {
+                        SummaryJobCard(title: job.name, accent: job.accent.color, confidenceLabel: job.projectedConfidenceLabel,
+                                       rollup: job.rollup, mode: mode, isCombined: false)
+                    } else {
+                        SummaryJobCard(title: "All jobs", accent: accent, confidenceLabel: snapshot.projectedConfidenceLabel,
+                                       rollup: snapshot.combined, mode: mode, isCombined: true)
+                    }
 
                     // MARK: - Earnings chart
                     if !shifts.isEmpty || !salaryPlans.isEmpty {
-                        EarningsChart(
+                        WeeklyEarningsChart(
                             shifts: shifts,
                             mode: mode,
                             taxProfile: taxProfiles.first,
@@ -100,15 +91,19 @@ struct SummaryView: View {
                     }
 
                     // MARK: - Per-job cards
-                    ForEach(snapshot.jobs) { job in
-                        SummaryJobCard(
-                            title: job.name,
-                            accent: job.accent.color,
-                            confidenceLabel: job.projectedConfidenceLabel,
-                            rollup: job.rollup,
-                            mode: mode,
-                            isCombined: false
-                        )
+                    if snapshot.jobs.count > 1 || jobs.contains(where: \.isArchived) {
+                        DisclosureGroup("By job") {
+                            ForEach(snapshot.jobs) { job in
+                                SummaryJobCard(
+                                    title: job.name,
+                                    accent: job.accent.color,
+                                    confidenceLabel: job.projectedConfidenceLabel,
+                                    rollup: job.rollup,
+                                    mode: mode,
+                                    isCombined: false
+                                )
+                            }
+                        }
                     }
                 }
                 .padding(18)
@@ -122,8 +117,7 @@ struct SummaryView: View {
 
 // MARK: - Earnings Chart
 
-private struct EarningsChart: View {
-    @Environment(AppTheme.self) private var theme
+private struct WeeklyEarningsChart: View {
 
     let shifts: [ShiftRecord]
     let mode: EarningsDisplayMode
@@ -153,9 +147,7 @@ private struct EarningsChart: View {
             guard let weekStart = calendar.date(byAdding: .weekOfYear, value: -weekOffset, to: now),
                   let interval = calendar.dateInterval(of: .weekOfYear, for: weekStart) else { continue }
 
-            let formatter = DateFormatter()
-            formatter.dateFormat = "M/d"
-            let label = formatter.string(from: interval.start)
+            let label = interval.start.formatted(.dateTime.month(.abbreviated).day())
             buckets[interval.start] = WeekBucket(id: interval.start, label: label)
         }
 
@@ -182,7 +174,7 @@ private struct EarningsChart: View {
             let plan = SalaryEngine.activePlan(in: plans, at: cutoff.addingTimeInterval(-0.001)) ?? plans.max { $0.effectiveDate < $1.effectiveDate }!
             let estimate = TaxEstimator.estimate(currentGross: 0, annualizedGrossIncome: plan.annualGross,
                 annualExtraWithholding: TaxEstimator.annualExtraWithholding(payFrequency: plan.frequency, taxProfile: taxProfile ?? TaxProfile()),
-                taxProfile: taxProfile ?? TaxProfile(), payFrequency: plan.frequency)
+                taxProfile: taxProfile ?? TaxProfile(), payFrequency: plan.frequency, paycheck: job.paycheckReference)
             for start in Array(buckets.keys) {
                 guard let interval = calendar.dateInterval(of: .weekOfYear, for: start) else { continue }
                 let gross = SalaryEngine.gross(for: plans, within: interval, through: cutoff)
@@ -194,63 +186,42 @@ private struct EarningsChart: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Spacing.md) {
-            HStack(spacing: Spacing.sm) {
-                Image(systemName: "chart.bar.fill")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(theme.accent(for: mode))
-                Text("WEEKLY EARNINGS")
-                    .font(TypeStyle.micro)
-                    .tracking(1.4)
-                    .foregroundStyle(theme.accent(for: mode).opacity(0.72))
+        let weeks = recentWeeks
+        let maximum = weeks.map { mode == .gross ? $0.gross : $0.takeHome }.max() ?? 0
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("Weekly earnings").font(TypeStyle.title2).accessibilityAddTraits(.isHeader)
+                Spacer(minLength: 8)
+                Text(mode == .gross ? "Gross pay" : "Est. take-home")
+                    .font(TimecardType.label).foregroundStyle(TimecardColor.graphite)
             }
-
-            Chart(recentWeeks) { week in
-                BarMark(
-                    x: .value("Week", week.label),
-                    y: .value("Earnings", mode == .gross ? week.gross : week.takeHome)
-                )
-                .foregroundStyle(
-                    LinearGradient(
-                        colors: [theme.accent(for: mode), theme.accent(for: mode).opacity(0.5)],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
-                .cornerRadius(6)
-                .accessibilityLabel(Text("Week of \(week.label)"))
-                .accessibilityValue(Text((mode == .gross ? week.gross : week.takeHome).formatted(.currency(code: "USD"))))
-            }
-            .accessibilityLabel(mode == .gross ? "Weekly gross earnings" : "Weekly estimated take-home")
-            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
-            .chartYAxis {
-                AxisMarks(position: .leading) { value in
-                    AxisGridLine()
-                        .foregroundStyle(Color.white.opacity(0.06))
-                    AxisValueLabel {
-                        if let amount = value.as(Double.self) {
-                            Text(amount.formatted(.currency(code: "USD").precision(.fractionLength(0))))
-                                .font(.system(.caption2, design: .rounded, weight: .medium))
-                                .foregroundStyle(theme.secondaryText)
+            Grid(horizontalSpacing: 12, verticalSpacing: 10) {
+                ForEach(weeks) { week in
+                    let value = mode == .gross ? week.gross : week.takeHome
+                    let isCurrent = week.id == weeks.last?.id
+                    GridRow {
+                        Text(isCurrent ? "This week" : week.label).font(.caption.monospacedDigit())
+                            .gridColumnAlignment(.leading)
+                        GeometryReader { proxy in
+                            let fraction = maximum > 0 ? min(1, max(0, value / maximum)) : 0
+                            Rectangle().fill(TimecardColor.inset)
+                                .overlay(alignment: .leading) {
+                                    Rectangle().fill(isCurrent ? TimecardColor.redInk : TimecardColor.blueInk)
+                                        .frame(width: proxy.size.width * fraction)
+                                }
                         }
+                        .frame(height: 7).accessibilityHidden(true)
+                        Text(value, format: .currency(code: "USD")).font(.subheadline.monospacedDigit())
+                            .gridColumnAlignment(.trailing)
                     }
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("Week of " + week.label)
+                    .accessibilityValue(value.formatted(.currency(code: "USD")))
                 }
             }
-            .chartXAxis {
-                AxisMarks { value in
-                    AxisValueLabel {
-                        if let label = value.as(String.self) {
-                            Text(label)
-                                .font(.system(.caption2, design: .rounded, weight: .medium))
-                                .foregroundStyle(theme.secondaryText)
-                        }
-                    }
-                }
-            }
-            .frame(height: 160)
         }
-        .padding(Spacing.lg)
-        .glassCard(cornerRadius: CornerRadius.cardLarge, accent: theme.accent(for: mode))
+        .foregroundStyle(TimecardColor.ink)
+        .padding(.bottom, 16).ruledSection()
     }
 
     private func estimatedTakeHome(for shift: ShiftRecord, calendar: Calendar) -> Double {
@@ -283,137 +254,136 @@ private struct SummaryJobCard: View {
     let mode: EarningsDisplayMode
     let isCombined: Bool
 
-    // Collapsible section state — Pay Period and Projected default expanded
-    @State private var expandedSections: Set<String> = ["Pay Period", "Projected Paycheck"]
+    @State private var expandedSections: Set<String> = ["Pay Period"]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // ── Header ──
             cardHeader
-                .padding(.horizontal, 20)
-                .padding(.top, 20)
-                .padding(.bottom, 16)
+            DisclosureGroup("Earnings breakdown") {
+                VStack(spacing: 0) {
+                    // Active Now
+                    if rollup.activeShiftCount > 0 {
+                        collapsibleSection(
+                            title: "Active Now",
+                            icon: "bolt.fill",
+                            rows: [
+                                ("Live Shifts", "\(rollup.activeShiftCount)"),
+                                ("Gross", rollup.activeGross.asCurrency),
+                                ("Est. take-home", rollup.activeTakeHome.asCurrency),
+                            ]
+                        )
+                    }
 
-            Divider()
-                .overlay(accent.opacity(0.18))
-
-            // ── Sections ──
-            VStack(spacing: 0) {
-                // Active Now
-                if rollup.activeShiftCount > 0 {
+                    // Pay Period
                     collapsibleSection(
-                        title: "Active Now",
-                        icon: "bolt.fill",
+                        title: "Pay Period",
+                        icon: "calendar",
+                        rows: payPeriodRows
+                    )
+
+                    // Projected
+                    collapsibleSection(
+                        title: "Projected Paycheck",
+                        icon: "chart.line.uptrend.xyaxis",
+                        rows: projectedRows
+                    )
+
+                    if rollup.hasSupplementConfiguration {
+                        collapsibleSection(
+                            title: "Supplements & Effective",
+                            icon: "plus.rectangle.on.folder.fill",
+                            rows: supplementalRows
+                        )
+                    }
+
+                    // All Time
+                    collapsibleSection(
+                        title: "All Time",
+                        icon: "clock.arrow.circlepath",
                         rows: [
-                            ("Live Shifts", "\(rollup.activeShiftCount)"),
-                            ("Gross", rollup.activeGross.asCurrency),
-                            ("Est. take-home", rollup.activeTakeHome.asCurrency),
+                            ("Gross", rollup.allTimeGross.asCurrency),
+                            ("Est. take-home", rollup.allTimeTakeHome.asCurrency),
+                            ("Hours", rollup.allTimeHours.asHours),
                         ]
                     )
-                }
 
-                // Pay Period
-                collapsibleSection(
-                    title: "Pay Period",
-                    icon: "calendar",
-                    rows: payPeriodRows
-                )
+                    // Overtime & Premiums
+                    if rollup.totalOvertimeHours > 0 || rollup.totalNightPremium > 0 {
+                        collapsibleSection(
+                            title: "Overtime & Premiums",
+                            icon: "moon.stars.fill",
+                            rows: [
+                                ("Overtime Hours", rollup.totalOvertimeHours.asHours),
+                                ("Overtime Premium", rollup.totalOvertimePremium.asCurrency),
+                                ("Night Premium (Lifetime)", rollup.totalNightPremium.asCurrency),
+                            ]
+                        )
+                    }
 
-                // Projected
-                collapsibleSection(
-                    title: "Projected Paycheck",
-                    icon: "chart.line.uptrend.xyaxis",
-                    rows: projectedRows
-                )
-
-                if rollup.hasSupplementConfiguration {
-                    collapsibleSection(
-                        title: "Supplements & Effective",
-                        icon: "plus.rectangle.on.folder.fill",
-                        rows: supplementalRows
-                    )
-                }
-
-                // All Time
-                collapsibleSection(
-                    title: "All Time",
-                    icon: "clock.arrow.circlepath",
-                    rows: [
-                        ("Gross", rollup.allTimeGross.asCurrency),
-                        ("Est. take-home", rollup.allTimeTakeHome.asCurrency),
-                        ("Hours", rollup.allTimeHours.asHours),
-                    ]
-                )
-
-                // Overtime & Premiums
-                if rollup.totalOvertimeHours > 0 || rollup.totalNightPremium > 0 {
-                    collapsibleSection(
-                        title: "Overtime & Premiums",
-                        icon: "moon.stars.fill",
-                        rows: [
-                            ("Overtime Hours", rollup.totalOvertimeHours.asHours),
-                            ("Overtime Premium", rollup.totalOvertimePremium.asCurrency),
-                            ("Night Premium (Lifetime)", rollup.totalNightPremium.asCurrency),
-                        ]
-                    )
-                }
-
-                // Averages apply to tracked hourly shifts.
-                if rollup.completedShiftCount > 0 || rollup.salaryJobCount == 0 {
-                    collapsibleSection(
-                        title: "Averages & Records",
-                        icon: "trophy.fill",
-                        rows: [
-                            ("Avg Shift Gross", rollup.averageShiftGross.asCurrency),
-                            ("Avg Shift Hours", rollup.averageShiftHours.asHours),
-                            ("Best Shift", rollup.highestShiftGross.asCurrency),
-                            ("Blended Rate", rollup.currentBlendedRate.asCurrency + "/hr"),
-                        ],
-                        isLast: true
-                    )
-                } else {
-                    collapsibleSection(title: "Salary", icon: "banknote.fill", rows: [
-                        ("Accrued this period", rollup.salaryGross.asCurrency),
-                        ("All-time salary", rollup.salaryAllTimeGross.asCurrency),
-                        ("Optional logged hours", rollup.salaryLoggedHours.asHours),
-                        ("Basis", "Automatic visualization estimate")
-                    ], isLast: true)
+                    // Averages apply to tracked hourly shifts.
+                    if rollup.completedShiftCount > 0 {
+                        collapsibleSection(
+                            title: "Averages & Records",
+                            icon: "trophy.fill",
+                            rows: [
+                                ("Avg Shift Gross", rollup.averageShiftGross.asCurrency),
+                                ("Avg Shift Hours", rollup.averageShiftHours.asHours),
+                                ("Best Shift", rollup.highestShiftGross.asCurrency),
+                                ("Blended Rate", rollup.currentBlendedRate.asCurrency + "/hr"),
+                            ],
+                            isLast: true
+                        )
+                    } else if rollup.salaryJobCount > 0 {
+                        collapsibleSection(title: "Salary", icon: "banknote.fill", rows: [
+                            ("Accrued this period", rollup.salaryGross.asCurrency),
+                            ("All-time salary", rollup.salaryAllTimeGross.asCurrency),
+                            ("Optional logged hours", rollup.salaryLoggedHours.asHours),
+                            ("Basis", "Automatic visualization estimate")
+                        ], isLast: true)
+                    }
                 }
             }
+            .padding(.vertical, 12)
         }
-        .glassCard(cornerRadius: CornerRadius.cardLarge, accent: accent)
+        .ruledSection()
     }
 
     // MARK: Header
 
     private var cardHeader: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .top, spacing: 12) {
-                JobInitialBadge(name: title, accent: accent, size: 36)
-                VStack(alignment: .leading, spacing: 5) {
-                    Text(title).font(TypeStyle.title2).foregroundStyle(.white)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .accessibilityAddTraits(.isHeader)
-                    Text(rollup.salaryJobCount > 0 && rollup.completedShiftCount == 0 && rollup.activeShiftCount == 0 ? "Automatic salary · visualization estimate" : "\(rollup.completedShiftCount) completed · \(rollup.scheduledShiftCount) scheduled" + (rollup.activeShiftCount > 0 ? " · \(rollup.activeShiftCount) active" : ""))
-                        .font(TypeStyle.caption).foregroundStyle(theme.secondaryText)
-                        .fixedSize(horizontal: false, vertical: true)
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title).font(TypeStyle.title3)
+            Text(heroContext).font(TimecardType.label).textCase(.uppercase).foregroundStyle(TimecardColor.graphite)
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .top, spacing: 24) {
+                    statementAmount(.gross).fixedSize()
+                    Spacer(minLength: 0)
+                    statementAmount(.takeHome).fixedSize()
                 }
-            }
-            VStack(alignment: .leading, spacing: 5) {
-                Text(heroContext).font(TypeStyle.caption).foregroundStyle(theme.secondaryText)
-                Text(heroAmount.asCurrency)
-                    .font(.system(.title, design: .rounded, weight: .bold))
-                    .foregroundStyle(accent).monospacedDigit()
-                    .lineLimit(1).minimumScaleFactor(0.35)
+                VStack(alignment: .leading, spacing: 8) {
+                    statementAmount(.gross)
+                    statementAmount(.takeHome)
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    private func statementAmount(_ displayMode: EarningsDisplayMode) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(displayMode == .gross ? "Gross pay" : "Est. take-home").font(.caption)
+            Text(amount(for: displayMode), format: .currency(code: "USD"))
+                .font(TimecardType.display(43, relativeTo: .largeTitle)).monospacedDigit()
+                .foregroundStyle(displayMode == mode ? TimecardColor.blueInk : TimecardColor.ink)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
     private var heroContext: String {
-        let basis = isCombined && rollup.payPeriodAggregation == .variesByJob
-            ? (rollup.activeShiftCount > 0 ? "Active shifts" : "All time") : "Current pay period"
-        return basis + " · " + (mode == .gross ? "gross earnings" : "estimated take-home")
+        if isCombined && rollup.payPeriodAggregation == .variesByJob {
+            return rollup.activeShiftCount > 0 ? "Active shifts" : "All time"
+        }
+        return "Current pay period"
     }
 
     private var payPeriodRows: [(String, String)] {
@@ -431,8 +401,7 @@ private struct SummaryJobCard: View {
             ("Gross", rollup.payPeriodGross.asCurrency),
             ("Est. take-home", rollup.payPeriodTakeHome.asCurrency),
             ("Hours", rollup.payPeriodHours.asHours),
-            ("Night Premium", rollup.payPeriodNightPremium.asCurrency),
-        ]
+        ] + (rollup.payPeriodNightPremium > 0 ? [("Night premium", rollup.payPeriodNightPremium.asCurrency)] : [])
     }
 
     private var projectedRows: [(String, String)] {
@@ -472,7 +441,7 @@ private struct SummaryJobCard: View {
         return rows
     }
 
-    private var heroAmount: Double {
+    private func amount(for mode: EarningsDisplayMode) -> Double {
         guard !(isCombined && rollup.payPeriodAggregation == .variesByJob) else {
             if rollup.activeShiftCount > 0 {
                 return mode == .gross ? rollup.activeGross : rollup.activeTakeHome
@@ -520,7 +489,7 @@ private struct SummaryJobCard: View {
                         .foregroundStyle(accent.opacity(0.72))
 
                     Text(title)
-                        .font(.system(.caption2, design: .rounded, weight: .bold))
+                        .font(.system(.caption2, design: .default, weight: .bold))
                         .foregroundStyle(accent.opacity(0.72))
 
                     Spacer()
@@ -548,7 +517,7 @@ private struct SummaryJobCard: View {
 
                     if index < rows.count - 1 {
                         Divider()
-                            .overlay(Color.white.opacity(0.04))
+                            .overlay(TimecardColor.ink.opacity(0.04))
                             .padding(.leading, 20)
                     }
                 }

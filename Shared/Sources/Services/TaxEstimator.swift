@@ -47,9 +47,18 @@ enum TaxEstimator {
         annualizedTaxableSupplementalIncome: Double = 0,
         annualExtraWithholding: Double,
         taxProfile: TaxProfile,
-        payFrequency: PayFrequency? = nil
+        payFrequency: PayFrequency? = nil,
+        paycheck: PaycheckReference? = nil
     ) -> TaxEstimate {
         let resolvedAnnualizedGrossIncome = max(0, annualizedGrossIncome + annualizedTaxableSupplementalIncome)
+        if let paycheck {
+            return TaxEstimate(
+                annualizedGrossIncome: resolvedAnnualizedGrossIncome,
+                estimatedWithholdingRate: 0,
+                currentShiftNetEstimate: max(0, currentGross + currentTaxableSupplemental) * paycheck.netRate,
+                estimatedPayrollDeductionRate: 1 - paycheck.netRate
+            )
+        }
         let insurance = min(resolvedAnnualizedGrossIncome, max(0, taxProfile.annualPretaxInsurance))
         let retirement = min(resolvedAnnualizedGrossIncome - insurance, max(0, taxProfile.annualRetirementContribution))
         let pretaxDeductions = insurance + retirement
@@ -112,6 +121,7 @@ enum TaxEstimator {
         taxProfile: TaxProfile,
         calendar: Calendar = .current
     ) -> Double {
+        if let paycheck = shift.job?.paycheckReference { return max(0, shift.grossEarnings) * paycheck.netRate }
         guard let jobIdentifier = shift.job?.id,
               let paySchedule = paySchedules.first(where: { $0.job?.id == jobIdentifier }) else {
             return shift.grossEarnings
